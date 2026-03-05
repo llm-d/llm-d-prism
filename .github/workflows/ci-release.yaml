@@ -1,0 +1,53 @@
+name: CI - Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker-build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set project name from repository
+        id: meta
+        run: |
+          repo="${GITHUB_REPOSITORY##*/}"
+          echo "project_name=$repo" >> "$GITHUB_OUTPUT"
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            echo "tag=${GITHUB_REF##refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=${{ github.event.release.prerelease }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF##refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: Build and push
+        uses: ./.github/actions/docker-build-and-push
+        with:
+          image-name: ${{ steps.meta.outputs.project_name }}
+          tag: ${{ steps.tag.outputs.tag }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ steps.tag.outputs.prerelease }}
+
+      - name: Trivy security scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          image: ghcr.io/llm-d/${{ steps.meta.outputs.project_name }}:${{ steps.tag.outputs.tag }}

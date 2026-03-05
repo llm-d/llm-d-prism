@@ -1,0 +1,26 @@
+name: Trivy Security Scan
+description: Scan container image for HIGH and CRITICAL vulnerabilities
+
+inputs:
+  image:
+    required: true
+    description: Container image to scan (e.g., ghcr.io/llm-d/my-project:v0.1.0)
+  severity:
+    required: false
+    description: Severity levels to report
+    default: HIGH,CRITICAL
+  exit-code:
+    required: false
+    description: Exit code when vulnerabilities are found (0 = warn only, 1 = fail)
+    default: "0"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ inputs.image }}
+        format: table
+        severity: ${{ inputs.severity }}
+        exit-code: ${{ inputs.exit-code }}
