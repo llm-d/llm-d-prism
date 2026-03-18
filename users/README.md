@@ -1,6 +1,6 @@
 # User Profiles and Skills
 
-This directory contains specialized skills tailored for different user profiles involved in the llm-d project. These skills are designed to assist agents in developing features, tuning configurations, and maintaining production stability.
+This directory contains specialized skills tailored for different user profiles involved in the llm-d project. These skills are designed to assist agents in developing features, tuning configurations, and maintaining production stability. We will build on these user profiles over time.
 
 ![User Roles Diagram](./roles_diagram.png)
 
