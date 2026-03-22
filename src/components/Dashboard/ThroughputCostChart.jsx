@@ -476,7 +476,7 @@ export const ThroughputCostChart = (props) => {
             });
 
             // Assign Colors
-            // If Hardare: key matches keys in 'colorPalettes'
+            // If Hardware: key matches keys in 'colorPalettes'
             // If Other: assign from categoricalPalettes dynamically
             
             // Stable sort keys to ensure color stability
