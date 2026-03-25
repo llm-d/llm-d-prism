@@ -1125,10 +1125,15 @@ export function parseLpgLifecycleMetrics(json, filename, metadataOverride = {}) 
     // Filename Fallback if still unknown
     if (modelName === 'Unknown Model') {
         const parts = filename.split('/');
-        const base = parts[parts.length - 1];
+        let base = parts[parts.length - 1];
+
+        // Use directory name if the filename is generic
+        if (parts.length > 1 && (base.includes('lifecycle_metrics') || base === 'metrics.json' || base === 'data.json' || base.startsWith('stage_'))) {
+            base = parts[parts.length - 2];
+        }
+
         if (base) {
-            const m = base.split('-')[0];
-            if (m) modelName = base;
+            modelName = base;
         }
     }
 
@@ -1470,3 +1475,46 @@ export function extractJsonFromText(text) {
     }
     return candidates;
 }
+
+// Extractor for manifest.yaml text
+export const parseLpgManifest = (yamlTxt) => {
+    let model = 'Unknown';
+    let hw = 'Unknown';
+    let count = 1;
+    let tp = 1;
+    let backend = 'vllm';
+
+    const modelMatch = yamlTxt.match(/model:\s*([^\s]+)/) || yamlTxt.match(/--model=([^\s]+)/);
+    const hwMatch = yamlTxt.match(/cloud\.google\.com\/gke-accelerator:\s*([^\s]+)/) || yamlTxt.match(/cloud\.google\.com\/gke-tpu-accelerator:\s*([^\s]+)/);
+    const countMatch = yamlTxt.match(/nvidia\.com\/gpu:\s*(\d+)/i) || yamlTxt.match(/google\.com\/tpu:\s*(\d+)/i);
+    const topologyMatch = yamlTxt.match(/cloud\.google\.com\/gke-tpu-topology:\s*([^\s]+)/);
+    const tpMatch = yamlTxt.match(/tensor-parallel-size:\s*['"]?(\d+)['"]?/i) || yamlTxt.match(/--tensor-parallel-size[=\s]+(\d+)/i);
+    const backendMatch = yamlTxt.match(/backend:\s*([^\s]+)/i);
+
+    model = modelMatch ? modelMatch[1].replace(/['"]/g, '').split('/').pop() : 'Unknown';
+    hw = hwMatch ? hwMatch[1] : 'Unknown';
+    count = countMatch ? parseInt(countMatch[1]) : 1;
+
+    if (!countMatch && topologyMatch) {
+        const dims = topologyMatch[1].split('x').map(d => parseInt(d)).filter(n => !isNaN(n));
+        if (dims.length > 0) {
+            count = dims.reduce((a, b) => a * b, 1);
+        }
+    }
+
+    tp = tpMatch ? parseInt(tpMatch[1]) : 1;
+    backend = backendMatch ? backendMatch[1].replace(/['"]/g, '') : 'vllm';
+    if (backend.toLowerCase().includes('trt')) backend = 'trtllm';
+
+    return { model, hw, count, tp, backend };
+};
+
+// Extractor for config.yaml text
+export const parseLpgConfig = (configTxt) => {
+    let model = 'Unknown';
+    const pathMatch = configTxt.match(/"pretrained_model_name_or_path"\s*:\s*"?([^",\s]+)"?/i);
+    if (pathMatch) {
+        model = pathMatch[1].split('/').pop();
+    }
+    return { model };
+};
