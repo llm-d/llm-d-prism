@@ -16,7 +16,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CacheManager } from '../utils/cacheManager';
 import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
-import { parseJsonEntry, parseLogFile } from '../utils/dataParser';
+import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
@@ -1499,11 +1499,19 @@ export const useDashboardData = (initialState, dashboardState) => {
                     // Relaxed search: find manifest and metrics ANYWHERE within this logical leaf node folder
                     // i.e., "config/manifest.yaml" or "stage_4_lifecycle_metrics.json"
                     const manifestFile = files.find(f => f.name.endsWith('manifest.yaml'));
+                    const configFile = files.find(f => f.name.endsWith('config.yaml'));
                     const metricFiles = files.filter(f => f.name.endsWith('lifecycle_metrics.json') && !f.name.endsWith('summary_lifecycle_metrics.json'));
 
                     if (!metricFiles.length) return;
 
                     let syntheticMetadata = "";
+                    let model = 'Unknown';
+                    let hw = 'Unknown';
+                    let count = 1;
+                    let tp = 1;
+                    let backend = 'vllm';
+                    let precision = 'bfloat16'; // Usually bfloat16 for these tests
+
                     if (manifestFile) {
                         let manifestUrl = manifestFile.mediaLink;
                         if (usingProxy && manifestUrl.startsWith('https://storage.googleapis.com/')) {
@@ -1512,35 +1520,36 @@ export const useDashboardData = (initialState, dashboardState) => {
                         const manifestRes = await fetch(manifestUrl);
                         if (manifestRes.ok) {
                             const yamlTxt = await manifestRes.text();
-                            const modelMatch = yamlTxt.match(/model:\s*([^\s]+)/) || yamlTxt.match(/--model=([^\s]+)/);
-                            const hwMatch = yamlTxt.match(/cloud\.google\.com\/gke-accelerator:\s*([^\s]+)/) || yamlTxt.match(/cloud\.google\.com\/gke-tpu-accelerator:\s*([^\s]+)/);
-                            const countMatch = yamlTxt.match(/nvidia\.com\/gpu:\s*(\d+)/i) || yamlTxt.match(/google\.com\/tpu:\s*(\d+)/i);
-                            const topologyMatch = yamlTxt.match(/cloud\.google\.com\/gke-tpu-topology:\s*([^\s]+)/);
-                            const tpMatch = yamlTxt.match(/tensor-parallel-size:\s*['"]?(\d+)['"]?/i) || yamlTxt.match(/--tensor-parallel-size[=\s]+(\d+)/i);
-                            const backendMatch = yamlTxt.match(/backend:\s*([^\s]+)/i);
-
-                            const model = modelMatch ? modelMatch[1].replace(/['"]/g, '').split('/').pop() : 'Unknown';
-                            const hw = hwMatch ? hwMatch[1] : 'Unknown';
-                            let count = countMatch ? parseInt(countMatch[1]) : 1;
-
-                            if (!countMatch && topologyMatch) {
-                                const dims = topologyMatch[1].split('x').map(d => parseInt(d)).filter(n => !isNaN(n));
-                                if (dims.length > 0) {
-                                    count = dims.reduce((a, b) => a * b, 1);
-                                }
-                            }
-
-                            const tp = tpMatch ? parseInt(tpMatch[1]) : 1;
-                            let backend = backendMatch ? backendMatch[1].replace(/['"]/g, '') : 'vllm';
-                            // Normalize backend string if possible
-                            if (backend.toLowerCase().includes('trt')) backend = 'trtllm';
-                            const precision = 'bfloat16'; // Usually bfloat16 for these tests
-
-                            syntheticMetadata = JSON.stringify({
-                                config: { model, tensor_parallel: tp, backend, precision },
-                                infrastructure: { accelerator_type: hw, accelerator_count: count }
-                            }) + "\n";
+                            const meta = parseLpgManifest(yamlTxt);
+                            model = meta.model;
+                            hw = meta.hw;
+                            count = meta.count;
+                            tp = meta.tp;
+                            backend = meta.backend;
                         }
+                    }
+
+                    // Fallback to config.yaml for model name if manifest didn't provide it
+                    if (model === 'Unknown' && configFile) {
+                        let configUrl = configFile.mediaLink;
+                        if (usingProxy && configUrl.startsWith('https://storage.googleapis.com/')) {
+                            configUrl = `/api/gcs/${configUrl.replace('https://storage.googleapis.com/', '')}`;
+                        }
+                        const configRes = await fetch(configUrl);
+                        if (configRes.ok) {
+                            const configTxt = await configRes.text();
+                            const meta = parseLpgConfig(configTxt);
+                            if (meta.model && meta.model !== 'Unknown') {
+                                model = meta.model;
+                            }
+                        }
+                    }
+
+                    if (manifestFile || configFile) {
+                        syntheticMetadata = JSON.stringify({
+                            config: { model, tensor_parallel: tp, backend, precision },
+                            infrastructure: { accelerator_type: hw, accelerator_count: count }
+                        }) + "\n";
                     }
 
                     for (const metricFile of metricFiles) {
