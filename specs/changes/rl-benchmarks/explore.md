@@ -1,4 +1,4 @@
-# PRD: RL Inference Benchmarking & Optimization
+# Spec: RL Inference Benchmarking & Optimization
 
 ## 1. Landscape
 

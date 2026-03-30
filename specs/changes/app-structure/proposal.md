@@ -1,4 +1,4 @@
-# PRD: Application Structure - 3 Tiered Views
+# Spec: Application Structure - 3 Tiered Views
 
 **Status**: Draft
 **Author**: Agent

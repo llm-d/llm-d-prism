@@ -1,4 +1,4 @@
-# Disaggregated Benchmarks Analysis PRD
+# Spec: Disaggregated Benchmarks Analysis
 
 ## 1. Executive Summary
 

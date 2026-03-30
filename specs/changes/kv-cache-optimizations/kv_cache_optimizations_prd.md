@@ -1,4 +1,4 @@
-# PRD: KV Cache Optimizations Analysis
+# Spec: KV Cache Optimizations Analysis
 
 ## 1. Executive Summary
 
