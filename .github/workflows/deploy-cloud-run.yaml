@@ -1,0 +1,82 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual triggers
+
+permissions:
+  contents: read
+  id-token: write # Required for Workload Identity Federation
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      SERVICE_NAME: ${{ vars.GCP_SERVICE_NAME }}
+      SITE_NAME: ${{ vars.SITE_NAME }}
+      GA_TRACKING_ID: ${{ vars.GA_TRACKING_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      CONTACT_US_URL: ${{ vars.CONTACT_US_URL }}
+      GIQ_PROJECTS: ${{ vars.GIQ_PROJECTS }}
+      GCS_BUCKETS: ${{ vars.GCS_BUCKETS }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Validate required deployment configuration
+        run: |
+          required_vars=(
+            "PROJECT_ID"
+            "SERVICE_NAME"
+            "SITE_NAME"
+            "GA_TRACKING_ID"
+            "REGION"
+            "GIQ_PROJECTS"
+            "GCS_BUCKETS"
+            "GOOGLE_API_KEY"
+          )
+
+          for var in "${required_vars[@]}"; do
+            if [ -z "${!var}" ]; then
+              echo "Missing required repository variable/secret mapped to: ${var}"
+              exit 1
+            fi
+          done
+
+      - name: Deploy to Cloud Run
+        run: |
+          chmod +x ./deploy.sh
+          ./deploy.sh \
+            --project "$PROJECT_ID" \
+            --service "$SERVICE_NAME" \
+            --name "$SITE_NAME" \
+            --ga-id "$GA_TRACKING_ID" \
+            --contact "$CONTACT_US_URL" \
+            --giq-projects "$GIQ_PROJECTS" \
+            --gcs-buckets "$GCS_BUCKETS"
+
+      - name: Verify deployment
+        run: |
+          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+            --platform managed \
+            --region $REGION \
+            --project $PROJECT_ID \
+            --format 'value(status.url)')
+          echo "✅ Deployment successful!"
+          echo "🌐 Service URL: $SERVICE_URL"
+          echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
