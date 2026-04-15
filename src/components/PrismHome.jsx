@@ -163,6 +163,77 @@ const PrismHome = ({ onNavigate }) => {
                         </div>
                     </div>
                 </section>
+                
+                {/* Section: Utility Suite */}
+                <section className="mb-20 w-full max-w-4xl">
+                    <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
+                          Utility Suite
+                    </h2>
+                    <p className="text-sm text-slate-500 text-center mb-8">Access specialized tools for deeper analysis and schema browsing.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                        {/* Card 1: Benchmark Browser */}
+                        <div 
+                            onClick={() => onNavigate('advanced')}
+                            className="bg-slate-900 shadow-xl border border-slate-800 rounded-xl p-4 hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between h-full group"
+                        >
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <BarChart2 className="h-5 w-5 text-cyan-400 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">Benchmark Browser</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-4">Browse and compare benchmark results across runs.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800 hover:bg-cyan-600 text-white rounded-lg font-medium text-xs flex items-center justify-center transition-colors">
+                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+                            </button>
+                        </div>
+
+                        {/* Card 2: Model Intelligence */}
+                        <div className="bg-slate-900/50 shadow-xl border border-slate-800/50 rounded-xl p-4 cursor-not-allowed flex flex-col justify-between h-full opacity-60">
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <Zap className="h-5 w-5 text-slate-500 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-500">Model Intelligence</h3>
+                                    <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
+                                </div>
+                                <p className="text-xs text-slate-600 mb-4">Advanced analytics and model performance insights.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-600 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/30 cursor-not-allowed">
+                                Coming soon
+                            </button>
+                        </div>
+
+                        {/* Card 3: Value Analysis */}
+                        <div className="bg-slate-900/50 shadow-xl border border-slate-800/50 rounded-xl p-4 cursor-not-allowed flex flex-col justify-between h-full opacity-60">
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <TrendingUp className="h-5 w-5 text-slate-500 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-500">Value Analysis</h3>
+                                    <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
+                                </div>
+                                <p className="text-xs text-slate-600 mb-4">Cost vs performance optimization reports.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-600 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/30 cursor-not-allowed">
+                                Coming soon
+                            </button>
+                        </div>
+
+                        {/* Card 4: Schema Browser */}
+                        <div className="bg-slate-900/50 shadow-xl border border-slate-800/50 rounded-xl p-4 cursor-not-allowed flex flex-col justify-between h-full opacity-60">
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <HelpCircle className="h-5 w-5 text-slate-500 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-500">Schema Browser</h3>
+                                    <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
+                                </div>
+                                <p className="text-xs text-slate-600 mb-4">Explore data schemas and metric definitions.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-600 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/30 cursor-not-allowed">
+                                Coming soon
+                            </button>
+                        </div>
+                    </div>
+                </section>
 
                 {/* Section: Who is it for? (Aligned with SKILL.md) */}
                 <section className="mb-20 w-full max-w-4xl">
