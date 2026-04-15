@@ -31,9 +31,9 @@ const MENU_GROUPS = [
         title: "Utility Suite",
         items: [
             { id: 'benchmark-browser', label: 'Benchmark Browser', icon: BarChart2, view: 'advanced' },
+            { id: 'schema-browser', label: 'Schema Explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
             { id: 'model-intelligence', label: 'Model Intelligence', icon: Lightbulb, view: 'model-intelligence', disabled: true },
-            { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true },
-            { id: 'schema-browser', label: 'Schema Browser', icon: FileCode, view: 'schema-browser', disabled: true }
+            { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }
         ]
     }
 ];

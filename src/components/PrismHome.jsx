@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Zap, BarChart2, ArrowRight, Server, Cpu, CheckCircle, Shield, TrendingUp, HelpCircle } from 'lucide-react';
+import { Activity, Zap, BarChart2, ArrowRight, Server, Cpu, CheckCircle, Shield, TrendingUp, HelpCircle, FileCode } from 'lucide-react';
 
 const PrismHome = ({ onNavigate }) => {
     return (
@@ -188,6 +188,23 @@ const PrismHome = ({ onNavigate }) => {
                             </button>
                         </div>
 
+                        {/* Card 4: Schema Explorer */}
+                        <div 
+                            onClick={() => onNavigate('schema-explorer')}
+                            className="bg-slate-900 shadow-xl border border-slate-800 rounded-xl p-4 hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between h-full group"
+                        >
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <FileCode className="h-5 w-5 text-cyan-400 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">Schema Explorer</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-4">Explore data schemas and metric definitions.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800 hover:bg-cyan-600 text-white rounded-lg font-medium text-xs flex items-center justify-center transition-colors">
+                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+                            </button>
+                        </div>
+
                         {/* Card 2: Model Intelligence */}
                         <div className="bg-slate-900/50 shadow-xl border border-slate-800/50 rounded-xl p-4 cursor-not-allowed flex flex-col justify-between h-full opacity-60">
                             <div>
@@ -212,21 +229,6 @@ const PrismHome = ({ onNavigate }) => {
                                     <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
                                 </div>
                                 <p className="text-xs text-slate-600 mb-4">Cost vs performance optimization reports.</p>
-                            </div>
-                            <button className="w-full py-2 bg-slate-800/50 text-slate-600 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/30 cursor-not-allowed">
-                                Coming soon
-                            </button>
-                        </div>
-
-                        {/* Card 4: Schema Browser */}
-                        <div className="bg-slate-900/50 shadow-xl border border-slate-800/50 rounded-xl p-4 cursor-not-allowed flex flex-col justify-between h-full opacity-60">
-                            <div>
-                                <div className="flex items-center mb-2">
-                                    <HelpCircle className="h-5 w-5 text-slate-500 mr-2" />
-                                    <h3 className="text-base font-semibold text-slate-500">Schema Browser</h3>
-                                    <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
-                                </div>
-                                <p className="text-xs text-slate-600 mb-4">Explore data schemas and metric definitions.</p>
                             </div>
                             <button className="w-full py-2 bg-slate-800/50 text-slate-600 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/30 cursor-not-allowed">
                                 Coming soon

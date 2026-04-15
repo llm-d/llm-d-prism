@@ -17,6 +17,7 @@ import Dashboard from './components/Dashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
+import SchemaExplorer from './components/SchemaExplorer';
 
 import LeftNavigation from './components/LeftNavigation';
 
@@ -38,6 +39,7 @@ function App() {
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
           {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} />}
           {currentView === 'advanced' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
+          {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
         </main>
       </div>
