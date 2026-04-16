@@ -371,7 +371,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
     const [visiblePercentiles, setVisiblePercentiles] = useState(['p50', 'p90', 'p99']);
 
     const exportToCSV = () => {
-        const headers = ['QPS', 'Standard P50 (ms)', 'Prefix-aware P50 (ms)', 'Standard P99 (ms)', 'Prefix-aware P99 (ms)', 'Overall Gain (%)'];
+        const headers = ['QPS', 'Standard P50 (ms)', 'Prefix-aware P50 (ms)', 'Standard P99 (ms)', 'Prefix-aware P99 (ms)', 'Difference (%)'];
         const rows = tableData.map(row => {
             const base50 = tableMetricMode === 'ttft' ? (row.baseline_ttft_p50 || 0) : (row.baseline_itl_p50 || 0);
             const opt50 = tableMetricMode === 'ttft' ? (row.router_ttft_p50 || 0) : (row.router_itl_p50 || 0);
@@ -873,21 +873,20 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             <p className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-2 flex justify-between items-center">
                                 Primary outcome
                                 <span className="text-[8px] px-1 py-0.5 rounded bg-slate-800 text-slate-400 font-mono border border-slate-700 flex items-center gap-1 font-semibold">
-                                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> P99 Tail
+                                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> TTFT (P50)
                                 </span>
                             </p>
                             <h3 className="text-base font-bold text-white mb-2">
-                                Tail latency reduction
+                                Latency reduction
                             </h3>
-                            <h4 className="text-3xl font-black text-emerald-400 flex items-baseline tracking-tight">
+                            <h4 className="text-5xl font-black text-emerald-400 flex items-baseline tracking-tight">
                                 {(() => {
-                                    const validRows = tableData.filter(r => r.baseline_ttft_p99 > 0 && r.router_ttft_p99 > 0);
+                                    const validRows = tableData.filter(r => r.baseline_ttft_p50 > 0 && r.router_ttft_p50 > 0);
                                     if (validRows.length === 0) return "41%";
                                     const r = validRows[validRows.length - 1];
-                                    const gain = ((r.baseline_ttft_p99 - r.router_ttft_p99) / r.baseline_ttft_p99) * 100;
+                                    const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
                                     return `${Math.round(gain)}%`;
                                 })()}
-                                <span className="text-xs font-bold text-emerald-500/80 ml-1.5">Reduction</span>
                             </h4>
                         </div>
                         <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between">
@@ -1245,7 +1244,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     </th>
                                     <th scope="col" className="px-4 py-3 border-l border-slate-800 text-right cursor-pointer hover:bg-slate-900" onClick={() => setSortConfig(prev => ({ key: 'gain', direction: prev.key === 'gain' && prev.direction === 'asc' ? 'desc' : 'asc' }))}>
                                         <div className="flex items-center justify-end gap-1 text-emerald-400">
-                                            Overall Gain {sortConfig.key === 'gain' && <span className="text-cyan-400">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
+                                            Difference (%) {sortConfig.key === 'gain' && <span className="text-cyan-400">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
                                         </div>
                                     </th>
                                 </tr>
