@@ -3,7 +3,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     ScatterChart, Scatter, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
-import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle } from 'lucide-react';
+import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 
 const RAW_GEMMA_DATA = [
@@ -287,7 +287,7 @@ const PercentileGroupedLegend = ({ payload }) => {
     );
 };
 
-const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
+const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [gcsData, setGcsData] = useState([]);
     const [reportsMeta, setReportsMeta] = useState(null);
@@ -676,6 +676,15 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
             {/* Top Navigation Bar - Fully Fixed for 100% Scroll Independence */}
             <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
                 <div className="flex items-center gap-4">
+                    {/* Hamburger Menu for Mobile */}
+                    <button 
+                        onClick={onToggleMobileNav} 
+                        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden"
+                        title="Toggle Navigation"
+                    >
+                        <Menu className="h-6 w-6" />
+                    </button>
+
                     {onNavigateBack && (
                         <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
                             <ArrowLeft className="h-5 w-5" />
@@ -685,27 +694,29 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                     {/* Compact Prism Logo & Name */}
                     <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
                         <img src="/favicon.png" alt="Prism Logo" className="h-6 w-6 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-600">
+                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-600 hidden sm:inline">
                             Prism
                         </span>
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-lg font-bold text-white tracking-wide">Inference scheduling</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Inference scheduling</h1>
+                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
                             Guided mode
                         </span>
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 sm:space-x-4">
                     <a 
                         href="https://llm-d.ai/docs/community" 
                         target="_blank" 
                         rel="noreferrer"
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
+                        title="Contact us"
                     >
-                        <MessageCircle className="w-4 h-4 mr-2" /> Contact us
+                        <MessageCircle className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Contact us</span>
                     </a>
                     <button 
                         onClick={() => { 
@@ -726,9 +737,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                 setTimeout(() => setShareToast(false), 2000); 
                             });
                         }} 
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
+                        title="Share view"
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
+                        <Share2 className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Share view</span>
                         {shareToast && (
                             <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                 {toastMessage}
