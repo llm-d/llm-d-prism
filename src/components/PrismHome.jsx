@@ -33,28 +33,28 @@ const PrismHome = ({ onNavigate }) => {
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
                           Select a well-lit path to begin
                      </h2>
-                     <p className="text-sm text-slate-500 text-center mb-12">Standardized workloads optimized for rapid evaluation and deployment.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+                     <p className="text-xs text-slate-500 text-center mb-6">Standardized workloads optimized for rapid evaluation and deployment.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                         {/* Path 1: Inference scheduling (Primary M1 Path - Popping) */}
                         <div 
                             onClick={() => onNavigate('inference-scheduling')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-2xl border-2 border-cyan-500 rounded-2xl p-8 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] transition-all duration-500 cursor-pointer flex flex-col h-full overflow-hidden"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-2xl border-2 border-cyan-500 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] transition-all duration-500 cursor-pointer flex flex-col h-full overflow-hidden"
                         >
                             <div className="absolute top-0 right-0 text-xs px-2.5 py-1 bg-cyan-500 text-white rounded-bl-lg font-mono font-bold tracking-wide shadow-lg">PRIMARY PATH</div>
-                            <h3 className="text-xl font-bold mb-3 text-white group-hover:text-cyan-400 transition-colors">
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors">
                                 Intelligent inference scheduling
                             </h3>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <span className="text-xs px-2.5 py-1 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20">Automated routing</span>
-                                <span className="text-xs px-2.5 py-1 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20">Regression testing</span>
+                            <div className="flex flex-nowrap gap-1.5 mb-2">
+                                <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Prefix-cache aware</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Load balancing</span>
                             </div>
-                            <p className="text-slate-400 text-sm mb-6 flex-1">
-                                Visualize performance deltas for automated prompt routing. Compare baseline vs. challenger scenarios. Run historical regression checks.
+                            <p className="text-slate-400 text-xs mb-3 flex-1">
+                                Optimize vLLM and SGLang on Kubernetes. Reduce tail latency and increase throughput with load-aware and prefix-cache aware routing.
                             </p>
                             
                             {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-8 relative">
-                                <div className="space-y-2 mb-3">
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3 mb-4 relative">
+                                <div className="space-y-1 mb-2">
                                     <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Avg. TTFT reduction</span>
                                         <span className="text-cyan-400 font-mono font-bold">-210ms</span>
@@ -65,38 +65,38 @@ const PrismHome = ({ onNavigate }) => {
                                     </div>
                                 </div>
                                 {/* Monochromatic Preview Chart */}
-                                <div className="h-10 flex items-end justify-between space-x-1">
-                                    <div className="w-full bg-cyan-500 h-3 rounded-sm opacity-30"></div>
-                                    <div className="w-full bg-cyan-500 h-5 rounded-sm opacity-50"></div>
-                                    <div className="w-full bg-cyan-500 h-8 rounded-sm opacity-80"></div>
-                                    <div className="w-full bg-cyan-500 h-6 rounded-sm opacity-60"></div>
-                                    <div className="w-full bg-cyan-500 h-10 rounded-sm"></div>
+                                <div className="h-8 flex items-end justify-between space-x-1">
+                                    <div className="w-full bg-cyan-500 h-2 rounded-sm opacity-30"></div>
+                                    <div className="w-full bg-cyan-500 h-4 rounded-sm opacity-50"></div>
+                                    <div className="w-full bg-cyan-500 h-6 rounded-sm opacity-80"></div>
+                                    <div className="w-full bg-cyan-500 h-5 rounded-sm opacity-60"></div>
+                                    <div className="w-full bg-cyan-500 h-8 rounded-sm"></div>
                                 </div>
                             </div>
 
-                            <button className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-sm flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.3)] transform group-hover:scale-[1.02] transition-all">
-                                Launch Dashboard <ArrowRight className="ml-1.5 h-4 w-4" />
+                            <button className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-xs flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.3)] transform group-hover:scale-[1.02] transition-all">
+                                Launch Dashboard <ArrowRight className="ml-1.5 h-3 w-3" />
                             </button>
                         </div>
 
                         {/* Path 2: P/D Disaggregation */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-8 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
                         >
-                            <h3 className="text-xl font-bold mb-3 text-white group-hover:text-emerald-400 transition-colors">
-                                P/D disaggregation
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-emerald-400 transition-colors">
+                                Prefill / Decode (P/D)<br />Disaggregated Serving
                             </h3>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <span className="text-xs px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20">Split scaling</span>
-                                <span className="text-xs px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20">Hardware tuning</span>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20 whitespace-nowrap">Interactivity</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20 whitespace-nowrap">Large models</span>
                             </div>
-                            <p className="text-slate-400 text-sm mb-6 flex-1">
-                                Split prompt (prefill) and decode workloads across specialized hardware nodes. Optimize idle metrics.
+                            <p className="text-slate-400 text-xs mb-3 flex-1">
+                                Improve interactivity and throughput for large models like gpt-oss-120b. Eliminate prefill interference by specializing P and D workers.
                             </p>
 
                             {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-8 relative">
-                                <div className="space-y-2 mb-3">
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3 mb-4 relative">
+                                <div className="space-y-1 mb-2">
                                     <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Target scale split</span>
                                         <span className="text-emerald-400 font-mono font-bold">P-H100 : D-L4</span>
@@ -107,35 +107,35 @@ const PrismHome = ({ onNavigate }) => {
                                     </div>
                                 </div>
                                 <div className="flex justify-center space-x-2">
-                                     <div className="w-12 h-10 bg-emerald-500/20 rounded border border-emerald-500/50 flex items-center justify-center text-xs text-emerald-400">P</div>
-                                     <div className="w-12 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
-                                     <div className="w-12 h-10 bg-emerald-500/30 rounded border border-emerald-500/50 flex items-center justify-center text-xs text-emerald-400">D</div>
+                                     <div className="w-10 h-8 bg-emerald-500/20 rounded border border-emerald-500/50 flex items-center justify-center text-xs text-emerald-400">P</div>
+                                     <div className="w-10 h-8 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
+                                     <div className="w-10 h-8 bg-emerald-500/30 rounded border border-emerald-500/50 flex items-center justify-center text-xs text-emerald-400">D</div>
                                 </div>
                             </div>
 
-                            <button className="w-full py-2.5 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-sm flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
                                 Coming soon
                             </button>
                         </div>
 
                         {/* Path 3: Wide-EP */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-8 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
                         >
-                            <h3 className="text-xl font-bold mb-3 text-white group-hover:text-pink-400 transition-colors">
-                                Wide expert parallelism
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-pink-400 transition-colors">
+                                Wide Expert<br />Parallelism (Wide EP)
                             </h3>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <span className="text-xs px-2.5 py-1 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20">Expert tracking</span>
-                                <span className="text-xs px-2.5 py-1 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20">MoE scale</span>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                <span className="text-[10px] px-2 py-0.5 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20 whitespace-nowrap">LeaderWorkerSet</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20 whitespace-nowrap">MoE scale</span>
                             </div>
-                            <p className="text-slate-400 text-sm mb-6 flex-1">
-                                Scales sparse Mixture-of-Experts (MoE) across large device clusters. Monitor node telemetry.
+                            <p className="text-slate-400 text-xs mb-3 flex-1">
+                                Deploy large MoE models like DeepSeek-R1 across multi-node GPU clusters. Scale sparse models using wide expert parallelism and LeaderWorkerSet.
                             </p>
 
                             {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-8 relative">
-                                <div className="space-y-2 mb-3">
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3 mb-4 relative">
+                                <div className="space-y-1 mb-2">
                                     <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Node expert count</span>
                                         <span className="text-pink-400 font-mono font-bold">64+ Experts</span>
@@ -145,7 +145,7 @@ const PrismHome = ({ onNavigate }) => {
                                         <span className="text-pink-400 font-mono font-bold">256+ Chips</span>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-1 h-10">
+                                <div className="grid grid-cols-4 gap-1 h-8">
                                      <div className="bg-pink-500/20 rounded-sm"></div>
                                      <div className="bg-pink-500/40 rounded-sm"></div>
                                      <div className="bg-pink-500/10 rounded-sm"></div>
@@ -157,7 +157,48 @@ const PrismHome = ({ onNavigate }) => {
                                 </div>
                             </div>
 
-                            <button className="w-full py-2.5 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-sm flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
+                                Coming soon
+                            </button>
+                        </div>
+
+                        {/* Path 4: Prefix Cache Offloading */}
+                        <div 
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
+                        >
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-amber-400 transition-colors">
+                                Prefix Cache<br />Offloading
+                            </h3>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full font-medium border border-amber-500/20 whitespace-nowrap">KV-cache</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full font-medium border border-amber-500/20 whitespace-nowrap">Tiered storage</span>
+                            </div>
+                            <p className="text-slate-400 text-xs mb-3 flex-1">
+                                Offload KV cache to CPU memory to extend accelerator capacity and serve longer contexts. Supports tiered storage hierarchy.
+                            </p>
+
+                            {/* Visual Preview / Metrics */}
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3 mb-4 relative">
+                                <div className="space-y-1 mb-2">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Primary tier</span>
+                                        <span className="text-amber-400 font-mono font-bold">HBM</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Offload tier</span>
+                                        <span className="text-amber-400 font-mono font-bold">CPU RAM</span>
+                                    </div>
+                                </div>
+                                <div className="flex justify-center space-x-1">
+                                     <div className="w-10 h-8 bg-amber-500/20 rounded border border-amber-500/50 flex items-center justify-center text-xs text-amber-400">HBM</div>
+                                     <div className="w-6 h-8 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
+                                     <div className="w-10 h-8 bg-amber-500/30 rounded border border-amber-500/50 flex items-center justify-center text-xs text-amber-400">CPU</div>
+                                     <div className="w-6 h-8 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
+                                     <div className="w-10 h-8 bg-amber-500/10 rounded border border-amber-500/30 flex items-center justify-center text-xs text-amber-400">Disk</div>
+                                </div>
+                            </div>
+
+                            <button className="w-full py-2 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
                                 Coming soon
                             </button>
                         </div>
