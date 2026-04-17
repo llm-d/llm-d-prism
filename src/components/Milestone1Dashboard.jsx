@@ -171,7 +171,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                 {(() => {
                     const groups = {
                         'Standard Kubernetes [STD]': [],
-                        'Prefix-aware caching [BENCH]': [],
+                        'Approx. prefix aware routing [BENCH]': [],
                         'Other': []
                     };
 
@@ -179,7 +179,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                         if (entry.name.includes('Standard Kubernetes') || entry.name.includes('Baseline')) {
                             groups['Standard Kubernetes [STD]'].push(entry);
                         } else if (entry.name.includes('Prefix-aware') || entry.name.includes('Router')) {
-                            groups['Prefix-aware caching [BENCH]'].push(entry);
+                            groups['Approx. prefix aware routing [BENCH]'].push(entry);
                         } else {
                             groups['Other'].push(entry);
                         }
@@ -202,7 +202,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                                     
                                     let label = entry.name;
                                     if (groupName !== 'Other') {
-                                        label = label.replace('Standard Kubernetes ', '').replace('Prefix-aware caching ', '').replace('Baseline ', '').replace('Router ', '');
+                                        label = label.replace('Standard Kubernetes ', '').replace('Approx. prefix aware routing ', '').replace('Baseline ', '').replace('Router ', '');
                                     }
 
                                     return (
@@ -233,56 +233,14 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
 const PercentileGroupedLegend = ({ payload }) => {
     if (!payload || !payload.length) return null;
 
-    const stdItems = payload.filter(entry => entry.value.includes('Standard Kubernetes'));
-    const pacItems = payload.filter(entry => entry.value.includes('Prefix-aware'));
-    const otherItems = payload.filter(entry => !entry.value.includes('Standard Kubernetes') && !entry.value.includes('Prefix-aware'));
-
     return (
-        <div className="w-full flex flex-col items-center justify-center gap-2 border-t border-slate-800/60 pt-2 mt-2 px-4 text-[11px]">
-            {pacItems.length > 0 && (
-                <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Prefix-aware caching:</span>
-                    <div className="flex items-center justify-center gap-3">
-                        {pacItems.map((entry, index) => {
-                            const cleanLabel = entry.value.replace('Prefix-aware caching ', '');
-                            return (
-                                <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                                    <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                                    <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{cleanLabel}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
+        <div className="w-full flex items-center justify-center gap-4 flex-wrap border-t border-slate-800/60 pt-2 mt-2 px-4 text-[11px]">
+            {payload.map((entry, index) => (
+                <div key={index} className="flex items-center gap-1.5 cursor-pointer group" onClick={entry.onClick}>
+                    <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                    <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{entry.value}</span>
                 </div>
-            )}
-
-            {stdItems.length > 0 && (
-                <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Standard Kubernetes:</span>
-                    <div className="flex items-center justify-center gap-3">
-                        {stdItems.map((entry, index) => {
-                            const cleanLabel = entry.value.replace('Standard Kubernetes ', '');
-                            return (
-                                <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                                    <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                                    <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{cleanLabel}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {otherItems.length > 0 && (
-                <div className="flex items-center justify-center gap-3 flex-wrap">
-                    {otherItems.map((entry, index) => (
-                        <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                            <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                            <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{entry.value}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
+            ))}
         </div>
     );
 };
@@ -753,24 +711,87 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
 
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-8">
                 {/* Description Card - Premium Aesthetic */}
-                <div className="relative overflow-hidden border border-slate-800/80 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-8 shadow-2xl backdrop-blur-xl group transition-all duration-500 hover:border-emerald-500/30">
+                <div className="relative overflow-hidden border border-slate-800/80 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-4 shadow-2xl backdrop-blur-xl group transition-all duration-500 hover:border-emerald-500/30">
                     {/* Ambient glowing background orb */}
                     <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-all duration-700 pointer-events-none" />
                     <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700 pointer-events-none" />
                     
-                    <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="flex-1 space-y-3">
-                            <h3 className="text-lg font-bold text-white">
-                                Optimize vLLM with prefix-cache aware routing
-                            </h3>
-                            <p className="text-sm text-slate-400 leading-relaxed max-w-3xl">
-                                Monitors the effectiveness of intelligent load balancing and <strong className="text-slate-200">prefix-cache aware routing</strong>. By observing request traffic and cache locality, it routes requests to optimal instances, reducing tail latency compared to Standard Kubernetes workloads.
-                            </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
+                        {/* Col 1: Overview */}
+                        <div className="flex flex-col justify-between space-y-3">
+                            <div>
+                                <p className="text-sm text-slate-400 leading-relaxed">
+                                    These variants of intelligent inference scheduling optimize request routing to maximize performance. By leveraging real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex-shrink-0 self-start md:self-center flex flex-col gap-2">
-                            <a href="https://llm-d.ai/docs/guide/Installation/inference-scheduling" target="_blank" rel="noreferrer" className="inline-flex items-center justify-center px-5 py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium text-sm rounded-xl border border-slate-700 hover:border-slate-600 transition-all duration-300 group/btn">
-                                Read full guide <ExternalLink className="w-4 h-4 ml-2 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                            </a>
+
+                        {/* Col 2: Active Configurations */}
+                        <div className="space-y-2">
+                            <div className="text-[10px] font-extrabold text-cyan-400/90 uppercase tracking-widest mb-1">
+                                Active Configurations
+                            </div>
+                            
+                            {/* Baseline */}
+                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-200">Baseline</div>
+                                    <p className="text-[10px] text-slate-500">Standard Kubernetes service endpoint</p>
+                                </div>
+                                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                            </div>
+
+                            {/* Opt 1: Active */}
+                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-200">Approximate Prefix Cache Routing</div>
+                                    <p className="text-[10px] text-slate-500">Current active scenario</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/inference-scheduling" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Col 3: Upcoming */}
+                        <div className="space-y-2">
+                            <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1">
+                                Upcoming
+                            </div>
+                            
+                            {/* Opt 2: Disabled */}
+                            <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-400">Precise Cache Aware Routing</div>
+                                    <p className="text-[10px] text-slate-500">More accurate cache tracking</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/precise-prefix-cache-aware" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                </div>
+                            </div>
+
+                            {/* Opt 3: Disabled */}
+                            <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-400">Predicted Latency Balancing</div>
+                                    <p className="text-[10px] text-slate-500">Machine learning guided routing</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/predicted-latency-based-scheduling" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -943,10 +964,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -974,10 +995,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1007,10 +1028,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1038,10 +1059,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1071,10 +1092,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1102,10 +1123,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1138,7 +1159,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name="Prefix-aware caching" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name="Approx. prefix aware routing" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1169,7 +1190,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name="Prefix-aware caching" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Scatter name="Approx. prefix aware routing" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
                                     )}
                                 </ScatterChart>
                             </ResponsiveContainer>
@@ -1182,7 +1203,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-md font-bold text-white">Summary metrics comparison</h3>
-                            <span className="text-xs text-slate-500">Comparing Standard workloads against Prefix-aware caching workloads side-by-side.</span>
+                            <span className="text-xs text-slate-500">Comparing Standard workloads against Approx. prefix aware routing workloads side-by-side.</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <div className="flex gap-2 bg-slate-950 border border-slate-800 p-1 rounded-lg">
@@ -1710,7 +1731,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                                     {(() => {
                                                         const groups = {};
                                                         visibleZoomData.forEach(pt => {
-                                                            const prefix = pt.type === 'baseline' ? 'Standard Kubernetes' : 'Prefix-aware caching';
+                                                            const prefix = pt.type === 'baseline' ? 'Standard Kubernetes' : 'Approx. prefix aware routing';
                                                             let key = prefix;
                                                             if (zoomColorMode === 'default') {
                                                                 const isPercentileAxis = ['ttft', 'tpot', 'itl', 'ntpot', 'e2e'].includes(zoomXAxis);
