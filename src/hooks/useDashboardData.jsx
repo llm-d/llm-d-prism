@@ -1251,6 +1251,23 @@ export const useDashboardData = (initialState, dashboardState) => {
                 }
             }
 
+            // Auto-load LPG sources from URL
+            if (initialState.sources) {
+                for (const src of initialState.sources) {
+                    if (src.startsWith('lpg:')) {
+                        const bucketName = src.substring(4);
+                        console.log(`[useDashboardData] Auto-loading LPG source: ${bucketName}`);
+                        try {
+                            const scanResult = await handleLpgGcsScan(`gs://${bucketName}`);
+                            await handleLpgGcsLoad(`gs://${bucketName}`, scanResult.folderNames, scanResult.folders, scanResult.usingProxy);
+                        } catch (e) {
+                            console.warn(`Failed to auto-load LPG source ${bucketName}`, e);
+                            failedSources.push(src);
+                        }
+                    }
+                }
+            }
+
             // Assign IDs
             const dataWithIds = allData.map((d, i) => ({ ...d, id: i }));
 

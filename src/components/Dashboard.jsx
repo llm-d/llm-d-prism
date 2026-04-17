@@ -1242,7 +1242,8 @@ const Dashboard = ({ onNavigateBack }) => {
     // 2. Drops invisible/stale selections when filters change.
     // 3. Auto-selects fallback data if nothing matched.
     useEffect(() => {
-        if (loading || filteredBySource.length === 0) return;
+        const isAnySourceLoading = gcsProfiles.some(p => p.loading);
+        if (loading || isRestoringConnections || isAnySourceLoading || filteredBySource.length === 0) return;
 
         const currentKeys = filteredBySource.map(d => getBenchmarkKey(d));
         const validKeys = new Set(currentKeys);
@@ -1303,7 +1304,7 @@ const Dashboard = ({ onNavigateBack }) => {
 
             return changed ? next : prev;
         });
-    }, [loading, filteredBySource, getBenchmarkKey]);
+    }, [loading, isRestoringConnections, gcsProfiles, filteredBySource, getBenchmarkKey]);
 
     // Derive selectedModels for compatibility with Header/components
     const selectedModels = useMemo(() => {
