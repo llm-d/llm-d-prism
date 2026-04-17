@@ -1101,7 +1101,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     // --- Extracted Block ---
     const loadAllData = async (fetchedConfig = null) => {
-        console.log("[useDashboardData] loadAllData START");
+        console.log("[useDashboardData] loadAllData START", { initialState });
         setLoading(true);
         setGcsLoading(true);
         setGcsError(null);
@@ -1248,6 +1248,26 @@ export const useDashboardData = (initialState, dashboardState) => {
                         type: 'giq',
                         rawResponse: { error: e.message }
                     });
+                }
+            }
+
+            // Auto-load LPG sources from URL
+            console.log("[useDashboardData] initialState.sources available for auto-load:", initialState.sources);
+            if (initialState.sources) {
+                for (const src of initialState.sources) {
+                    if (src.startsWith('lpg:')) {
+                        const bucketName = src.substring(4);
+                        console.log(`[useDashboardData] Auto-loading LPG source: ${bucketName}`);
+                        try {
+                            const scanResult = await handleLpgGcsScan(`gs://${bucketName}`);
+                            console.log(`[useDashboardData] Scan result for ${bucketName}:`, scanResult);
+                            await handleLpgGcsLoad(`gs://${bucketName}`, scanResult.folderNames, scanResult.folders, scanResult.usingProxy);
+                            console.log(`[useDashboardData] Successfully auto-loaded LPG source: ${bucketName}`);
+                        } catch (e) {
+                            console.warn(`Failed to auto-load LPG source ${bucketName}`, e);
+                            failedSources.push(src);
+                        }
+                    }
                 }
             }
 
