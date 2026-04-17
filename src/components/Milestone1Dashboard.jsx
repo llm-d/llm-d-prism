@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    ScatterChart, Scatter, ZAxis, Label, ReferenceArea, ReferenceLine
+    ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
-import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle } from 'lucide-react';
+import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 
 const RAW_GEMMA_DATA = [
@@ -171,7 +171,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                 {(() => {
                     const groups = {
                         'Standard Kubernetes [STD]': [],
-                        'Prefix-aware caching [BENCH]': [],
+                        'Approx. prefix aware routing [BENCH]': [],
                         'Other': []
                     };
 
@@ -179,7 +179,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                         if (entry.name.includes('Standard Kubernetes') || entry.name.includes('Baseline')) {
                             groups['Standard Kubernetes [STD]'].push(entry);
                         } else if (entry.name.includes('Prefix-aware') || entry.name.includes('Router')) {
-                            groups['Prefix-aware caching [BENCH]'].push(entry);
+                            groups['Approx. prefix aware routing [BENCH]'].push(entry);
                         } else {
                             groups['Other'].push(entry);
                         }
@@ -202,7 +202,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                                     
                                     let label = entry.name;
                                     if (groupName !== 'Other') {
-                                        label = label.replace('Standard Kubernetes ', '').replace('Prefix-aware caching ', '').replace('Baseline ', '').replace('Router ', '');
+                                        label = label.replace('Standard Kubernetes ', '').replace('Approx. prefix aware routing ', '').replace('Baseline ', '').replace('Router ', '');
                                     }
 
                                     return (
@@ -233,61 +233,45 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
 const PercentileGroupedLegend = ({ payload }) => {
     if (!payload || !payload.length) return null;
 
-    const stdItems = payload.filter(entry => entry.value.includes('Standard Kubernetes'));
-    const pacItems = payload.filter(entry => entry.value.includes('Prefix-aware'));
-    const otherItems = payload.filter(entry => !entry.value.includes('Standard Kubernetes') && !entry.value.includes('Prefix-aware'));
+    // Filter out duplicate entries from Line components
+    const filteredPayload = payload.filter(entry => !['dynamic_y', 'input', 'output', 'total', 'qps'].includes(entry.value));
+
+    // Group entries by variant
+    const baselineItems = filteredPayload.filter(e => e.value.includes('Standard Kubernetes'));
+    const routerItems = filteredPayload.filter(e => e.value.includes('Approx. prefix aware routing'));
+
+    const renderItem = (entry, index) => {
+        let dashArray = "0";
+        if (entry.value.includes('P90')) dashArray = "5 5";
+        else if (entry.value.includes('P99')) dashArray = "2 2";
+
+        return (
+            <div key={index} className="flex items-center gap-1.5 cursor-pointer group w-max" onClick={entry.onClick}>
+                <svg width="16" height="4" className="shrink-0">
+                    <line x1="0" y1="2" x2="16" y2="2" stroke={entry.color} strokeWidth="2" strokeDasharray={dashArray} />
+                </svg>
+                <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{entry.value}</span>
+            </div>
+        );
+    };
 
     return (
-        <div className="w-full flex flex-col items-center justify-center gap-2 border-t border-slate-800/60 pt-2 mt-2 px-4 text-[11px]">
-            {pacItems.length > 0 && (
+        <div className="w-full flex flex-col gap-2 border-t border-slate-800/60 pt-2 mt-2 px-4 text-[11px]">
+            {routerItems.length > 0 && (
                 <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Prefix-aware caching:</span>
-                    <div className="flex items-center justify-center gap-3">
-                        {pacItems.map((entry, index) => {
-                            const cleanLabel = entry.value.replace('Prefix-aware caching ', '');
-                            return (
-                                <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                                    <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                                    <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{cleanLabel}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {routerItems.map(renderItem)}
                 </div>
             )}
-
-            {stdItems.length > 0 && (
+            {baselineItems.length > 0 && (
                 <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Standard Kubernetes:</span>
-                    <div className="flex items-center justify-center gap-3">
-                        {stdItems.map((entry, index) => {
-                            const cleanLabel = entry.value.replace('Standard Kubernetes ', '');
-                            return (
-                                <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                                    <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                                    <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{cleanLabel}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {otherItems.length > 0 && (
-                <div className="flex items-center justify-center gap-3 flex-wrap">
-                    {otherItems.map((entry, index) => (
-                        <div key={index} className="flex items-center gap-1 cursor-pointer group" onClick={entry.onClick}>
-                            <div className="w-3 h-0.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                            <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{entry.value}</span>
-                        </div>
-                    ))}
+                    {baselineItems.map(renderItem)}
                 </div>
             )}
         </div>
     );
 };
 
-const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
+const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [gcsData, setGcsData] = useState([]);
     const [reportsMeta, setReportsMeta] = useState(null);
@@ -371,7 +355,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
     const [visiblePercentiles, setVisiblePercentiles] = useState(['p50', 'p90', 'p99']);
 
     const exportToCSV = () => {
-        const headers = ['QPS', 'Standard P50 (ms)', 'Prefix-aware P50 (ms)', 'Standard P99 (ms)', 'Prefix-aware P99 (ms)', 'Overall Gain (%)'];
+        const headers = ['QPS', 'Standard P50 (ms)', 'Prefix-aware P50 (ms)', 'Standard P99 (ms)', 'Prefix-aware P99 (ms)', 'Difference (%)'];
         const rows = tableData.map(row => {
             const base50 = tableMetricMode === 'ttft' ? (row.baseline_ttft_p50 || 0) : (row.baseline_itl_p50 || 0);
             const opt50 = tableMetricMode === 'ttft' ? (row.router_ttft_p50 || 0) : (row.router_itl_p50 || 0);
@@ -676,6 +660,15 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
             {/* Top Navigation Bar - Fully Fixed for 100% Scroll Independence */}
             <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
                 <div className="flex items-center gap-4">
+                    {/* Hamburger Menu for Mobile */}
+                    <button 
+                        onClick={onToggleMobileNav} 
+                        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden"
+                        title="Toggle Navigation"
+                    >
+                        <Menu className="h-6 w-6" />
+                    </button>
+
                     {onNavigateBack && (
                         <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
                             <ArrowLeft className="h-5 w-5" />
@@ -685,27 +678,29 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                     {/* Compact Prism Logo & Name */}
                     <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
                         <img src="/favicon.png" alt="Prism Logo" className="h-6 w-6 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-600">
+                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-600 hidden sm:inline">
                             Prism
                         </span>
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-lg font-bold text-white tracking-wide">Inference scheduling</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Inference scheduling</h1>
+                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
                             Guided mode
                         </span>
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 sm:space-x-4">
                     <a 
                         href="https://llm-d.ai/docs/community" 
                         target="_blank" 
                         rel="noreferrer"
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
+                        title="Contact us"
                     >
-                        <MessageCircle className="w-4 h-4 mr-2" /> Contact us
+                        <MessageCircle className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Contact us</span>
                     </a>
                     <button 
                         onClick={() => { 
@@ -726,9 +721,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                 setTimeout(() => setShareToast(false), 2000); 
                             });
                         }} 
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
+                        title="Share view"
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
+                        <Share2 className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Share view</span>
                         {shareToast && (
                             <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                 {toastMessage}
@@ -740,24 +737,87 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
 
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-8">
                 {/* Description Card - Premium Aesthetic */}
-                <div className="relative overflow-hidden border border-slate-800/80 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-8 shadow-2xl backdrop-blur-xl group transition-all duration-500 hover:border-emerald-500/30">
+                <div className="relative overflow-hidden border border-slate-800/80 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-4 shadow-2xl backdrop-blur-xl group transition-all duration-500 hover:border-emerald-500/30">
                     {/* Ambient glowing background orb */}
                     <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-all duration-700 pointer-events-none" />
                     <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700 pointer-events-none" />
                     
-                    <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="flex-1 space-y-3">
-                            <h3 className="text-lg font-bold text-white">
-                                Optimize vLLM with prefix-cache aware routing
-                            </h3>
-                            <p className="text-sm text-slate-400 leading-relaxed max-w-3xl">
-                                Monitors the effectiveness of intelligent load balancing and <strong className="text-slate-200">prefix-cache aware routing</strong>. By observing request traffic and cache locality, it routes requests to optimal instances, reducing tail latency compared to Standard Kubernetes workloads.
-                            </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
+                        {/* Col 1: Overview */}
+                        <div className="flex flex-col justify-between space-y-3">
+                            <div>
+                                <p className="text-sm text-slate-400 leading-relaxed">
+                                    These variants of intelligent inference scheduling optimize request routing to maximize performance. By leveraging real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex-shrink-0 self-start md:self-center flex flex-col gap-2">
-                            <a href="https://llm-d.ai/docs/guide/Installation/inference-scheduling" target="_blank" rel="noreferrer" className="inline-flex items-center justify-center px-5 py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium text-sm rounded-xl border border-slate-700 hover:border-slate-600 transition-all duration-300 group/btn">
-                                Read full guide <ExternalLink className="w-4 h-4 ml-2 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                            </a>
+
+                        {/* Col 2: Active Configurations */}
+                        <div className="space-y-2">
+                            <div className="text-[10px] font-extrabold text-cyan-400/90 uppercase tracking-widest mb-1">
+                                Active Configurations
+                            </div>
+                            
+                            {/* Baseline */}
+                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-200">Baseline</div>
+                                    <p className="text-[10px] text-slate-500">Standard Kubernetes service endpoint</p>
+                                </div>
+                                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                            </div>
+
+                            {/* Opt 1: Active */}
+                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-200">Approximate Prefix Cache Routing</div>
+                                    <p className="text-[10px] text-slate-500">Current active scenario</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/inference-scheduling" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Col 3: Upcoming */}
+                        <div className="space-y-2">
+                            <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1">
+                                Upcoming
+                            </div>
+                            
+                            {/* Opt 2: Disabled */}
+                            <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-400">Precise Cache Aware Routing</div>
+                                    <p className="text-[10px] text-slate-500">More accurate cache tracking</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/precise-prefix-cache-aware" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                </div>
+                            </div>
+
+                            {/* Opt 3: Disabled */}
+                            <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-400">Predicted Latency Balancing</div>
+                                    <p className="text-[10px] text-slate-500">Machine learning guided routing</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/predicted-latency-based-scheduling" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                        <span className="text-[10px]">Guide</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -860,21 +920,20 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                             <p className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-2 flex justify-between items-center">
                                 Primary outcome
                                 <span className="text-[8px] px-1 py-0.5 rounded bg-slate-800 text-slate-400 font-mono border border-slate-700 flex items-center gap-1 font-semibold">
-                                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> P99 Tail
+                                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> TTFT (P50)
                                 </span>
                             </p>
                             <h3 className="text-base font-bold text-white mb-2">
-                                Tail latency reduction
+                                Latency reduction
                             </h3>
-                            <h4 className="text-3xl font-black text-emerald-400 flex items-baseline tracking-tight">
+                            <h4 className="text-5xl font-black text-emerald-400 flex items-baseline tracking-tight">
                                 {(() => {
-                                    const validRows = tableData.filter(r => r.baseline_ttft_p99 > 0 && r.router_ttft_p99 > 0);
+                                    const validRows = tableData.filter(r => r.baseline_ttft_p50 > 0 && r.router_ttft_p50 > 0);
                                     if (validRows.length === 0) return "41%";
                                     const r = validRows[validRows.length - 1];
-                                    const gain = ((r.baseline_ttft_p99 - r.router_ttft_p99) / r.baseline_ttft_p99) * 100;
+                                    const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
                                     return `${Math.round(gain)}%`;
                                 })()}
-                                <span className="text-xs font-bold text-emerald-500/80 ml-1.5">Reduction</span>
                             </h4>
                         </div>
                         <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between">
@@ -920,7 +979,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="ttft" name="TTFT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TTFT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -931,12 +990,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.ttft_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.ttft_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -951,7 +1016,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="ttft" name="TTFT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TTFT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -962,12 +1027,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.ttft_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.ttft_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -984,7 +1055,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="ttft" name="TTFT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TTFT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -995,12 +1066,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="total" data={scatterData.ttft_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="total" data={scatterData.ttft_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1015,7 +1092,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="ttft" name="TTFT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TTFT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -1026,12 +1103,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.ttft_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="qps" data={scatterData.ttft_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.ttft_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.ttft_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="qps" data={scatterData.ttft_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.ttft_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1048,7 +1131,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="tpot" name="TPOT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TPOT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -1059,12 +1142,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.tpot_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.tpot_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.tpot_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.tpot_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1079,7 +1168,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="tpot" name="TPOT" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="TPOT (ms)" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -1090,12 +1179,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name={`Standard Kubernetes ${selectedPercentile}`} data={scatterData.tpot_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.tpot_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name={`Standard Kubernetes (${selectedPercentile})`} data={scatterData.tpot_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name={`Prefix-aware caching ${selectedPercentile}`} data={scatterData.tpot_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.tpot_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name={`Approx. prefix aware routing (${selectedPercentile})`} data={scatterData.tpot_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1112,7 +1207,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="qps" name="QPS" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="Queries Per Second" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -1123,12 +1218,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.qps_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name="Prefix-aware caching" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="input" data={scatterData.qps_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name="Approx. prefix aware routing" data={scatterData.qps_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1143,7 +1244,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                         </div>
                         <div className="flex-1 p-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
+                                <ComposedChart margin={{ top: 10, right: 10, left: 10, bottom: 60 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis type="number" dataKey="qps" name="QPS" stroke="#64748b" tick={{ fontSize: 12 }}>
                                         <Label value="Queries Per Second" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
@@ -1154,12 +1255,18 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichSchedulingTooltip />} />
                                     <Legend verticalAlign="bottom" wrapperStyle={{ width: '100%', left: '0px', bottom: '0px' }} content={<PercentileGroupedLegend />} />
                                     {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
-                                        <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" line={{ stroke: '#fb923c', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.qps_baseline} stroke="#fb923c" strokeWidth={2} dot={false} legendType="none" />
+                                    )}
+                                    {!hiddenSeries.includes(`Baseline ${selectedPercentile}`) && (
+                                        <Scatter name="Standard Kubernetes" data={scatterData.qps_baseline} fill="#fb923c" />
                                     )}
                                     {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
-                                        <Scatter name="Prefix-aware caching" data={scatterData.qps_router} fill="#38bdf8" line={{ stroke: '#38bdf8', strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="output" data={scatterData.qps_router} stroke="#38bdf8" strokeWidth={2} dot={false} legendType="none" />
                                     )}
-                                </ScatterChart>
+                                    {!hiddenSeries.includes(`Router ${selectedPercentile}`) && (
+                                        <Scatter name="Approx. prefix aware routing" data={scatterData.qps_router} fill="#38bdf8" />
+                                    )}
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -1170,7 +1277,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-md font-bold text-white">Summary metrics comparison</h3>
-                            <span className="text-xs text-slate-500">Comparing Standard workloads against Prefix-aware caching workloads side-by-side.</span>
+                            <span className="text-xs text-slate-500">Comparing Standard workloads against Approx. prefix aware routing workloads side-by-side.</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <div className="flex gap-2 bg-slate-950 border border-slate-800 p-1 rounded-lg">
@@ -1232,7 +1339,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                     </th>
                                     <th scope="col" className="px-4 py-3 border-l border-slate-800 text-right cursor-pointer hover:bg-slate-900" onClick={() => setSortConfig(prev => ({ key: 'gain', direction: prev.key === 'gain' && prev.direction === 'asc' ? 'desc' : 'asc' }))}>
                                         <div className="flex items-center justify-end gap-1 text-emerald-400">
-                                            Overall Gain {sortConfig.key === 'gain' && <span className="text-cyan-400">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
+                                            Difference (%) {sortConfig.key === 'gain' && <span className="text-cyan-400">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
                                         </div>
                                     </th>
                                 </tr>
@@ -1678,7 +1785,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                             </div>
 
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <ScatterChart margin={{ top: 10, right: 20, left: 20, bottom: 60 }}>
+                                                <ComposedChart margin={{ top: 10, right: 20, left: 20, bottom: 60 }}>
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                                     <XAxis 
                                                         type="number"
@@ -1698,11 +1805,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                                     {(() => {
                                                         const groups = {};
                                                         visibleZoomData.forEach(pt => {
-                                                            const prefix = pt.type === 'baseline' ? 'Standard Kubernetes' : 'Prefix-aware caching';
+                                                            const prefix = pt.type === 'baseline' ? 'Standard Kubernetes' : 'Approx. prefix aware routing';
                                                             let key = prefix;
                                                             if (zoomColorMode === 'default') {
                                                                 const isPercentileAxis = ['ttft', 'tpot', 'itl', 'ntpot', 'e2e'].includes(zoomXAxis);
-                                                                key = isPercentileAxis ? `${prefix} ${pt.percentile.toUpperCase()}` : prefix;
+                                                                key = isPercentileAxis ? `${prefix} (${pt.percentile.toUpperCase()})` : prefix;
                                                             } else if (zoomColorMode === 'hardware') {
                                                                 key = `${prefix} - ${pt.hardware || 'H100'}`;
                                                             } else if (zoomColorMode === 'node_config') {
@@ -1723,22 +1830,24 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate }) => {
                                                             }
                                                             
                                                             let opacity = 1.0;
-                                                            if (k.endsWith('P90')) opacity = 0.6;
-                                                            else if (k.endsWith('P99')) opacity = 0.3;
+                                                            let dashArray = "0";
+                                                            if (k.includes('P90')) {
+                                                                opacity = 0.6;
+                                                                dashArray = "5 5";
+                                                            } else if (k.includes('P99')) {
+                                                                opacity = 0.3;
+                                                                dashArray = "2 2";
+                                                            }
 
                                                             return (
-                                                                <Scatter 
-                                                                    key={k}
-                                                                    name={k}
-                                                                    data={groups[k]}
-                                                                    fill={scatterColor}
-                                                                    line={{ stroke: scatterColor, strokeWidth: 2, strokeOpacity: opacity }}
-                                                                    fillOpacity={opacity}
-                                                                />
+                                                                <React.Fragment key={k}>
+                                                                    <Line type="monotone" dataKey="dynamic_y" data={groups[k]} stroke={scatterColor} strokeWidth={2} strokeOpacity={opacity} strokeDasharray={dashArray} dot={false} legendType="none" />
+                                                                    <Scatter name={k} data={groups[k]} fill={scatterColor} fillOpacity={opacity} />
+                                                                </React.Fragment>
                                                             );
                                                         });
                                                     })()}
-                                                </ScatterChart>
+                                                </ComposedChart>
                                             </ResponsiveContainer>
                                     </div>
                                 </div>

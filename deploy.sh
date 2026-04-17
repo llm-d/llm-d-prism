@@ -7,6 +7,9 @@ SERVICE_NAME="prism"
 SITE_NAME=""
 GA_TRACKING_ID="G-9V2H96477R"
 REGION="us-central1"
+MIN_INSTANCES=""
+MAX_INSTANCES=""
+CONCURRENCY=""
 
 # Helper function to print usage
 usage() {
@@ -81,26 +84,42 @@ REGION="$REGION"
 CONTACT_US_URL="$CONTACT_US_URL"
 GIQ_PROJECTS="${GIQ_PROJECTS:-$PROJECT_ID}"
 GCS_BUCKETS="${GCS_BUCKETS:-prism-internal-results}"
+MIN_INSTANCES="$MIN_INSTANCES"
+MAX_INSTANCES="$MAX_INSTANCES"
+CONCURRENCY="$CONCURRENCY"
 EOL
 
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME"
 
 echo "Deploying to Project: $PROJECT_ID with Name: '$SITE_NAME' and GA: '$GA_TRACKING_ID'"
 
-# Enable required APIs
-echo "Enabling required APIs..."
-gcloud services enable cloudbuild.googleapis.com containerregistry.googleapis.com run.googleapis.com --project $PROJECT_ID
+# Enable required APIs (skipped in CI; enable manually or grant the SA serviceusage.serviceUsageAdmin)
+if [ "${CI}" != "true" ]; then
+  echo "Enabling required APIs..."
+  gcloud services enable cloudbuild.googleapis.com containerregistry.googleapis.com run.googleapis.com --project $PROJECT_ID
+else
+  echo "Skipping API enablement in CI environment"
+fi
 
 # Deploy to Cloud Run from source
 echo "Deploying to Cloud Run from source..."
-gcloud run deploy $SERVICE_NAME \
-  --source . \
-  --platform managed \
-  --region $REGION \
-  --allow-unauthenticated \
-  --port 8080 \
-  --project $PROJECT_ID \
+
+DEPLOY_ARGS=(
+  run deploy $SERVICE_NAME
+  --source .
+  --platform managed
+  --region $REGION
+  --allow-unauthenticated
+  --port 8080
+  --project $PROJECT_ID
   --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID",DEFAULT_PROJECTS="${GIQ_PROJECTS:-$PROJECT_ID}",DEFAULT_BUCKETS="${GCS_BUCKETS:-prism-internal-results}",SITE_NAME="$SITE_NAME",GA_TRACKING_ID="$GA_TRACKING_ID",CONTACT_US_URL="$CONTACT_US_URL",GOOGLE_API_KEY="$GOOGLE_API_KEY"
+)
+
+[ -n "$MIN_INSTANCES" ] && DEPLOY_ARGS+=(--min-instances "$MIN_INSTANCES")
+[ -n "$MAX_INSTANCES" ] && DEPLOY_ARGS+=(--max-instances "$MAX_INSTANCES")
+[ -n "$CONCURRENCY" ] && DEPLOY_ARGS+=(--concurrency "$CONCURRENCY")
+
+gcloud "${DEPLOY_ARGS[@]}"
 
 # Tip: To configure default data sources, verify functionality using --set-env-vars:
 # --set-env-vars DEFAULT_PROJECTS="my-project",DEFAULT_BUCKETS="gs://my-bucket"

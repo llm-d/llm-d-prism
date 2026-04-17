@@ -17,6 +17,7 @@ import Dashboard from './components/Dashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
+import SchemaExplorer from './components/SchemaExplorer';
 
 import LeftNavigation from './components/LeftNavigation';
 
@@ -26,18 +27,22 @@ function App() {
     return params.get('view') || 'home';
   }); // 'home' | 'inference-scheduling' | 'advanced'
 
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
   const handleNavigate = (view) => {
     setCurrentView(view);
+    setIsMobileNavOpen(false); // Close mobile nav on navigation
   };
 
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-950 w-full overflow-hidden font-sans relative flex flex-col">
-        <LeftNavigation currentView={currentView} onNavigate={handleNavigate} />
+        <LeftNavigation currentView={currentView} onNavigate={handleNavigate} isMobileOpen={isMobileNavOpen} />
         <main className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-          {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} />}
+          {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'advanced' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
+          {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
         </main>
       </div>

@@ -25,16 +25,30 @@ help: ## Show this help message
 
 .PHONY: build
 build: ## Build the Go binary
-	go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/$(PROJECT_NAME) .
+	@if [ -d "./cmd" ] && find ./cmd -name "*.go" | head -1 | grep -q .; then \
+		go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/$(PROJECT_NAME) ./cmd/; \
+	elif find . -maxdepth 1 -name "*.go" | head -1 | grep -q .; then \
+		go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/$(PROJECT_NAME) .; \
+	else \
+		echo "No Go files found, skipping build"; \
+	fi
 
 .PHONY: test
 test: ## Run tests with race detection
-	go test -race -count=1 ./...
+	@if find . -name "*.go" -not -path "./.git/*" | head -1 | grep -q .; then \
+		go test -race -count=1 ./...; \
+	else \
+		echo "No Go files found, skipping tests"; \
+	fi
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage report
-	go test -race -coverprofile=coverage.out -covermode=atomic ./...
-	go tool cover -html=coverage.out -o coverage.html
+	@if find . -name "*.go" -not -path "./.git/*" | head -1 | grep -q .; then \
+		go test -race -coverprofile=coverage.out -covermode=atomic ./... && \
+		go tool cover -html=coverage.out -o coverage.html; \
+	else \
+		echo "No Go files found, skipping coverage"; \
+	fi
 
 .PHONY: lint
 lint: lint-go lint-python ## Run all linters

@@ -124,6 +124,12 @@ The following environment variables can be set via `--set-env-vars` in the `gclo
 - **`DEFAULT_S3_BUCKETS`**: Comma-separated list of public AWS S3 buckets.
 - **`GOOGLE_API_KEY`**: API Key for Google Drive/Sheets (auto-detected from `.env.local` if present).
 
+#### Automated Deployment with GitHub Actions
+
+For automatic deployment on push to `main` branch, see [GitHub Actions Setup Guide](docs/github-actions-setup.md).
+
+The workflow uses Workload Identity Federation for secure, keyless authentication and automatically deploys using GitHub repository variables (plus a secret for `GOOGLE_API_KEY`).
+
 ## Multi-Cloud Deployment (AWS, Azure, On-Prem)
 Note: Deployment on other clouds is a work in progress and requires testing.
 
