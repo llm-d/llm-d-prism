@@ -1031,6 +1031,7 @@ const Dashboard = ({ onNavigateBack }) => {
 
     // Filter data by all active filters
     const filteredBySource = useMemo(() => {
+        console.log("[Dashboard] recalculating filteredBySource. baseData length:", baseData.length, "activeFilters:", activeFilters);
         const filtered = baseData.filter(d => {
             // Check modal filters
             if (activeFilters.models.size > 0 && !activeFilters.models.has(d.model_name)) return false;
@@ -1052,7 +1053,7 @@ const Dashboard = ({ onNavigateBack }) => {
                 if (!activeFilters.ratio.has(r)) return false;
             }
 
-            if (activeFilters.acc_count.size > 0 && !activeFilters.acc_count.has(getAcceleratorCount(d))) return false;
+            if (activeFilters.acc_count.size > 0 && !activeFilters.acc_count.has(String(getAcceleratorCount(d)))) return false;
 
             if (activeFilters.modelServer.size > 0) {
                 const ms = d.model_server || d.backend || d.metadata?.model_server || d.metadata?.backend;
@@ -1090,6 +1091,7 @@ const Dashboard = ({ onNavigateBack }) => {
             return true;
         });
 
+        console.log("[Dashboard] filteredBySource result length:", filtered.length);
 
         if (!showPerChip) return filtered;
 
@@ -1243,6 +1245,7 @@ const Dashboard = ({ onNavigateBack }) => {
     // 3. Auto-selects fallback data if nothing matched.
     useEffect(() => {
         const isAnySourceLoading = gcsProfiles.some(p => p.loading);
+        console.log("[Sync Effect] Running. loading:", loading, "isRestoringConnections:", isRestoringConnections, "isAnySourceLoading:", isAnySourceLoading, "filteredBySource length:", filteredBySource.length);
         if (loading || isRestoringConnections || isAnySourceLoading || filteredBySource.length === 0) return;
 
         const currentKeys = filteredBySource.map(d => getBenchmarkKey(d));
@@ -1338,11 +1341,14 @@ const Dashboard = ({ onNavigateBack }) => {
         });
 
     const toggleBenchmark = (key) => {
+        console.log("[toggleBenchmark] Toggling key:", key);
         const newSelected = new Set(selectedBenchmarks);
         if (newSelected.has(key)) {
             newSelected.delete(key);
+            console.log("[toggleBenchmark] Removed key. New size:", newSelected.size);
         } else {
             newSelected.add(key);
+            console.log("[toggleBenchmark] Added key. New size:", newSelected.size);
         }
         setSelectedBenchmarks(newSelected);
     };

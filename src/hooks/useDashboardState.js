@@ -30,7 +30,8 @@ export const getSharedState = () => {
             tputType: params.get('t_type') || 'output',
             costMode: params.get('cost_mode') || 'spot',
             latType: params.get('l_type') || 'e2e',
-            selectedModels: parseSet('models'),
+            // Normalize Aggregated keys to use double colons (only if not already double)
+            selectedModels: new Set([...parseSet('models')].map(k => k.includes('::Aggregated') ? k : k.replace(':Aggregated', '::Aggregated'))),
             modelsFilter: parseSet('f_models'),
             hwFilter: parseSet('f_hw'),
             machFilter: parseSet('f_mach'),
@@ -151,7 +152,7 @@ export const useDashboardState = () => {
     ) => {
         const params = new URLSearchParams();
         params.set('share', '1');
-        params.set('view', 'advanced');
+        params.set('view', 'benchmark-browser');
         params.set('c_mode', chartMode);
         params.set('t_type', tputType);
         params.set('cost_mode', costMode);

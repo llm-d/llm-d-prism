@@ -25,13 +25,18 @@ function App() {
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('view') || 'home';
-  }); // 'home' | 'inference-scheduling' | 'advanced'
+  }); // 'home' | 'inference-scheduling' | 'benchmark-browser'
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const handleNavigate = (view) => {
     setCurrentView(view);
     setIsMobileNavOpen(false); // Close mobile nav on navigation
+    
+    // Update URL to reflect the current view
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', view);
+    window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
   };
 
   return (
@@ -41,7 +46,7 @@ function App() {
         <main className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
           {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-          {currentView === 'advanced' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
+          {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
         </main>
