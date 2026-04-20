@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Dashboard from './components/Dashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrismHome from './components/PrismHome';
@@ -22,6 +22,7 @@ import SchemaExplorer from './components/SchemaExplorer';
 import LeftNavigation from './components/LeftNavigation';
 
 function App() {
+  const mainRef = useRef(null);
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('view') || 'home';
@@ -37,13 +38,19 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     params.set('view', view);
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+    
+    // Reset scroll position on navigation
+    window.scrollTo(0, 0);
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
   };
 
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-950 w-full overflow-hidden font-sans relative flex flex-col">
         <LeftNavigation currentView={currentView} onNavigate={handleNavigate} isMobileOpen={isMobileNavOpen} />
-        <main className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
+        <main ref={mainRef} className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
           {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
