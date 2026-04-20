@@ -11,7 +11,7 @@ Add 2 additional input dropdowns to the Ochestration / Serving Framework section
    -- Inference Scheduler
    -- LeaderWorkerSet
 
-The Inference Gateway option should display a count of 1 as it will temporarily map to the same benchark as the llm-d v0.30 serving stack option. The other Component options should list 0 as a count.
+The Inference Gateway option should display a count of 1 as it will temporarily map to the same benchmark as the llm-d v0.30 serving stack option. The other Component options should list 0 as a count.
 
 2. If a user selects "P/D Disaggregation" from the Optimizations dropdown, the app should present an additional dropdown inputs so the user can select the number of prefill nodes and the number of decode nodes.
 

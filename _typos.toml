@@ -9,6 +9,9 @@ aks = "aks"
 IST = "IST"
 # Abbreviation (e.g., 2nd -> ND)
 ND = "ND"
+# Mean Absolute Percentage Error — standard forecasting metric used in
+# specs/changes/predicted-latency/ callouts.
+MAPE = "MAPE"
 
 # Add repo-specific false positives here:
 # word = "word"
