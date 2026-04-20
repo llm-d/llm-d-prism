@@ -260,6 +260,9 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                 grouped[q][`${prefix}_tpot_p50`] = parseFloat(r.tpot.p50.toFixed(2));
                 grouped[q][`${prefix}_tpot_p90`] = parseFloat(r.tpot.p90.toFixed(2));
                 grouped[q][`${prefix}_tpot_p99`] = parseFloat(r.tpot.p99.toFixed(2));
+                grouped[q][`${prefix}_ntpot_p50`] = parseFloat(r.ntpot.p50.toFixed(2));
+                grouped[q][`${prefix}_ntpot_p90`] = parseFloat(r.ntpot.p90.toFixed(2));
+                grouped[q][`${prefix}_ntpot_p99`] = parseFloat(r.ntpot.p99.toFixed(2));
                 grouped[q][`${prefix}_itl_p50`] = parseFloat(r.itl.p50.toFixed(2));
                 grouped[q][`${prefix}_itl_p90`] = parseFloat(r.itl.p90.toFixed(2));
                 grouped[q][`${prefix}_itl_p99`] = parseFloat(r.itl.p99.toFixed(2));
@@ -945,7 +948,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                 </div>
 
                 <div className="flex flex-col gap-6 w-full">
-                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="tpot" />
+                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="ntpot" />
                     <InferenceSchedulingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} />
                 </div>
                 

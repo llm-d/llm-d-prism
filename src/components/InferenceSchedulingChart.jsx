@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
@@ -110,6 +110,12 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
     const [zoomXMax, setZoomXMax] = useState(Infinity);
     const [showFilters, setShowFilters] = useState(false);
 
+    useEffect(() => {
+        if (zoomXAxis === 'ntpot') {
+            setZoomLogScale(true);
+        }
+    }, [zoomXAxis]);
+
     const derivedZoomData = data
         .flatMap(item => {
             const chipDivisor = zoomPerChip ? 4 : 1;
@@ -154,6 +160,8 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
             percentilesToGenerate.forEach(pKey => {
                 const b_tpotVal = parseNum(item[`baseline_tpot_${pKey}`], 20);
                 const r_tpotVal = parseNum(item[`router_tpot_${pKey}`], 20);
+                const b_ntpotVal = parseNum(item[`baseline_ntpot_${pKey}`], 20);
+                const r_ntpotVal = parseNum(item[`router_ntpot_${pKey}`], 20);
                 const b_ttftVal = parseNum(item[`baseline_ttft_${pKey}`], 250);
                 const r_ttftVal = parseNum(item[`router_ttft_${pKey}`], 250);
                 const b_itlVal = parseNum(item[`baseline_itl_${pKey}`], 25);
@@ -161,7 +169,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                 
                 let b_xVal = parseNum(item.qps, 0);
                 if (zoomXAxis === 'tpot') b_xVal = b_tpotVal;
-                else if (zoomXAxis === 'ntpot') b_xVal = b_tpotVal * 0.85;
+                else if (zoomXAxis === 'ntpot') b_xVal = b_ntpotVal;
                 else if (zoomXAxis === 'ttft') b_xVal = b_ttftVal;
                 else if (zoomXAxis === 'itl') b_xVal = b_itlVal;
                 else if (zoomXAxis === 'tokens_sec') b_xVal = b_outputRate || 1000;
@@ -169,7 +177,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                 
                 let r_xVal = parseNum(item.qps, 0);
                 if (zoomXAxis === 'tpot') r_xVal = r_tpotVal;
-                else if (zoomXAxis === 'ntpot') r_xVal = r_tpotVal * 0.85;
+                else if (zoomXAxis === 'ntpot') r_xVal = r_ntpotVal;
                 else if (zoomXAxis === 'ttft') r_xVal = r_ttftVal;
                 else if (zoomXAxis === 'itl') r_xVal = r_itlVal;
                 else if (zoomXAxis === 'tokens_sec') r_xVal = r_outputRate || 1000;
@@ -302,8 +310,8 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14">X-Axis:</span>
                             <div className="flex flex-wrap bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
-                                <button onClick={() => setZoomXAxis('tpot')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'tpot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TPOT</button>
                                 <button onClick={() => setZoomXAxis('ntpot')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'ntpot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>NTPOT</button>
+                                <button onClick={() => setZoomXAxis('tpot')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'tpot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TPOT</button>
                                 <button onClick={() => setZoomXAxis('ttft')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'ttft' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TTFT</button>
                                 <button onClick={() => setZoomXAxis('itl')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'itl' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>ITL</button>
                                 <button onClick={() => setZoomXAxis('tokens_sec')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'tokens_sec' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Tokens/sec</button>
