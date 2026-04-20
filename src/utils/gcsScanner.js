@@ -221,6 +221,7 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
 
         const ttft = latency.time_to_first_token || {};
         const tpot = latency.time_per_output_token || {};
+        const ntpot = latency.normalized_time_per_output_token || {};
         const itl = latency.inter_token_latency || {};
 
         const parts = filePath.split('/');
@@ -272,6 +273,11 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
                 p50: (tpot.p50 || 0) * 1000,
                 p90: (tpot.p90 || 0) * 1000,
                 p99: (tpot.p99 || 0) * 1000,
+            },
+            ntpot: {
+                p50: (ntpot.p50 || 0) * 1000,
+                p90: (ntpot.p90 || 0) * 1000,
+                p99: (ntpot.p99 || 0) * 1000,
             },
             itl: {
                 p50: (itl.p50 || 0) * 1000,
