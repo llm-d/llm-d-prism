@@ -417,6 +417,9 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                                             dashArray = "2 2";
                                         }
 
+                                        // Ensure points are in order of Stage
+                                        groups[k].sort((a, b) => a.stage - b.stage);
+
                                         return (
                                             <Line 
                                                 key={k}

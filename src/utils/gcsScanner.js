@@ -249,6 +249,9 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
         const prefill_node_count = doc.prefill_node_count || config.prefill_node_count || 0;
         const decode_node_count = doc.decode_node_count || config.decode_node_count || 0;
         const num_nodes = prefill_node_count + decode_node_count;
+        
+        const stageMatch = filePath.match(/_stage_(\d+)_/);
+        const stage = stageMatch ? parseInt(stageMatch[1], 10) : (doc.scenario?.load?.standardized?.stage || 0);
 
         return {
             id: crypto.randomUUID(),
@@ -262,6 +265,7 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
             serving_engine,
             num_nodes: num_nodes || 4,
             runId,
+            stage,
             qps: throughput.request_rate?.mean || 0,
             output_token_rate: throughput.output_token_rate?.mean || 0,
             ttft: {

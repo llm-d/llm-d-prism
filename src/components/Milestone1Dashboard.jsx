@@ -248,9 +248,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
             
             const grouped = {};
             reports.forEach(r => {
+                if (r.stage === 0) return; // Skip stage 0
                 const q = parseFloat(r.qps.toFixed(2));
                 if (!grouped[q]) {
-                    grouped[q] = { qps: q };
+                    grouped[q] = { qps: q, stage: r.stage };
                 }
                 const prefix = r.scenario === 'k8s-service-baseline' ? 'baseline' : 'router';
                 grouped[q][`${prefix}_output_token_rate`] = parseFloat(r.output_token_rate.toFixed(2));
