@@ -15,7 +15,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     const qpsVal = pl.qps ?? pl.y ?? 'N/A';
     
     const xLabelMap = { tpot: 'TPOT', ntpot: 'NTPOT', ttft: 'TTFT', itl: 'ITL', e2e: 'E2E' };
-    const yLabelMap = { output: 'Out Tok/s', input: 'In Tok/s', total: 'Tot Tok/s', qps: 'QPS', cost: 'Cost' };
+    const yLabelMap = { output: 'Out Tok/s', input: 'In Tok/s', total: 'Tot Tok/s', qps: 'QPS' };
     
     const xLabel = xLabelMap[zoomXAxis] || 'X';
     const yLabel = yLabelMap[zoomYAxis] || 'Y';
@@ -103,7 +103,6 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
     const [zoomXAxis, setZoomXAxis] = useState(initialXAxis || 'tpot');
     const [zoomYAxis, setZoomYAxis] = useState(initialYAxis || 'output');
     const [zoomColorMode, setZoomColorMode] = useState('default');
-    const [zoomCostMode, setZoomCostMode] = useState('cud_1y');
     const [zoomLogScale, setZoomLogScale] = useState(initialLogScale || false);
     const [zoomPerChip, setZoomPerChip] = useState(false);
     const [visiblePercentiles, setVisiblePercentiles] = useState(['p50', 'p90', 'p99']);
@@ -134,21 +133,13 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
             if (zoomYAxis === 'input') b_yVal = b_inputRate;
             else if (zoomYAxis === 'total') b_yVal = b_inputRate + b_outputRate;
             else if (zoomYAxis === 'qps') b_yVal = parseNum(item.qps, 0);
-            else if (zoomYAxis === 'cost') {
-                const rates = { spot: 2.89, on_demand: 9.89, cud_1y: 6.54, cud_3y: 4.22 };
-                b_yVal = ((b_outputRate * rates[zoomCostMode]) / 10000);
-            }
             
             let r_yVal = r_outputRate;
             if (zoomYAxis === 'input') r_yVal = r_inputRate;
             else if (zoomYAxis === 'total') r_yVal = r_inputRate + r_outputRate;
             else if (zoomYAxis === 'qps') r_yVal = parseNum(item.qps, 0);
-            else if (zoomYAxis === 'cost') {
-                const rates = { spot: 2.89, on_demand: 9.89, cud_1y: 6.54, cud_3y: 4.22 };
-                r_yVal = ((r_outputRate * rates[zoomCostMode]) / 10000);
-            }
             
-            if (zoomYAxis !== 'cost' && zoomPerChip) {
+            if (zoomPerChip) {
                 b_yVal = b_yVal / chipDivisor;
                 r_yVal = r_yVal / chipDivisor;
             }
@@ -242,8 +233,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
         output: 'Output Tokens/sec',
         input: 'Input Tokens/sec',
         total: 'Total Tokens/sec',
-        qps: 'Queries Per Second',
-        cost: 'Cost ($/1M Tokens)'
+        qps: 'Queries Per Second'
     };
 
     return (
@@ -263,8 +253,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                                 'output': 'Output Tokens/sec',
                                 'input': 'Input Tokens/sec',
                                 'total': 'Total Tokens/sec',
-                                'qps': 'QPS',
-                                'cost': 'Cost'
+                                'qps': 'QPS'
                             }[zoomYAxis] || zoomYAxis}`}
                         </h3>
                         
@@ -280,7 +269,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                                     </svg>
                                     <span>a3-highgpu-8g</span>
                                     <span>H100</span>
-                                    <span className="text-slate-400">(1-node / 8-chip)</span>
+                                    <span className="text-slate-400">(8 replicas)</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5">
@@ -325,16 +314,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                                     <button onClick={() => setZoomYAxis('input')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Input</button>
                                     <button onClick={() => setZoomYAxis('total')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Total</button>
                                     <button onClick={() => setZoomYAxis('qps')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>QPS</button>
-                                    <button onClick={() => setZoomYAxis('cost')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Cost</button>
                                 </div>
-                                {zoomYAxis === 'cost' && (
-                                    <select value={zoomCostMode} onChange={(e) => setZoomCostMode(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg text-[10px] px-2 py-1 text-slate-300 outline-none">
-                                        <option value="spot">Spot</option>
-                                        <option value="on_demand">On Demand</option>
-                                        <option value="cud_1y">1-Year CUD</option>
-                                        <option value="cud_3y">3-Year CUD</option>
-                                    </select>
-                                )}
                             </div>
                         </div>
                     </div>

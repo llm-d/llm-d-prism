@@ -813,8 +813,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         <span className="font-mono font-bold text-white truncate block text-xs">H100</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Topology</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">1-node / 8-chip</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Replicas</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">8</span>
                                     </div>
                                 </div>
                             </div>
@@ -827,11 +827,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                 <div className="flex flex-col gap-2.5">
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Model Name</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">qwen3-32B</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">qwen3-32B (BF16)</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Model Precision</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">BF16</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Parallelism Strategy</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">TP: 2</span>
                                     </div>
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Serving Engine</span>
@@ -847,7 +847,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                 </div>
                                 <div className="flex flex-col gap-2.5">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Test harness</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Test Harness</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">inference-perf</span>
                                     </div>
                                     <div>
@@ -856,7 +856,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     </div>
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Input / Output Sequence Length</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">1024 / 128</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">7200 / 1000</span>
                                     </div>
                                 </div>
                             </div>
@@ -1095,26 +1095,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         </header>
 
                         <div className="p-6">
-                            <div className="mb-6">
-                                <h4 className="text-sm font-semibold text-slate-300 mb-2">1. Apply Benchmark Definitions</h4>
-                                <p className="text-xs text-slate-400 mb-3">Load the specific Kubernetes evaluation service definitions onto your target node.</p>
-                                <div className="bg-slate-950 border border-emerald-500/30 rounded-lg p-4 relative group">
-                                    <pre className="text-emerald-400 font-mono text-sm whitespace-pre-wrap leading-relaxed">
-                                        kubectl apply -f https://llm-d.ai/benchmarks/qwen.yaml
-                                    </pre>
-                                    <button onClick={() => {
-                                        navigator.clipboard.writeText('kubectl apply -f https://llm-d.ai/benchmarks/qwen.yaml');
-                                        setCopied(true);
-                                        setTimeout(() => setCopied(false), 2000);
-                                    }} className="absolute top-3 right-3 p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-700 transition-colors shadow-sm flex items-center">
-                                        {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                                {copied && <p className="text-xs text-emerald-500 mt-2 font-medium animate-pulse">Copied to clipboard!</p>}
-                            </div>
-
                             <div className="mb-2">
-                                <h4 className="text-sm font-semibold text-slate-300 mb-1">2. Reference Documentation</h4>
+                                <h4 className="text-sm font-semibold text-slate-300 mb-1">Reference Documentation</h4>
                                 <p className="text-xs text-slate-400">
                                     For deep architectural specifications, view the full instructions directly on our repository:
                                 </p>
