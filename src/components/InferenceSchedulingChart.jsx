@@ -243,18 +243,18 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                     <div className="flex flex-col gap-2.5">
                         <h3 className="text-lg font-bold text-white">
                             {`${{
-                                'ttft': 'TTFT',
-                                'tpot': 'TPOT',
-                                'ntpot': 'NTPOT',
-                                'itl': 'ITL',
-                                'tokens_sec': 'Tokens/sec',
-                                'e2e': 'E2E Latency'
-                            }[zoomXAxis] || zoomXAxis} vs ${{
                                 'output': 'Output Tokens/sec',
                                 'input': 'Input Tokens/sec',
                                 'total': 'Total Tokens/sec',
                                 'qps': 'QPS'
-                            }[zoomYAxis] || zoomYAxis}`}
+                            }[zoomYAxis] || zoomYAxis} vs ${{
+                                'ttft': 'TTFT',
+                                'tpot': 'TPOT',
+                                'ntpot': 'Normalized TPOT',
+                                'itl': 'ITL',
+                                'tokens_sec': 'Tokens/sec',
+                                'e2e': 'E2E Latency'
+                            }[zoomXAxis] || zoomXAxis}`}
                         </h3>
                         
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
