@@ -22,7 +22,7 @@ const PrismHome = ({ onNavigate }) => {
                         </a>
                     </div>
                     <p className="text-xl text-slate-400 max-w-3xl leading-relaxed font-light tracking-wide mb-4">
-                        Performance analysis for distributed inference systems.
+                        Performance analysis for distributed inference systems and agentic workflows
                     </p>
                 </header>
 
