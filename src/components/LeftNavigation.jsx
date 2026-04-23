@@ -10,7 +10,8 @@ import {
     Split,
     Brain,
     DollarSign,
-    FileCode
+    FileCode,
+    Activity
 } from 'lucide-react';
 
 const MENU_GROUPS = [
@@ -33,7 +34,7 @@ const MENU_GROUPS = [
         items: [
             { id: 'benchmark-browser', label: 'Benchmark Browser', icon: BarChart2, view: 'benchmark-browser' },
             { id: 'schema-browser', label: 'Schema Explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
-            { id: 'model-intelligence', label: 'Model Intelligence', icon: Lightbulb, view: 'model-intelligence', disabled: true },
+            { id: 'workload-catalog', label: 'Workload Catalog', icon: Activity, view: 'workload-catalog', disabled: false },
             { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }
         ]
     }

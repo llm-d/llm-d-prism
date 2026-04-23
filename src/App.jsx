@@ -18,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
 import SchemaExplorer from './components/SchemaExplorer';
+import WorkloadCatalog from './components/WorkloadCatalog';
 
 import LeftNavigation from './components/LeftNavigation';
 
@@ -26,7 +27,7 @@ function App() {
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('view') || 'home';
-  }); // 'home' | 'inference-scheduling' | 'benchmark-browser'
+  }); // 'home' | 'inference-scheduling' | 'benchmark-browser' | 'workload-catalog'
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -55,6 +56,7 @@ function App() {
           {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
+          {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
         </main>
       </div>
