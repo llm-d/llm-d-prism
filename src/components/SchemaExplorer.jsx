@@ -47,7 +47,7 @@ const SchemaExplorer = ({ onNavigateBack }) => {
 
             <main className="w-full px-8 py-6 pl-28 flex flex-col relative w-full h-[calc(100vh-4rem)]">
                 <iframe 
-                    src="https://my-google-ai-studio-applet-369234493812.us-west1.run.app/" 
+                    src="https://benchmark-schema-explorer-369234493812.us-central1.run.app" 
                     className="w-full h-full border-0" 
                     title="Schema Explorer"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
