@@ -6,7 +6,7 @@ Multi-Token Prediction (MTP) is a commonly-used technique to increase output tok
 Questions for llm-d
 * How does MTP impact the configuration of other elements of the orchestration layer, e.g. infra topology?
 * How does MTP impact parallelism strategies like TP, DP, EPLB?
-* How do we represent models that leverage MTP in our benchmarked guides? Do we simply need to report metadata like the MTP winodw, average acceptance lenght, e.g. 2.4.
+* How do we represent models that leverage MTP in our benchmarked guides? Do we simply need to report metadata like the MTP window, average acceptance length, e.g. 2.4.
 
 # References
 https://www.lmsys.org/blog/2025-07-17-mtp/ 
