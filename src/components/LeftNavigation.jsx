@@ -23,7 +23,7 @@ const MENU_GROUPS = [
     {
         title: "Well-Lit Paths",
         items: [
-            { id: 'inference-scheduling', label: 'Inference Scheduling', icon: Route, view: 'inference-scheduling' },
+            { id: 'intelligent-routing', label: 'Intelligent Routing', icon: Route, view: 'intelligent-routing' },
             { id: 'pd-disaggregation', label: 'P/D Disaggregation', icon: Split, view: 'pd-disaggregation', disabled: true },
             { id: 'wide-ep', label: 'Wide-EP', icon: Brain, view: 'wide-ep', disabled: true },
             { id: 'prefix-cache-offloading', label: 'Prefix Cache Offloading', icon: Database, view: 'prefix-cache-offloading', disabled: true }

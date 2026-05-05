@@ -35,14 +35,14 @@ const PrismHome = ({ onNavigate }) => {
                      </h2>
                      <p className="text-xs text-slate-500 text-center mb-6">Standardized workloads optimized for rapid evaluation and deployment.</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-                        {/* Path 1: Inference scheduling (Primary M1 Path - Popping) */}
+                        {/* Path 1: Intelligent Routing (Primary M1 Path - Popping) */}
                         <div 
-                            onClick={() => onNavigate('inference-scheduling')}
+                            onClick={() => onNavigate('intelligent-routing')}
                             className="group relative bg-slate-900/80 backdrop-blur-xl shadow-2xl border-2 border-cyan-500 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] transition-all duration-500 cursor-pointer flex flex-col h-full overflow-hidden"
                         >
                             <div className="absolute top-0 right-0 text-xs px-2.5 py-1 bg-cyan-500 text-white rounded-bl-lg font-mono font-bold tracking-wide shadow-lg">PRIMARY PATH</div>
                             <h3 className="text-lg font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors">
-                                Intelligent inference scheduling
+                                Intelligent Routing
                             </h3>
                             <div className="flex flex-nowrap gap-1.5 mb-2">
                                 <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Prefix-cache aware</span>

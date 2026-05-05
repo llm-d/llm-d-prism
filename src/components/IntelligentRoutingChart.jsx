@@ -99,7 +99,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     );
 };
 
-const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLogScale }) => {
+const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogScale }) => {
     const [zoomXAxis, setZoomXAxis] = useState(initialXAxis || 'tpot');
     const [zoomYAxis, setZoomYAxis] = useState(initialYAxis || 'output');
     const [zoomColorMode, setZoomColorMode] = useState('default');
@@ -492,4 +492,4 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
     );
 };
 
-export default InferenceSchedulingChart;
+export default IntelligentRoutingChart;

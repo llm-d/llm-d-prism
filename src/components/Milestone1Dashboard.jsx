@@ -3,7 +3,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
-import InferenceSchedulingChart from './InferenceSchedulingChart';
+import IntelligentRoutingChart from './IntelligentRoutingChart';
 import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu, BarChart2, Table } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 import { CustomXAxis, CustomYAxis, CustomLabel, CustomChartTooltip, ChartCard } from './common';
@@ -672,7 +672,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Inference scheduling</h1>
+                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Intelligent Routing</h1>
                         <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
                             Guided mode
                         </span>
@@ -697,7 +697,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         onClick={() => {
                             const params = new URLSearchParams();
                             params.set('share', '1');
-                            params.set('view', 'inference-scheduling');
+                            params.set('view', 'intelligent-routing');
                             params.set('hw', hardware);
                             params.set('scale', latencyScale);
                             const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
@@ -738,7 +738,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         <div className="flex flex-col justify-between space-y-3">
                             <div>
                                 <p className="text-sm text-slate-400 leading-relaxed">
-                                    These variants of intelligent inference scheduling optimize request routing to maximize performance. By leveraging GKE Inference Gateway, real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
+                                    These variants of Intelligent Routing optimize request routing to maximize performance. By leveraging GKE Inference Gateway, real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
                                 </p>
                             </div>
                         </div>
@@ -976,7 +976,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                 Reproducibility guide
                             </h3>
                             <p className="text-sm text-slate-500 leading-relaxed">
-                                Replicate these intelligent inference scheduling benchmarks directly on your Kubernetes evaluation cluster.
+                                Replicate these Intelligent Routing benchmarks directly on your Kubernetes evaluation cluster.
                             </p>
                         </div>
 
@@ -987,8 +987,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                 </div>
 
                 <div className="flex flex-col gap-6 w-full">
-                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="ntpot" />
-                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ntpot" />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} />
                 </div>
 
                 {/* Summary Metrics Table */}

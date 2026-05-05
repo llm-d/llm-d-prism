@@ -27,7 +27,7 @@ function App() {
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('view') || 'home';
-  }); // 'home' | 'inference-scheduling' | 'benchmark-browser' | 'workload-catalog'
+  }); // 'home' | 'intelligent-routing' | 'benchmark-browser' | 'workload-catalog'
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -53,7 +53,7 @@ function App() {
         <LeftNavigation currentView={currentView} onNavigate={handleNavigate} isMobileOpen={isMobileNavOpen} />
         <main ref={mainRef} className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-          {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+          {currentView === 'intelligent-routing' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
