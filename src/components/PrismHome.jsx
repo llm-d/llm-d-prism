@@ -364,7 +364,7 @@ const PrismHome = ({ onNavigate }) => {
 
                              {/* Standard Benchmark Format / Report */}
                              <a 
-                                 href="https://github.com/llm-d/llm-d-benchmark/blob/main/benchmark_report"
+                                 href="https://github.com/llm-d/llm-d-benchmark/blob/main/llmdbenchmark/analysis/benchmark_report/README.md"
                                  target="_blank"
                                  rel="noopener noreferrer"
                                  className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-2 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-cyan-500/50 transition-all cursor-pointer"
