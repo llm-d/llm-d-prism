@@ -164,14 +164,15 @@ const PrismHome = ({ onNavigate }) => {
 
                         {/* Path 4: Prefix Cache Offloading */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-500 cursor-not-allowed flex flex-col h-full overflow-hidden"
+                            onClick={() => onNavigate('prefix-cache-offloading')}
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(147,51,234,0.3)] transition-all duration-500 cursor-pointer flex flex-col h-full overflow-hidden"
                         >
-                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-amber-400 transition-colors">
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-purple-400 transition-colors">
                                 Prefix Cache<br />Offloading
                             </h3>
                             <div className="flex flex-wrap gap-1.5 mb-2">
-                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full font-medium border border-amber-500/20 whitespace-nowrap">KV-cache</span>
-                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full font-medium border border-amber-500/20 whitespace-nowrap">Tiered storage</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full font-medium border border-purple-500/20 whitespace-nowrap">KV-cache</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full font-medium border border-purple-500/20 whitespace-nowrap">Tiered storage</span>
                             </div>
                             <p className="text-slate-400 text-xs mb-3 flex-1">
                                 Offload KV cache to CPU memory to extend accelerator capacity and serve longer contexts. Supports tiered storage hierarchy.
@@ -182,24 +183,24 @@ const PrismHome = ({ onNavigate }) => {
                                 <div className="space-y-1 mb-2">
                                     <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Primary tier</span>
-                                        <span className="text-amber-400 font-mono font-bold">HBM</span>
+                                        <span className="text-purple-400 font-mono font-bold">HBM</span>
                                     </div>
                                     <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Offload tier</span>
-                                        <span className="text-amber-400 font-mono font-bold">CPU RAM</span>
+                                        <span className="text-purple-400 font-mono font-bold">CPU RAM</span>
                                     </div>
                                 </div>
                                 <div className="flex justify-center space-x-1">
-                                     <div className="w-10 h-8 bg-amber-500/20 rounded border border-amber-500/50 flex items-center justify-center text-xs text-amber-400">HBM</div>
+                                     <div className="w-10 h-8 bg-purple-500/20 rounded border border-purple-500/50 flex items-center justify-center text-xs text-purple-400">HBM</div>
                                      <div className="w-6 h-8 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
-                                     <div className="w-10 h-8 bg-amber-500/30 rounded border border-amber-500/50 flex items-center justify-center text-xs text-amber-400">CPU</div>
+                                     <div className="w-10 h-8 bg-purple-500/30 rounded border border-purple-500/50 flex items-center justify-center text-xs text-purple-400">CPU</div>
                                      <div className="w-6 h-8 flex items-center justify-center text-xs text-slate-500">{"->"}</div>
-                                     <div className="w-10 h-8 bg-amber-500/10 rounded border border-amber-500/30 flex items-center justify-center text-xs text-amber-400">Disk</div>
-                                </div>
+                                     <div className="w-10 h-8 bg-purple-500/10 rounded border border-purple-500/30 flex items-center justify-center text-xs text-purple-400">Disk</div>
+                                 </div>
                             </div>
 
-                            <button className="w-full py-2 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-xs flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
-                                Coming soon
+                            <button className="w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg font-medium text-xs flex items-center justify-center hover:from-purple-400 hover:to-indigo-500 shadow-[0_0_15px_rgba(147,51,234,0.3)] transform group-hover:scale-[1.02] transition-all">
+                                Launch Dashboard <ArrowRight className="ml-1.5 h-3 w-3" />
                             </button>
                         </div>
                     </div>

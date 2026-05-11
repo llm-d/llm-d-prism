@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from 'react';
-import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line } from 'recharts';
+import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line, ReferenceLine } from 'recharts';
 import { RotateCcw, Maximize, Minimize } from 'lucide-react';
 import { CustomLabel, CustomChartTooltip, CustomXAxis, CustomYAxis, ChartCard } from '../common';
 import { getBucket, getEffectiveTp, getParetoFrontier } from '../../utils/dashboardHelpers';
@@ -28,8 +28,46 @@ export const ThroughputCostChart = (props) => {
         isZoomEnabled, setIsZoomEnabled, zoomDomain, setZoomDomain, chartContainerRef,
         isDragging, setIsDragging, lastMouseRef, chartColorMode, setChartColorMode,
         metricAvailability, filteredBySource, xAxisMax, setXAxisMax, setDebugInfo,
-        isLogScaleX, setIsLogScaleX, setLatType, selectedBenchmarks
+        isLogScaleX, setIsLogScaleX, setLatType, selectedBenchmarks,
+        isPrefixCacheMode = false
     } = props;
+
+    const [selectedWorkload, setSelectedWorkload] = React.useState('50k');
+    const [selectedTiers, setSelectedTiers] = React.useState(['baseline', 'cpu_ram', 'lustre']);
+
+    // Mock data for Prefix Cache Dashboard
+    const mockPrefixCacheData = [
+        // 10k Workload
+        { workload: '10k', tier: 'baseline', throughput: 100, ttft: 200, itl: 20, cost: 10 },
+        { workload: '10k', tier: 'baseline', throughput: 200, ttft: 250, itl: 22, cost: 10 },
+        { workload: '10k', tier: 'baseline', throughput: 300, ttft: 400, itl: 30, cost: 10 },
+        { workload: '10k', tier: 'cpu_ram', throughput: 100, ttft: 150, itl: 18, cost: 8 },
+        { workload: '10k', tier: 'cpu_ram', throughput: 300, ttft: 200, itl: 20, cost: 8 },
+        { workload: '10k', tier: 'cpu_ram', throughput: 500, ttft: 300, itl: 25, cost: 8 },
+        { workload: '10k', tier: 'lustre', throughput: 100, ttft: 120, itl: 15, cost: 6 },
+        { workload: '10k', tier: 'lustre', throughput: 400, ttft: 160, itl: 18, cost: 6 },
+        { workload: '10k', tier: 'lustre', throughput: 700, ttft: 250, itl: 22, cost: 6 },
+
+        // 50k Workload
+        { workload: '50k', tier: 'baseline', throughput: 50, ttft: 500, itl: 40, cost: 20 },
+        { workload: '50k', tier: 'baseline', throughput: 100, ttft: 800, itl: 60, cost: 20 },
+        { workload: '50k', tier: 'baseline', throughput: 150, ttft: 1500, itl: 100, cost: 20, oom: true },
+        { workload: '50k', tier: 'cpu_ram', throughput: 100, ttft: 300, itl: 30, cost: 12 },
+        { workload: '50k', tier: 'cpu_ram', throughput: 200, ttft: 400, itl: 35, cost: 12 },
+        { workload: '50k', tier: 'cpu_ram', throughput: 300, ttft: 800, itl: 60, cost: 12 },
+        { workload: '50k', tier: 'lustre', throughput: 100, ttft: 200, itl: 25, cost: 9 },
+        { workload: '50k', tier: 'lustre', throughput: 300, ttft: 300, itl: 30, cost: 9 },
+        { workload: '50k', tier: 'lustre', throughput: 500, ttft: 500, itl: 40, cost: 9 },
+
+        // 100k Workload
+        { workload: '100k', tier: 'baseline', throughput: 20, ttft: 1000, itl: 80, cost: 40, oom: true },
+        { workload: '100k', tier: 'cpu_ram', throughput: 50, ttft: 600, itl: 50, cost: 24 },
+        { workload: '100k', tier: 'cpu_ram', throughput: 100, ttft: 900, itl: 70, cost: 24 },
+        { workload: '100k', tier: 'cpu_ram', throughput: 150, ttft: 2000, itl: 120, cost: 24, oom: true },
+        { workload: '100k', tier: 'lustre', throughput: 100, ttft: 400, itl: 35, cost: 15 },
+        { workload: '100k', tier: 'lustre', throughput: 200, ttft: 600, itl: 45, cost: 15 },
+        { workload: '100k', tier: 'lustre', throughput: 300, ttft: 1000, itl: 60, cost: 15 }
+    ];
 
     // We can infer canShowPerChip
     const validData = filteredBySource.filter(d => selectedModels.has(d.model));
@@ -66,6 +104,12 @@ export const ThroughputCostChart = (props) => {
             } else if (tputType === 'cost') {
                 yKey = `metrics.cost.${costMode}`;
                 yLabel = `Cost ($/1M Tokens) - ${costMode.replace('_', ' ').toUpperCase()}`;
+            } else if (tputType === 'ttft') {
+                yKey = 'metrics.ttft.mean';
+                yLabel = 'Mean TTFT (ms)';
+            } else if (tputType === 'itl') {
+                yKey = 'metrics.itl';
+                yLabel = 'Inter-Token Latency (ms)';
             }
 
             // Compatibility fix if coming from old URL
@@ -182,24 +226,43 @@ export const ThroughputCostChart = (props) => {
             // Directly iterate filteredData (already filtered by selectedBenchmarks)
             // This avoids the brittle allModels × filteredData double-loop where
             // d.model === model matching could fail due to normalization differences.
-            filteredData.forEach(d => {
-                if (config.filterFn(d)) {
-                    const vx = Number(getVal(d, config.xKey));
-                    const vy = Number(getVal(d, config.yKey));
-                    if (!isNaN(vx) && !isNaN(vy)) {
-                        const benchmarkKey = getBenchmarkKey(d);
-                        const model = d.model_name || d.model || 'Unknown';
-                        visibleDataPoints.push({ ...d, vx, vy, model, benchmarkKey });
-                        if (vx < minX) minX = vx;
-                        if (vx > maxX) maxX = vx;
-                        if (vy < minY) minY = vy;
-                        if (vy > maxY) maxY = vy;
+            if (isPrefixCacheMode) {
+                const filteredMockData = mockPrefixCacheData.filter(d => 
+                    d.workload === selectedWorkload && 
+                    selectedTiers.includes(d.tier)
+                );
+                filteredMockData.forEach(d => {
+                    const vx = d.throughput;
+                    let vy = d.ttft;
+                    if (tputType === 'itl') vy = d.itl;
+                    else if (tputType === 'cost') vy = d.cost;
+
+                    visibleDataPoints.push({ ...d, vx, vy, model: d.tier, benchmarkKey: d.tier });
+                    if (vx < minX) minX = vx;
+                    if (vx > maxX) maxX = vx;
+                    if (vy < minY) minY = vy;
+                    if (vy > maxY) maxY = vy;
+                });
+            } else {
+                filteredData.forEach(d => {
+                    if (config.filterFn(d)) {
+                        const vx = Number(getVal(d, config.xKey));
+                        const vy = Number(getVal(d, config.yKey));
+                        if (!isNaN(vx) && !isNaN(vy)) {
+                            const benchmarkKey = getBenchmarkKey(d);
+                            const model = d.model_name || d.model || 'Unknown';
+                            visibleDataPoints.push({ ...d, vx, vy, model, benchmarkKey });
+                            if (vx < minX) minX = vx;
+                            if (vx > maxX) maxX = vx;
+                            if (vy < minY) minY = vy;
+                            if (vy > maxY) maxY = vy;
+                        }
                     }
-                }
-            });
+                });
+            }
             
             // Get unique benchmark keys (each upload becomes a distinct line)
-            const uniqueBenchmarks = [...new Set(visibleDataPoints.map(d => d.benchmarkKey))];
+            const uniqueBenchmarks = isPrefixCacheMode ? selectedTiers : [...new Set(visibleDataPoints.map(d => d.benchmarkKey))];
 
             // Calculate Pareto Frontier if enabled
             let paretoData = [];
@@ -668,7 +731,8 @@ export const ThroughputCostChart = (props) => {
             }
 
             return (
-                <ChartCard title={config.title}>
+                <>
+                  <ChartCard title={config.title}>
                   {/* Y-Axis Controls - Connected Sticky within Card */}
                   <div className="sticky top-[60px] z-30 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 pb-2 mb-2 -mx-2 px-2 flex items-center justify-between gap-4 flex-wrap">
                        <div className="flex-1 flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
@@ -684,6 +748,47 @@ export const ThroughputCostChart = (props) => {
                           </div>
                       
                       <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
+                      
+                      {isPrefixCacheMode && (
+                          <>
+                              <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Workload</span>
+                                  <div className="flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5">
+                                      {['10k', '50k', '100k'].map(w => (
+                                          <button key={w} onClick={() => setSelectedWorkload(w)} className={`px-2 py-0.5 text-xs font-medium rounded-md transition-all ${selectedWorkload === w ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}>{w}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                              <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
+                              <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Tiers</span>
+                                  <div className="flex items-center gap-3">
+                                      <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300">
+                                          <input type="checkbox" checked={selectedTiers.includes('baseline')} onChange={(e) => {
+                                              if (e.target.checked) setSelectedTiers([...selectedTiers, 'baseline']);
+                                              else setSelectedTiers(selectedTiers.filter(t => t !== 'baseline'));
+                                          }} className="accent-blue-600" />
+                                          Baseline
+                                      </label>
+                                      <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300">
+                                          <input type="checkbox" checked={selectedTiers.includes('cpu_ram')} onChange={(e) => {
+                                              if (e.target.checked) setSelectedTiers([...selectedTiers, 'cpu_ram']);
+                                              else setSelectedTiers(selectedTiers.filter(t => t !== 'cpu_ram'));
+                                          }} className="accent-emerald-600" />
+                                          CPU RAM
+                                      </label>
+                                      <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300">
+                                          <input type="checkbox" checked={selectedTiers.includes('lustre')} onChange={(e) => {
+                                              if (e.target.checked) setSelectedTiers([...selectedTiers, 'lustre']);
+                                              else setSelectedTiers(selectedTiers.filter(t => t !== 'lustre'));
+                                          }} className="accent-purple-600" />
+                                          Lustre
+                                      </label>
+                                  </div>
+                              </div>
+                              <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
+                          </>
+                      )}
                       
                       {tputType === 'cost' && (
                           <select 
@@ -793,6 +898,10 @@ export const ThroughputCostChart = (props) => {
                             cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
                             animationDuration={200}
                           />
+                          
+                          {isPrefixCacheMode && (tputType === 'ttft' || tputType === 'itl') && (
+                              <ReferenceLine y={200} stroke="red" strokeDasharray="3 3" label={{ value: 'SLO Target (200ms)', position: 'top', fill: 'red', fontSize: 10 }} />
+                          )}
     
                           {uniqueBenchmarks.map((benchmarkKey) => {
                               // Get the model for this benchmark (for label display)
@@ -1047,6 +1156,36 @@ export const ThroughputCostChart = (props) => {
                        </div>
                   </div>
                 </ChartCard>
+                
+                {isPrefixCacheMode && (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/50 p-4 mt-4">
+                        <details className="group">
+                            <summary className="flex justify-between items-center cursor-pointer">
+                                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Advanced: Cost & SLO Analysis</h3>
+                                <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+                            </summary>
+                            <div className="mt-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400">Cost-to-Serve (TCO)</span>
+                                    <button onClick={() => setTputType(tputType === 'cost' ? 'ttft' : 'cost')} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tputType === 'cost' ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                                        {tputType === 'cost' ? 'Show Latency' : 'Show Cost'}
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400">SLO Target Line</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-mono text-slate-700 dark:text-slate-300">Target: 200ms</span>
+                                        <div className="w-10 h-0.5 border-t-2 border-dashed border-red-500"></div>
+                                    </div>
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Enabling Tiered Prefix Cache significantly reduces cost-to-serve by allowing long-context workloads to run on cost-effective instances (like G4s) instead of requiring scaling up to expensive A3/H100 clusters.
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                )}
+                </>
             );
         })()}
       </div>

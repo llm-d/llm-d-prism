@@ -19,6 +19,8 @@ import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
 import SchemaExplorer from './components/SchemaExplorer';
 import WorkloadCatalog from './components/WorkloadCatalog';
+import PrefixCacheOffloadingDashboard from './components/PrefixCacheOffloadingDashboard';
+import StackInsightEngine from './components/StackInsightEngine';
 
 import LeftNavigation from './components/LeftNavigation';
 
@@ -57,6 +59,8 @@ function App() {
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
+          {currentView === 'prefix-cache-offloading' && <PrefixCacheOffloadingDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+          {currentView === 'stack-insight' && <StackInsightEngine onNavigateBack={() => handleNavigate('prefix-cache-offloading')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
         </main>
       </div>
