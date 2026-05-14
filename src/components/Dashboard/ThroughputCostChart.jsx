@@ -893,10 +893,10 @@ export const ThroughputCostChart = (props) => {
                             }}
                           />
                           <Tooltip 
+                            isAnimationActive={false}
                             content={<CustomChartTooltip xLabel={config.xLabel} yLabel={config.yLabel} costMode={costMode} qualityMetrics={qualityMetrics} />}
                             wrapperStyle={{ outline: 'none', zIndex: 100 }}
                             cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
-                            animationDuration={200}
                           />
                           
                           {isPrefixCacheMode && (tputType === 'ttft' || tputType === 'itl') && (

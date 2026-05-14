@@ -366,6 +366,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                                     theme="dark"
                                 />
                                 <Tooltip 
+                                    isAnimationActive={false}
                                     content={<RichSchedulingTooltip zoomXAxis={zoomXAxis} zoomYAxis={zoomYAxis} />}
                                     wrapperStyle={{ outline: 'none', zIndex: 100 }}
                                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}

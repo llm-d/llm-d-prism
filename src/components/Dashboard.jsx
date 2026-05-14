@@ -1807,7 +1807,7 @@ const Dashboard = ({ onNavigateBack }) => {
                         }} 
                         className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
+                        <Share2 className="w-4 h-4 mr-2" /> Share link 
                         {shareToast && (
                             <div className="absolute -bottom-10 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                 {toastMessage}

@@ -713,10 +713,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             });
                         }}
                         className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
-                        title="Share view"
+                        title="Share link"
                     >
                         <Share2 className="w-4 h-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Share view</span>
+                        <span className="hidden sm:inline">Share link</span>
                         {shareToast && (
                             <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                 {toastMessage}
@@ -759,17 +759,17 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             </div>
 
                             {/* Opt 1: Active */}
-                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                            <div className="border border-cyan-500/40 rounded-lg bg-slate-800/70 p-2 flex items-center justify-between shadow-sm">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Approximate Prefix Cache Routing</div>
-                                    <p className="text-[10px] text-slate-500">Current active scenario</p>
+                                    <div className="text-xs font-bold text-white">Approximate Prefix Cache Routing</div>
+                                    <p className="text-[10px] text-slate-400">Current active scenario</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <a href="https://llm-d.ai/docs/guide/Installation/optimized-baseline" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                    <a href="https://llm-d.ai/docs/guide/Installation/optimized-baseline" target="_blank" rel="noreferrer" className="text-slate-400 hover:text-slate-200 transition-colors flex items-center space-x-1">
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                                    <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider">Active</span>
                                 </div>
                             </div>
                         </div>
@@ -901,10 +901,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         </div>
                     </div>
 
-                    {/* CARD 2: Primary Outcomes Metric */}
-                    <div
-                        className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all"
-                    >
+                    {/* CARD 2: Primary Outcomes Metric (Prefix Cache Pattern) */}
+                    <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none transition-all group-hover:bg-emerald-500/10" />
                         <div>
                             <div className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-3 flex justify-between items-center">
@@ -919,48 +917,44 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     View Table
                                 </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-1.5 hover:border-emerald-500/20 transition-all grid grid-rows-[55px_1fr] h-[140px]">
-                                    <div className="flex flex-col justify-start">
-                                        <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-0.5">
+                            <div className="grid grid-cols-1 gap-2">
+                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-emerald-500/20 transition-all flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
                                             Latency Reduction
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 font-normal uppercase">
+                                        <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
                                             (TTFT P50)
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-center">
-                                        <h4 className="text-4xl font-black text-emerald-400 flex items-baseline tracking-tight">
-                                            {(() => {
-                                                const validRows = tableData.filter(r => r.baseline_ttft_p50 > 0 && r.router_ttft_p50 > 0);
-                                                if (validRows.length === 0) return "41%";
-                                                const r = validRows[validRows.length - 1];
-                                                const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
-                                                return `${Math.floor(gain)}%`;
-                                            })()}
-                                        </h4>
-                                    </div>
+                                    <h4 className="text-base font-black text-emerald-400 font-mono">
+                                        {(() => {
+                                            const validRows = tableData.filter(r => r.baseline_ttft_p50 > 0 && r.router_ttft_p50 > 0);
+                                            if (validRows.length === 0) return "41%";
+                                            const r = validRows[validRows.length - 1];
+                                            const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
+                                            return `${Math.floor(gain)}%`;
+                                        })()}
+                                    </h4>
                                 </div>
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-1.5 hover:border-cyan-500/20 transition-all grid grid-rows-[55px_1fr] h-[140px]">
-                                    <div className="flex flex-col justify-start">
-                                        <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-0.5">
+                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-cyan-500/20 transition-all flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
                                             Throughput Increase
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 font-normal uppercase">
+                                        <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
                                             (Output Tokens/sec)
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-center">
-                                        <h4 className="text-4xl font-black text-cyan-400 flex items-baseline tracking-tight">
-                                            {(() => {
-                                                const validRows = tableData.filter(r => r.baseline_output_token_rate > 0 && r.router_output_token_rate > 0);
-                                                if (validRows.length === 0) return "0%";
-                                                const r = validRows[validRows.length - 1];
-                                                const gain = ((r.router_output_token_rate - r.baseline_output_token_rate) / r.baseline_output_token_rate) * 100;
-                                                return `${Math.floor(gain)}%`;
-                                            })()}
-                                        </h4>
-                                    </div>
+                                    <h4 className="text-base font-black text-cyan-400 font-mono">
+                                        {(() => {
+                                            const validRows = tableData.filter(r => r.baseline_output_token_rate > 0 && r.router_output_token_rate > 0);
+                                            if (validRows.length === 0) return "0%";
+                                            const r = validRows[validRows.length - 1];
+                                            const gain = ((r.router_output_token_rate - r.baseline_output_token_rate) / r.baseline_output_token_rate) * 100;
+                                            return `${Math.floor(gain)}%`;
+                                        })()}
+                                    </h4>
                                 </div>
                             </div>
                         </div>

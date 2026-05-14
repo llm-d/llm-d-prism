@@ -571,7 +571,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
                                                         <XAxis dataKey="name" stroke="#4b5563" fontSize={9} />
                                                         <YAxis stroke="#4b5563" fontSize={9} />
-                                                        <Tooltip cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} tok/s`, 'Throughput']} />
+                                                        <Tooltip isAnimationActive={false} cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} tok/s`, 'Throughput']} />
                                                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                                             <Cell fill="#fb923c" />
                                                             {pinnedConfig && <Cell fill="#a855f7" />}
@@ -600,7 +600,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
                                                         <XAxis dataKey="name" stroke="#4b5563" fontSize={9} />
                                                         <YAxis stroke="#4b5563" fontSize={9} />
-                                                        <Tooltip cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} ms`, 'Latency']} />
+                                                        <Tooltip isAnimationActive={false} cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} ms`, 'Latency']} />
                                                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                                             <Cell fill="#fb923c" />
                                                             {pinnedConfig && <Cell fill="#a855f7" />}
@@ -629,7 +629,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
                                                         <XAxis dataKey="name" stroke="#4b5563" fontSize={9} />
                                                         <YAxis stroke="#4b5563" fontSize={9} />
-                                                        <Tooltip cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`$${value.toFixed(2)}/hr`, 'Cost']} />
+                                                        <Tooltip isAnimationActive={false} cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`$${value.toFixed(2)}/hr`, 'Cost']} />
                                                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                                             <Cell fill="#fb923c" />
                                                             {pinnedConfig && <Cell fill="#a855f7" />}
@@ -660,7 +660,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
                                                         <XAxis dataKey="name" stroke="#4b5563" fontSize={9} />
                                                         <YAxis stroke="#4b5563" fontSize={9} />
-                                                        <Tooltip cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} tok/$`, 'Efficiency']} />
+                                                        <Tooltip isAnimationActive={false} cursor={false} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px', fontSize: 11 }} itemStyle={{ color: '#cbd5e1' }} labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }} formatter={(value) => [`${value} tok/$`, 'Efficiency']} />
                                                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                                             <Cell fill="#fb923c" />
                                                             {pinnedConfig && <Cell fill="#a855f7" />}
