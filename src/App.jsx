@@ -26,8 +26,11 @@ function App() {
   const mainRef = useRef(null);
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('view') || 'home';
-  }); // 'home' | 'intelligent-routing' | 'benchmark-browser' | 'workload-catalog'
+    // 'benchmark-comparison' navigates to 'benchmark-browser'; comparison view
+    // is toggled internally via showBenchmarkComparison state in Dashboard.
+    const view = params.get('view') || 'home';
+    return view === 'benchmark-comparison' ? 'benchmark-browser' : view;
+  }); // 'home' | 'benchmark-browser' | 'intelligent-routing' | 'schema-explorer' | 'workload-catalog' | 'guided-analysis'
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -55,7 +58,6 @@ function App() {
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
           {currentView === 'intelligent-routing' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
-          {currentView === 'benchmark-comparison' && <Dashboard onNavigateBack={() => handleNavigate('home')} startWithComparison />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}

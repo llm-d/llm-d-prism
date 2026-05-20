@@ -337,7 +337,6 @@ export function stageToEntry(stage) {
             error_count: performance.failures || 0,
         },
 
-        label: runLabel,
         _diagnostics: { msg: [], raw_snapshot: {} },
     });
 }

@@ -60,7 +60,7 @@ A collapsible, multi-column panel that updates dynamically based on indexed data
 
 ## Connect & Scale Data
 
-- **Multi-Schema Support:** Native parsing for `llm-d-benchmark` reports (v0.1 & v0.2 schemas).
+- **Multi-Schema Support:** Native parsing for `llm-d-benchmark` reports (v0.1 & v0.2 schemas). v0.2 reports can be uploaded directly from the browser via the Local Benchmark Comparison panel.
 - **Automated Discovery:** Drive, GCS, and S3 sources index recursively to build a common dimensionality map across hundreds of files.
 - **Persistence:** Data connection configs and UI preferences persist in local storage for a tailored work session.
 
@@ -83,7 +83,7 @@ A collapsible, multi-column panel that updates dynamically based on indexed data
 
 - Prism automatically standardizes naming (e.g., `gpt-oss-120b-bf16` -> `gpt-oss-120b`) to group similar benchmarks while preserving precision metadata for filtering.
 - Accelerator names and machine types are normalized to ensure consistent mapping across GIQ, LPG, S3, and LLM-D sources (e.g., grouping `nvidia-h100-80gb` and `H100`, or extracting `tpu7x` from `manifest.yaml`).
-- **Source Standardization**: Benchmarks are tagged with human-readable IDs: `infperf` (formerly `inference-perf`), `Quality` (formerly `MQ`), and `llm-d` (formerly `DRIVE`).
+- **Source Standardization**: Benchmarks are tagged with human-readable IDs: `infperf` (inference-perf uploads), `Quality` (quality leaderboards), `llm-d` (Drive results), and `brv02:<run-uid>` (local Benchmark Report v0.2 uploads).
 
 ## Latency Metrics
 
@@ -115,19 +115,30 @@ The application is located at the repository root.
 │   └── process-data.js
 ├── src/
 │   ├── components/
-│   │   ├── Dashboard/      # Modular Dashboard Components
-│   │   ├── Dashboard.jsx   # Dashboard Orchestrator
+│   │   ├── Dashboard/                      # Modular Dashboard Components
+│   │   ├── DataConnections/
+│   │   │   ├── BenchmarkReportPanel.jsx    # Local v0.2 upload & run management
+│   │   │   ├── GIQPanel.jsx
+│   │   │   ├── LPGPanel.jsx
+│   │   │   └── CustomGCSPanel.jsx
+│   │   ├── BenchmarkComparisonDashboard.jsx  # Full-width v0.2 comparison view
+│   │   ├── Dashboard.jsx                   # Dashboard Orchestrator
 │   │   ├── DataConnectionsPanel.jsx
+│   │   ├── Milestone1Dashboard.jsx
 │   │   └── DataInspector.jsx
 │   ├── hooks/
-│   │   ├── useAWS.js       # AWS S3 Hook
-│   │   ├── useGCS.js       # Cloud Storage Hook
-│   │   ├── useGIQ.js       # API Data Hook
-│   │   └── useLLMD.js      # Benchmarking Hook
+│   │   ├── useAWS.js           # AWS S3 Hook
+│   │   ├── useGCS.js           # Cloud Storage Hook
+│   │   ├── useGIQ.js           # API Data Hook
+│   │   ├── useLLMD.js          # Drive Results Hook
+│   │   ├── useDashboardData.jsx # Central data orchestration (includes brv02 state)
+│   │   └── useDashboardState.jsx
 │   ├── utils/
-│   │   ├── dashboardHelpers.js
-│   │   ├── dataParser.js   # Data Normalization Logic
-│   │   └── cacheManager.js # Client-side caching
+│   │   ├── benchmarkReportV02Parser.js  # v0.2 YAML parser (standalone, does not modify dataParser.js)
+│   │   ├── dashboardHelpers.jsx
+│   │   ├── dataParser.js        # Data normalization for existing sources
+│   │   ├── gcsScanner.js
+│   │   └── cacheManager.js
 │   ├── App.jsx             # React App Root
 │   └── main.jsx            # Entry Point
 └── package.json

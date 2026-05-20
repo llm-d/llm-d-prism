@@ -170,12 +170,6 @@ export default function BenchmarkComparisonDashboard({
 
     const hasObs = columns.some(c => c.stage?.observability !== null);
 
-    // Table rows
-    const allTableRows = [
-        ...perfMetrics,
-        ...(hasObs ? obsMetrics : []),
-    ];
-
     return (
         <div className="flex-1 flex flex-col min-h-screen bg-slate-950 text-white">
             {/* Header */}

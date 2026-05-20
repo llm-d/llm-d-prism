@@ -16,181 +16,12 @@ import React from "react";
 import { FileJson, X, Star, AlertCircle, Pencil } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const fmt = (val, decimals = 1) => {
-    if (val === null || val === undefined) return '—';
-    return Number(val).toFixed(decimals);
-};
-
-const pctDiff = (baseline, value) => {
-    if (baseline === null || baseline === undefined || baseline === 0) return null;
-    if (value === null || value === undefined) return null;
-    return ((value - baseline) / Math.abs(baseline)) * 100;
-};
-
-// higherIsBetter: true  → positive diff is green
-// higherIsBetter: false → negative diff is green
-const DiffBadge = ({ baseline, value, higherIsBetter, decimals = 1 }) => {
-    const diff = pctDiff(baseline, value);
-    if (diff === null) return <span className="text-slate-400 text-[10px]">—</span>;
-
-    const isImprovement = higherIsBetter ? diff > 0 : diff < 0;
-    const isNeutral = Math.abs(diff) < 0.1;
-
-    const colorClass = isNeutral
-        ? 'text-slate-500'
-        : isImprovement
-            ? 'text-green-600 dark:text-green-400'
-            : 'text-red-500 dark:text-red-400';
-
-    const sign = diff > 0 ? '+' : '';
-    return (
-        <span className={`text-[10px] font-medium ${colorClass}`}>
-            {sign}{diff.toFixed(1)}%
-        </span>
-    );
-};
-
-const MetricCell = ({ value, baseline, higherIsBetter, unit, decimals = 1, isBaseline }) => (
-    <td className="px-2 py-1.5 text-center">
-        <div className="text-xs text-slate-800 dark:text-slate-200 font-mono">
-            {fmt(value, decimals)}{unit ? <span className="text-[9px] text-slate-400 ml-0.5">{unit}</span> : null}
-        </div>
-        {!isBaseline && (
-            <DiffBadge baseline={baseline} value={value} higherIsBetter={higherIsBetter} decimals={decimals} />
-        )}
-    </td>
-);
-
-// ---------------------------------------------------------------------------
 // Stage label helper
 // ---------------------------------------------------------------------------
 const stageLabel = (stage) => {
     const idx = stage.stageIndex !== null ? `Stage ${stage.stageIndex}` : 'Stage —';
     const qps = stage.scenario.rateQps !== null ? ` · ${stage.scenario.rateQps} QPS` : '';
     return `${idx}${qps}`;
-};
-
-// ---------------------------------------------------------------------------
-// Comparison table
-// ---------------------------------------------------------------------------
-const ComparisonTable = ({ runs, selectedStages, baselineRunId, customLabels }) => {
-    const getLabel = (run) => customLabels?.[run.runId] || run.runLabel;
-    // Build ordered columns: baseline first, then the rest in insertion order
-    const columns = [
-        ...runs.filter(r => r.runId === baselineRunId),
-        ...runs.filter(r => r.runId !== baselineRunId),
-    ].map(run => {
-        const stageIdx = selectedStages[run.runId] ?? 0;
-        const stage = run.stages[stageIdx] || run.stages[0];
-        return { run, stage, isBaseline: run.runId === baselineRunId };
-    });
-
-    if (columns.length < 2) return null;
-
-    const baselineStage = columns[0].stage;
-    const bp = baselineStage.performance;
-    const bo = baselineStage.observability;
-
-    const hasObs = columns.some(c => c.stage.observability !== null);
-
-    const perfRows = [
-        { label: 'Output throughput',  key: p => p.outputTokenRate,  unit: 'tok/s', dec: 0, higher: true },
-        { label: 'Request rate',        key: p => p.requestRate,       unit: 'req/s', dec: 2, higher: true },
-        { label: 'TTFT mean',           key: p => p.ttftMean,          unit: 'ms',    dec: 1, higher: false },
-        { label: 'TTFT p99',            key: p => p.ttftP99,           unit: 'ms',    dec: 1, higher: false },
-        { label: 'TPOT mean',           key: p => p.tpotMean,          unit: 'ms',    dec: 2, higher: false },
-        { label: 'ITL mean',            key: p => p.itlMean,           unit: 'ms',    dec: 2, higher: false },
-        { label: 'E2E latency mean',    key: p => p.e2eMean,           unit: 'ms',    dec: 1, higher: false },
-        { label: 'E2E latency p99',     key: p => p.e2eP99,            unit: 'ms',    dec: 1, higher: false },
-        { label: 'Failures',            key: p => p.failures,          unit: '',      dec: 0, higher: false },
-    ];
-
-    const obsRows = [
-        { label: 'KV cache utilization',   key: o => o?.kvCacheUsage,        unit: '%',   dec: 1, higher: null },
-        { label: 'Prefix cache hit rate',  key: o => o?.prefixCacheHitRate,   unit: '%',   dec: 1, higher: true  },
-        { label: 'EPP KV utilization',     key: o => o?.eppKvUtilization,     unit: '%',   dec: 1, higher: null },
-        { label: 'EPP queue size',         key: o => o?.eppQueueSize,         unit: '',    dec: 1, higher: false },
-        { label: 'Pod startup (mean)',     key: o => o?.podStartupMeanS,      unit: 's',   dec: 1, higher: false },
-    ];
-
-    const colHeader = (col) => (
-        <th key={col.run.runId} className={`px-2 py-2 text-center text-[10px] font-semibold max-w-[100px] ${col.isBaseline ? 'text-violet-600 dark:text-violet-400' : 'text-slate-600 dark:text-slate-300'}`}>
-            <div className="truncate" title={getLabel(col.run)}>
-                {col.isBaseline && <span className="mr-1">★</span>}
-                {getLabel(col.run)}
-            </div>
-            <div className="text-[9px] font-normal text-slate-400">{stageLabel(col.stage)}</div>
-        </th>
-    );
-
-    const sectionHeader = (label) => (
-        <tr>
-            <td colSpan={columns.length + 1} className="px-2 pt-3 pb-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</span>
-            </td>
-        </tr>
-    );
-
-    return (
-        <div className="overflow-x-auto mt-3">
-            <table className="w-full text-left border-collapse">
-                <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                        <th className="px-2 py-2 text-[10px] font-semibold text-slate-500 uppercase">Metric</th>
-                        {columns.map(colHeader)}
-                    </tr>
-                </thead>
-                <tbody>
-                    {sectionHeader('Request Performance')}
-                    {perfRows.map(row => (
-                        <tr key={row.label} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                            <td className="px-2 py-1.5 text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">{row.label}</td>
-                            {columns.map(col => (
-                                <MetricCell
-                                    key={col.run.runId}
-                                    value={row.key(col.stage.performance)}
-                                    baseline={row.key(bp)}
-                                    higherIsBetter={row.higher}
-                                    unit={row.unit}
-                                    decimals={row.dec}
-                                    isBaseline={col.isBaseline}
-                                />
-                            ))}
-                        </tr>
-                    ))}
-
-                    {hasObs && (
-                        <>
-                            {sectionHeader('Observability')}
-                            {obsRows.map(row => {
-                                const anyHasValue = columns.some(c => row.key(c.stage.observability) !== null);
-                                if (!anyHasValue) return null;
-                                return (
-                                    <tr key={row.label} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                                        <td className="px-2 py-1.5 text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">{row.label}</td>
-                                        {columns.map(col => (
-                                            <MetricCell
-                                                key={col.run.runId}
-                                                value={row.key(col.stage.observability)}
-                                                baseline={row.key(bo)}
-                                                higherIsBetter={row.higher}
-                                                unit={row.unit}
-                                                decimals={row.dec}
-                                                isBaseline={col.isBaseline}
-                                            />
-                                        ))}
-                                    </tr>
-                                );
-                            })}
-                        </>
-                    )}
-                </tbody>
-            </table>
-        </div>
-    );
 };
 
 // ---------------------------------------------------------------------------
@@ -265,13 +96,11 @@ export const BenchmarkReportPanel = ({
         }
 
         prevRunIdsRef.current = new Set(runs.map(r => r.runId));
-    }, [runs]);
+    }, [runs, editingRunId]);
 
     const setStageForRun = (runId, idx) => {
         setSelectedStages(prev => ({ ...prev, [runId]: idx }));
     };
-
-    const showTable = runs.length >= 2 && baselineRunId;
 
     return (
         <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/50 p-4 animate-in slide-in-from-top-2 duration-200">

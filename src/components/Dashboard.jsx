@@ -134,7 +134,7 @@ const MOCK_FALLBACK_DATA_LEGACY = [
     }
 ];
 
-const Dashboard = ({ onNavigateBack, startWithComparison }) => {
+const Dashboard = ({ onNavigateBack }) => {
 
     const dashboardState = useDashboardState();
     const {
@@ -208,12 +208,8 @@ const Dashboard = ({ onNavigateBack, startWithComparison }) => {
         brv02Runs, brv02CustomLabels, setBrv02CustomLabels,
         brv02BaselineRunId, setBrv02BaselineRunId,
         brv02SelectedStages, setBrv02SelectedStages,
-        showBenchmarkComparison: showBenchmarkComparisonState, setShowBenchmarkComparison,
+        showBenchmarkComparison, setShowBenchmarkComparison,
     } = dashboardData;
-
-    // When navigated directly via the left nav "Benchmark Comparison" entry,
-    // open the comparison view immediately.
-    const showBenchmarkComparison = startWithComparison || showBenchmarkComparisonState;
 
     const data = useMemo(() => {
         if (!liveData || liveData.length === 0) return MOCK_FALLBACK_DATA_LEGACY.map((d, i) => ({ ...d, id: i }));
