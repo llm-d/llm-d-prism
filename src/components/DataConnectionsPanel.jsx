@@ -17,11 +17,12 @@ import { Activity, X, Cloud, FileJson, CheckCircle, AlertCircle, Loader, Chevron
 import { GIQPanel } from "./DataConnections/GIQPanel";
 import { LPGPanel } from "./DataConnections/LPGPanel";
 import { CustomGCSPanel } from "./DataConnections/CustomGCSPanel";
+import { BenchmarkReportPanel } from "./DataConnections/BenchmarkReportPanel";
 
 const DataConnectionsPanel = (props) => {
   const [localSampleError, setLocalSampleError] = React.useState(false);
   const [localSampleColor, setLocalSampleColor] = React.useState(null);
-    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast } = props;
+    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast, brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run, brv02CustomLabels, setBrv02CustomLabels, brv02BaselineRunId, setBrv02BaselineRunId, brv02SelectedStages, setBrv02SelectedStages, onOpenBenchmarkComparison } = props;
   const activationOrderRef = React.useRef(null);
   const prevActiveIdsRef = React.useRef(new Set());
   
@@ -124,6 +125,9 @@ const DataConnectionsPanel = (props) => {
       } else if (integ.id === 'quality_scores') {
           isConnected = selectedSources.has('quality_scores');
           matchCount = qualityMetrics && isConnected ? qualityMetrics.modelCount || Object.keys(qualityMetrics.data).length : 0;
+      } else if (integ.id === 'benchmark_report_v02') {
+          matchCount = brv02Runs.length;
+          isConnected = matchCount > 0;
       }
 
       if (isConnected) currentActiveIds.add(integ.id);
@@ -202,7 +206,7 @@ const DataConnectionsPanel = (props) => {
                                                         <button
                                                             onClick={async (e) => {
                                                                 e.stopPropagation();
-                                                                const isConfigurable = ['google_giq', 'inferencemax', 'lpg_lifecycle'].includes(integ.id);
+                                                                const isConfigurable = ['google_giq', 'inferencemax', 'lpg_lifecycle', 'benchmark_report_v02'].includes(integ.id);
                                                                 if (integ.id === 'llmd_results') {
                                                                     if (isConnected) {
                                                                         removeLLMDData();
@@ -233,7 +237,12 @@ const DataConnectionsPanel = (props) => {
                                                                         setAvailableSources(prev => { const n = new Set(prev); n.add(sourceKey); return n; });
                                                                     }
                                                                 } else if (isConfigurable) {
-                                                                    if (isConnected) {
+                                                                    if (integ.id === 'benchmark_report_v02') {
+                                                                        // Toggle is always pure expand/collapse.
+                                                                        // Runs are removed individually via the × button in BenchmarkReportPanel.
+                                                                        setExpandedIntegration(isExpanded ? null : integ.id);
+                                                                        setBrv02Error(null);
+                                                                    } else if (isConnected) {
                                                                         if (integ.id === 'google_giq') {
                                                                             setApiConfigs([]);
                                                                             setData(prev => prev.filter(d => !d.source?.startsWith('giq:')).map((d, i) => ({...d, id: i})));
@@ -262,12 +271,12 @@ const DataConnectionsPanel = (props) => {
                                                                     }
                                                                 }
                                                             }}
-                                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${isConnected ? 'bg-blue-600' : (localSampleColor === integ.id ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700')}`}
+                                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${integ.id === 'benchmark_report_v02' ? (isExpanded ? 'bg-violet-500' : 'bg-slate-200 dark:bg-slate-700') : isConnected ? 'bg-blue-600' : (localSampleColor === integ.id ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700')}`}
                                                         >
                                                             <span className="sr-only">Toggle Connection</span>
                                                             <span
                                                                 aria-hidden="true"
-                                                                className={`${isConnected ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
+                                                                className={`${(integ.id === 'benchmark_report_v02' ? isExpanded : isConnected) ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
                                                             />
                                                         </button>
                                                     ) : (
@@ -408,6 +417,23 @@ const DataConnectionsPanel = (props) => {
                                                 hostProject={hostProject}
                                                 lpgMatchCount={matchCount}
                                                 gcsSuccess={gcsSuccess} // Now passed as prop
+                                            />
+                                        )}
+
+                                        {isExpanded && integ.id === 'benchmark_report_v02' && (
+                                            <BenchmarkReportPanel
+                                                runs={brv02Runs}
+                                                error={brv02Error}
+                                                setError={setBrv02Error}
+                                                onUpload={handleBrv02Upload}
+                                                onRemoveRun={removeBrv02Run}
+                                                customLabels={brv02CustomLabels}
+                                                setCustomLabels={setBrv02CustomLabels}
+                                                baselineRunId={brv02BaselineRunId}
+                                                setBaselineRunId={setBrv02BaselineRunId}
+                                                selectedStages={brv02SelectedStages}
+                                                setSelectedStages={setBrv02SelectedStages}
+                                                onOpenComparison={onOpenBenchmarkComparison}
                                             />
                                         )}
                                     </div>

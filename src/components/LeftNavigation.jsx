@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Home, 
-    BarChart2, 
-    Route, 
-    Compass, 
-    Database, 
-    Lightbulb, 
+import {
+    Home,
+    BarChart2,
+    Route,
+    Compass,
+    Database,
+    Lightbulb,
     Layers,
     Split,
     Brain,
     DollarSign,
     FileCode,
-    Activity
+    Activity,
+    GitCompare,
 } from 'lucide-react';
 
 const MENU_GROUPS = [
@@ -33,6 +34,7 @@ const MENU_GROUPS = [
         title: "Utility Suite",
         items: [
             { id: 'benchmark-browser', label: 'Benchmark Browser', icon: BarChart2, view: 'benchmark-browser' },
+            { id: 'benchmark-comparison', label: 'Benchmark Comparison', icon: GitCompare, view: 'benchmark-comparison' },
             { id: 'schema-browser', label: 'Schema Explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
             { id: 'workload-catalog', label: 'Workload Catalog', icon: Activity, view: 'workload-catalog', disabled: false },
             { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }

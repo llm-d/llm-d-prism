@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from 'react';
-import { Zap, Cloud, FileJson, Target, ExternalLink } from 'lucide-react';
+import { Zap, Cloud, FileJson, Target, ExternalLink, GitCompare } from 'lucide-react';
 
 export const USE_CASE_META = {
     "Advanced Customer Support": "(~9k/256)",
@@ -96,6 +96,16 @@ export const INTEGRATIONS = [
         description: 'Aggregate quality metrics from open quality leaderboards (Arena.ai, Simple Benchmark Viewer).',
         icon: Target,
         color: 'text-indigo-500'
+    },
+    {
+        id: 'benchmark_report_v02',
+        name: 'Local Benchmark Comparison',
+        type: 'v0.2',
+        tags: ['Local', 'Compare'],
+        description: 'Upload local benchmark_report_v0.2 YAML files from llm-d-benchmark runs. Select a baseline and compare performance and observability metrics across runs.',
+        icon: GitCompare,
+        color: 'text-violet-500',
+        alwaysExpanded: true,
     }
 ];
 

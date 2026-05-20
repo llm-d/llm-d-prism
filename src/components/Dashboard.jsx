@@ -37,6 +37,7 @@ import DataInspector from './DataInspector';
 import { useDashboardState } from '../hooks/useDashboardState';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { INTEGRATIONS, getBucket, getRatioType, getEffectiveTp, sortBuckets, findParetoPoint, getNodesAndType, getBenchmarkKey } from '../utils/dashboardHelpers';
+import BenchmarkComparisonDashboard from './BenchmarkComparisonDashboard';
 const USE_CASE_META = {
     "Advanced Customer Support": "(~9k/256)",
     "Chatbot (ShareGPT)": "(~128/128)",
@@ -133,7 +134,7 @@ const MOCK_FALLBACK_DATA_LEGACY = [
     }
 ];
 
-const Dashboard = ({ onNavigateBack }) => {
+const Dashboard = ({ onNavigateBack, startWithComparison }) => {
 
     const dashboardState = useDashboardState();
     const {
@@ -203,8 +204,16 @@ const Dashboard = ({ onNavigateBack }) => {
         debugInfo, setDebugInfo,
         API_KEY,
         expandedIntegration, setExpandedIntegration,
-        awsBucketConfigs, handleAddAWSBucket, removeAWSBucket
+        awsBucketConfigs, handleAddAWSBucket, removeAWSBucket,
+        brv02Runs, brv02CustomLabels, setBrv02CustomLabels,
+        brv02BaselineRunId, setBrv02BaselineRunId,
+        brv02SelectedStages, setBrv02SelectedStages,
+        showBenchmarkComparison: showBenchmarkComparisonState, setShowBenchmarkComparison,
     } = dashboardData;
+
+    // When navigated directly via the left nav "Benchmark Comparison" entry,
+    // open the comparison view immediately.
+    const showBenchmarkComparison = startWithComparison || showBenchmarkComparisonState;
 
     const data = useMemo(() => {
         if (!liveData || liveData.length === 0) return MOCK_FALLBACK_DATA_LEGACY.map((d, i) => ({ ...d, id: i }));
@@ -1825,8 +1834,20 @@ const Dashboard = ({ onNavigateBack }) => {
                 // Actually, let's just use an inline function for the button below.
             })()}
 
-            {/* Configuration Area */}
-            <div className="space-y-4 mb-4">
+            {/* Benchmark Comparison full-width view — replaces chart/table when active */}
+            {showBenchmarkComparison && (
+                <BenchmarkComparisonDashboard
+                    runs={brv02Runs}
+                    customLabels={brv02CustomLabels}
+                    baselineRunId={brv02BaselineRunId}
+                    selectedStages={brv02SelectedStages}
+                    setBaselineRunId={setBrv02BaselineRunId}
+                    onNavigateBack={() => setShowBenchmarkComparison(false)}
+                />
+            )}
+
+            {/* Configuration Area — hidden when comparison view is active */}
+            <div className={`space-y-4 mb-4 ${showBenchmarkComparison ? 'hidden' : ''}`}>
 
                 {/* Data Connections Section - Moved to Slide-over */}
 
@@ -1918,17 +1939,19 @@ const Dashboard = ({ onNavigateBack }) => {
 
                 {/* Application Layer */}
 
+            </div>
+            </main>
 
-
-                {/* Data Connections Panel Overlay */}
+            {/* Data Connections Panel — rendered outside <main> so flex/overflow
+                inside main cannot affect its fixed positioning or stacking context */}
                 {showDataPanel && (
-                    <div 
+                    <div
                         className="fixed inset-0 bg-black/50 z-[55] backdrop-blur-sm transition-opacity"
                         onClick={() => setShowDataPanel(false)}
                     />
                 )}
                 <DataConnectionsPanel
-                    {...dashboardData} // Spread all data/handlers from useDashboardData
+                    {...dashboardData}
                     addToast={addToast}
                     showDataPanel={showDataPanel}
                     setShowDataPanel={setShowDataPanel}
@@ -2003,9 +2026,8 @@ const Dashboard = ({ onNavigateBack }) => {
                     awsBucketConfigs={awsBucketConfigs}
                     handleAddAWSBucket={handleAddAWSBucket}
                     removeAWSBucket={removeAWSBucket}
+                    onOpenBenchmarkComparison={() => { setShowBenchmarkComparison(true); setShowDataPanel(false); }}
                 />
-            </div>
-            </main>
         </div>
 
     );
