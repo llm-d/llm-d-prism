@@ -38,6 +38,9 @@ function App() {
     // Update URL to reflect the current view
     const params = new URLSearchParams(window.location.search);
     params.set('view', view);
+    if (view !== 'workload-catalog') {
+      params.delete('workload');
+    }
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
     
     // Reset scroll position on navigation
