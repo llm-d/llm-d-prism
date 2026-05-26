@@ -240,6 +240,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
     const [reportsMeta, setReportsMeta] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
+    const [workloadConfig, setWorkloadConfig] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -274,6 +275,17 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
             if (reports && reports.length > 0) {
                 setReportsMeta(reports[0]);
             }
+
+            try {
+                const configRes = await fetch('https://raw.githubusercontent.com/kubernetes-sigs/inference-perf/main/workload-catalog/interactive-chat/config.json');
+                if (configRes.ok) {
+                    const config = await configRes.json();
+                    setWorkloadConfig(config);
+                }
+            } catch (e) {
+                console.warn('Failed to fetch interactive-chat config:', e);
+            }
+
             setLoading(false);
         };
         fetchData();
@@ -892,7 +904,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     </div>
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Input / Output Sequence Length</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">7200 / 1000</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">
+                                            {workloadConfig 
+                                                ? `${workloadConfig.input_sequence_length.mean} / ${workloadConfig.output_sequence_length.max}`
+                                                : "7200 / 1000"}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
