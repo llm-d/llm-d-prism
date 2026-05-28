@@ -674,10 +674,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     <div className="flex items-center">
                         <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Inference scheduling</h1>
                         <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
-                            Guided mode
-                        </span>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
-                            Hi Google Cloud Next!
+                            Guided path
                         </span>
                     </div>
                 </div>
@@ -737,6 +734,9 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         {/* Col 1: Overview */}
                         <div className="flex flex-col justify-between space-y-3">
                             <div>
+                                <div className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2">
+                                    Overview
+                                </div>
                                 <p className="text-sm text-slate-400 leading-relaxed">
                                     These variants of intelligent inference scheduling optimize request routing to maximize performance. By leveraging GKE Inference Gateway, real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
                                 </p>
@@ -963,7 +963,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     {/* CARD 3: Reproducibility Guide */}
                     <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
                         <div>
-                            <p className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-2">
+                            <p className="text-[11px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2">
                                 Action
                             </p>
                             <h3 className="text-base font-bold text-white mb-1">
@@ -974,7 +974,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             </p>
                         </div>
 
-                        <button onClick={() => setIsModalOpen(true)} className="w-full mt-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex justify-center items-center">
+                        <button onClick={() => setIsModalOpen(true)} className="w-full mt-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex justify-center items-center gap-1.5">
                             <Zap className="w-3.5 h-3.5 mr-1.5" /> View instructions
                         </button>
                     </div>

@@ -22,6 +22,7 @@ import WorkloadCatalog from './components/WorkloadCatalog';
 import PrefixCacheOffloadingDashboard from './components/PrefixCacheOffloadingDashboard';
 import StackInsightEngine from './components/StackInsightEngine';
 import RegressionsAnalysisDashboard from './components/RegressionsAnalysisDashboard';
+import AgenticWorkloadsDashboard from './components/AgenticWorkloadsDashboard';
 
 import LeftNavigation from './components/LeftNavigation';
 
@@ -57,6 +58,7 @@ function App() {
         <main ref={mainRef} className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
           {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
           {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+          {currentView === 'agentic-workloads' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
           {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
           {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
