@@ -39,7 +39,52 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [lpgPasteText, setLpgPasteText] = useState("");
     const [brv02Runs, setBrv02Runs] = useState([]);
     const [brv02Error, setBrv02Error] = useState(null);
+    const [brv02Loading, setBrv02Loading] = useState(false);
     const [brv02CustomLabels, setBrv02CustomLabels] = useState({});
+    const [brv02BaselineRunId, setBrv02BaselineRunId] = useState(null);
+    const [brv02SelectedStages, setBrv02SelectedStages] = useState({});
+
+    useEffect(() => {
+        // Automatically sync all benchmark stage runs into the main scatter plot data array
+        const brv02Entries = brv02Runs.flatMap(run => run.stages.map(stageToEntry));
+        const runSourceKeys = brv02Runs.map(r => `brv02:${r.runId}`);
+
+        setData(prev => {
+            const nonBrv02Data = prev.filter(d => !d.source?.startsWith('brv02:'));
+            const startId = nonBrv02Data.length;
+            const entriesWithIds = brv02Entries.map((e, i) => ({ ...e, id: startId + i }));
+            return [...nonBrv02Data, ...entriesWithIds];
+        });
+
+        if (runSourceKeys.length > 0) {
+            setAvailableSources(prev => {
+                const next = new Set(prev);
+                runSourceKeys.forEach(k => next.add(k));
+                return next;
+            });
+
+            setSelectedSources(prev => {
+                const next = new Set(prev);
+                runSourceKeys.forEach(k => next.add(k));
+                return next;
+            });
+        } else {
+            setAvailableSources(prev => {
+                const next = new Set(prev);
+                Array.from(next).forEach(k => {
+                    if (k.startsWith('brv02:')) next.delete(k);
+                });
+                return next;
+            });
+            setSelectedSources(prev => {
+                const next = new Set(prev);
+                Array.from(next).forEach(k => {
+                    if (k.startsWith('brv02:')) next.delete(k);
+                });
+                return next;
+            });
+        }
+    }, [brv02Runs]);
     const [driveLoading, setDriveLoading] = useState(false);
     const [driveStatus, setDriveStatus] = useState("");
     const [driveProgress, setDriveProgress] = useState(0);
@@ -1712,79 +1757,94 @@ export const useDashboardData = (initialState, dashboardState) => {
     // Benchmark Report v0.2 handlers
     // -------------------------------------------------------------------------
 
-    const handleBrv02Upload = async (event) => {
-        const files = event.target.files;
+    const handleBrv02Upload = async (eventOrFiles) => {
+        let files;
+        let isEvent = false;
+        if (eventOrFiles && eventOrFiles.target && eventOrFiles.target.files) {
+            files = Array.from(eventOrFiles.target.files);
+            isEvent = true;
+        } else if (Array.isArray(eventOrFiles)) {
+            files = eventOrFiles;
+        } else if (eventOrFiles) {
+            files = Array.from(eventOrFiles);
+        }
+
         if (!files || files.length === 0) return;
+        
+        setBrv02Loading(true);
         setBrv02Error(null);
 
-        const newStages = [];
-        let skipped = 0;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const text = await file.text();
-            const record = parseReportV02(text, file.name);
-            if (record) {
-                newStages.push(record);
-            } else {
-                skipped++;
+        try {
+            const v02Pattern = /^benchmark_report_v0\.2.*\.ya?ml$/i;
+            const matchingFiles = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (v02Pattern.test(file.name)) {
+                    matchingFiles.push(file);
+                }
             }
+
+            if (matchingFiles.length === 0) {
+                setBrv02Error("No valid benchmark_report_v0.2 files found. Make sure the files start with version: '0.2' and match the 'benchmark_report_v0.2' filename prefix.");
+                if (isEvent && eventOrFiles.target) {
+                    eventOrFiles.target.value = '';
+                }
+                return;
+            }
+
+            const newStages = [];
+            for (let i = 0; i < matchingFiles.length; i++) {
+                const file = matchingFiles[i];
+                const text = await file.text();
+                const identifier = file.webkitRelativePath || file.relativePath || file.name;
+                const record = parseReportV02(text, identifier);
+                if (record) {
+                    newStages.push(record);
+                }
+            }
+
+            if (newStages.length === 0) {
+                setBrv02Error("No valid benchmark_report_v0.2 files found. Make sure the files start with version: '0.2' and match the 'benchmark_report_v0.2' filename prefix.");
+                if (isEvent && eventOrFiles.target) {
+                    eventOrFiles.target.value = '';
+                }
+                return;
+            }
+
+            // Deduplicate against existing stages by filename before updating state
+            const existingFilenames = new Set(
+                brv02Runs.flatMap(run => run.stages.map(s => s.filename))
+            );
+            const trulyNewStages = newStages.filter(s => !existingFilenames.has(s.filename));
+
+            if (trulyNewStages.length === 0 && newStages.length > 0) {
+                setBrv02Error('All selected files have already been uploaded.');
+                if (isEvent && eventOrFiles.target) {
+                    eventOrFiles.target.value = '';
+                }
+                return;
+            }
+
+            // Update comparison panel state
+            setBrv02Runs(prev => {
+                const allStages = [...prev.flatMap(run => run.stages), ...trulyNewStages];
+                return groupStagesIntoRuns(allStages);
+            });
+
+            if (isEvent && eventOrFiles.target) {
+                eventOrFiles.target.value = '';
+            }
+        } catch (e) {
+            console.error("Failed to upload local report files:", e);
+            setBrv02Error("Failed to upload report files. Make sure they are valid YAML files.");
+        } finally {
+            setBrv02Loading(false);
         }
-
-        if (newStages.length === 0) {
-            setBrv02Error('No valid benchmark_report_v0.2 files found. Make sure the files start with version: \'0.2\'.');
-            event.target.value = '';
-            return;
-        }
-
-        // Deduplicate against existing stages by filename before updating state
-        const existingFilenames = new Set(
-            brv02Runs.flatMap(run => run.stages.map(s => s.filename))
-        );
-        const trulyNewStages = newStages.filter(s => !existingFilenames.has(s.filename));
-
-        if (trulyNewStages.length === 0 && newStages.length > 0) {
-            setBrv02Error('All selected files have already been uploaded.');
-            event.target.value = '';
-            return;
-        }
-
-        // Update comparison panel state
-        setBrv02Runs(prev => {
-            const allStages = [...prev.flatMap(run => run.stages), ...trulyNewStages];
-            return groupStagesIntoRuns(allStages);
-        });
-
-        // Also push entries into the main data array so they appear in the
-        // scatter chart alongside all other data sources.
-        const newEntries = trulyNewStages.map(stageToEntry);
-        const newSourceKeys = [...new Set(newEntries.map(e => e.source))];
-        const startId = data.length;
-        const entriesWithIds = newEntries.map((e, i) => ({ ...e, id: startId + i }));
-
-        setData(prev => [...prev, ...entriesWithIds]);
-        setSelectedSources(prev => {
-            const next = new Set(prev);
-            newSourceKeys.forEach(k => next.add(k));
-            return next;
-        });
-        setAvailableSources(prev => {
-            const next = new Set(prev);
-            newSourceKeys.forEach(k => next.add(k));
-            return next;
-        });
-
-        if (skipped > 0) {
-            setBrv02Error(`${skipped} file(s) skipped — not valid v0.2 benchmark reports.`);
-        }
-        event.target.value = '';
     };
 
     const removeBrv02Run = (runId) => {
-        const sourceKey = `brv02:${runId}`;
         setBrv02Runs(prev => prev.filter(r => r.runId !== runId));
-        setData(prev => prev.filter(d => d.source !== sourceKey));
-        setSelectedSources(prev => { const next = new Set(prev); next.delete(sourceKey); return next; });
-        setAvailableSources(prev => { const next = new Set(prev); next.delete(sourceKey); return next; });
     };
 
     return {
@@ -1829,7 +1889,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
-        brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run,
+        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, removeBrv02Run,
         brv02CustomLabels, setBrv02CustomLabels
     };
 };

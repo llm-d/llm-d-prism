@@ -54,7 +54,17 @@ const pct = (val) => {
 // Stage grouping (multiple files → one run) requires the directory name as
 // context, which will be available once the directory-picker upload path is
 // implemented.
-const deriveRunId = (doc) => doc.run?.uid || crypto.randomUUID();
+const deriveRunId = (doc, filename) => {
+    const baseUid = doc.run?.uid || crypto.randomUUID();
+    if (filename && filename.includes('/')) {
+        const parts = filename.split('/');
+        const parentDir = parts[parts.length - 2];
+        if (parentDir) {
+            return `${parentDir}:${baseUid}`;
+        }
+    }
+    return baseUid;
+};
 
 // Derive a human-readable label from scenario context so the user can tell
 // runs apart without seeing raw UUIDs or uninformative filenames.
@@ -83,8 +93,8 @@ const deriveRunLabel = (doc, filename) => {
 
     // Last resort: filename stripped of the common prefix
     return filename
-        .replace(/^benchmark_report_v0\.2,_/, '')
-        .replace(/\.yaml$/, '');
+        .replace(/^benchmark_report_v0\.2[,_]*/i, "")
+        .replace(/\.ya?ml$/i, "");
 };
 
 // ---------------------------------------------------------------------------
@@ -143,7 +153,7 @@ export function parseReportV02(yamlText, filename) {
     let doc;
     try {
         doc = yaml.load(yamlText);
-    } catch (_) {
+    } catch {
         return null;
     }
     if (!doc || doc.version !== '0.2') return null;
@@ -243,7 +253,7 @@ export function parseReportV02(yamlText, filename) {
     }
 
     return {
-        runId: deriveRunId(doc),
+        runId: deriveRunId(doc, filename),
         runLabel: deriveRunLabel(doc, filename),
         filename,
         runUid: doc.run?.uid || null,
@@ -281,15 +291,32 @@ export function groupStagesIntoRuns(stageRecords) {
         }
         map.get(record.runId).stages.push(record);
     }
+    
     // Sort stages within each run
-    for (const run of map.values()) {
+    const runsList = Array.from(map.values());
+    for (const run of runsList) {
         run.stages.sort((a, b) => {
             if (a.stageIndex === null) return 1;
             if (b.stageIndex === null) return -1;
             return a.stageIndex - b.stageIndex;
         });
     }
-    return Array.from(map.values());
+
+    // Automatically make run labels unique to avoid conflicts
+    const seenLabels = new Map();
+    for (const run of runsList) {
+        let baseLabel = run.runLabel;
+        let uniqueLabel = baseLabel;
+        let suffixCount = 1;
+        while (seenLabels.has(uniqueLabel.toLowerCase())) {
+            uniqueLabel = `${baseLabel} (${suffixCount})`;
+            suffixCount++;
+        }
+        run.runLabel = uniqueLabel;
+        seenLabels.set(uniqueLabel.toLowerCase(), true);
+    }
+
+    return runsList;
 }
 
 /**
@@ -301,7 +328,7 @@ export function groupStagesIntoRuns(stageRecords) {
  * user removes a run from the comparison panel.
  */
 export function stageToEntry(stage) {
-    const { scenario, performance, runId, runLabel, timestamp } = stage;
+    const { scenario, performance, runId, timestamp } = stage;
 
     const modelName  = normalizeModelName(scenario.model);
     const hardware   = normalizeHardware(scenario.hardware);

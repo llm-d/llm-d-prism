@@ -11,7 +11,7 @@
 // limitations under the License.
 
 import React from "react";
-import { FileJson, X, AlertCircle, Pencil, Star } from "lucide-react";
+import { FileJson, X, AlertCircle, Pencil, Star, Loader } from "lucide-react";
 
 const stageSummary = (stage) => {
     if (!stage) return '—';
@@ -24,10 +24,118 @@ export const BenchmarkReportPanel = ({
     runs, error, setError, onUpload, onRemoveRun,
     customLabels, setCustomLabels,
     getRunBenchmarkKey, baselineBenchmarkKey, setBaselineBenchmarkKey,
+    loading = false,
 }) => {
     const [editingRunId, setEditingRunId] = React.useState(null);
     const [editingValue, setEditingValue] = React.useState('');
     const [collisionEdit, setCollisionEdit] = React.useState(false);
+    const [selectedRunIds, setSelectedRunIds] = React.useState(new Set());
+
+    const toggleRunSelection = (runId) => {
+        setSelectedRunIds(prev => {
+            const next = new Set(prev);
+            if (next.has(runId)) {
+                next.delete(runId);
+            } else {
+                next.add(runId);
+            }
+            return next;
+        });
+    };
+
+    const handleSelectionAction = () => {
+        if (selectedRunIds.size > 0) {
+            // Invert Selection
+            setSelectedRunIds(prev => {
+                const next = new Set();
+                runs.forEach(run => {
+                    if (!prev.has(run.runId)) {
+                        next.add(run.runId);
+                    }
+                });
+                return next;
+            });
+        } else {
+            // Select All
+            setSelectedRunIds(new Set(runs.map(r => r.runId)));
+        }
+    };
+
+    const handleDeleteSelected = () => {
+        selectedRunIds.forEach(runId => {
+            onRemoveRun(runId);
+            setCustomLabels(prev => {
+                const next = { ...prev };
+                delete next[runId];
+                return next;
+            });
+        });
+        setSelectedRunIds(new Set());
+    };
+    const [isDragging, setIsDragging] = React.useState(false);
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = () => {
+        setIsDragging(false);
+    };
+
+    const handleDrop = async (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        setError(null);
+
+        const items = e.dataTransfer.items;
+        if (!items || items.length === 0) return;
+
+        const files = [];
+
+        const readAllEntries = async (directoryReader) => {
+            let allEntries = [];
+            const readBatch = async () => {
+                const entries = await new Promise((resolve) => directoryReader.readEntries(resolve));
+                if (entries.length > 0) {
+                    allEntries.push(...entries);
+                    await readBatch();
+                }
+            };
+            await readBatch();
+            return allEntries;
+        };
+
+        const traverseEntry = async (entry) => {
+            if (entry.isFile) {
+                const file = await new Promise((resolve) => entry.file(resolve));
+                files.push(file);
+            } else if (entry.isDirectory) {
+                const directoryReader = entry.createReader();
+                const entries = await readAllEntries(directoryReader);
+                for (const subEntry of entries) {
+                    await traverseEntry(subEntry);
+                }
+            }
+        };
+
+        const promises = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+                const entry = item.webkitGetAsEntry();
+                if (entry) {
+                    promises.push(traverseEntry(entry));
+                }
+            }
+        }
+
+        await Promise.all(promises);
+        
+        if (files.length > 0) {
+            onUpload(files);
+        }
+    };
 
     const getLabel = (run) => customLabels[run.runId] || run.runLabel;
 
@@ -95,31 +203,92 @@ export const BenchmarkReportPanel = ({
 
                 {/* Drop zone — always visible, additive uploads */}
                 <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Upload Report Files</label>
-                    <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-5 flex flex-col items-center justify-center text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors relative group cursor-pointer">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Upload Report Files / Folder</label>
+                    <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={`border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center text-center transition-colors relative group cursor-pointer ${
+                            isDragging
+                                ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20'
+                                : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                        }`}
+                    >
                         <input
                             type="file"
                             multiple
                             accept=".yaml,.yml"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             onChange={onUpload}
+                            disabled={loading}
                         />
-                        <FileJson size={20} className="text-slate-400 mb-1.5 group-hover:text-cyan-500 transition-colors" />
+                        {loading ? (
+                            <Loader size={20} className="animate-spin text-cyan-500 mb-1.5" />
+                        ) : (
+                            <FileJson size={20} className={`mb-1.5 transition-colors ${isDragging ? 'text-cyan-500' : 'text-slate-400 group-hover:text-cyan-500'}`} />
+                        )}
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                            Drag & drop files or <span className="text-cyan-500">browse</span>
+                            {loading ? (
+                                <span>Processing files...</span>
+                            ) : (
+                                <span>Drag & drop files/folders or <span className="text-cyan-500">browse files</span></span>
+                            )}
                         </span>
                         <span className="text-[10px] text-slate-400 mt-1">
                             benchmark_report_v0.2,_*.yaml — new files are added to existing
                         </span>
+                    </div>
+                    {/* Directory Upload Option */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-2">
+                        <span>Or, upload a whole run directory:</span>
+                        {loading ? (
+                            <span className="text-slate-400 dark:text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed">
+                                Select Directory
+                            </span>
+                        ) : (
+                            <label className="text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 cursor-pointer font-semibold flex items-center gap-1">
+                                <span>Select Directory</span>
+                                <input
+                                    type="file"
+                                    webkitdirectory="true"
+                                    directory="true"
+                                    multiple
+                                    className="hidden"
+                                    onChange={onUpload}
+                                    disabled={loading}
+                                />
+                            </label>
+                        )}
                     </div>
                 </div>
 
                 {/* Uploaded runs list */}
                 {runs.length > 0 && (
                     <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">
-                            Uploaded Runs ({runs.length})
-                        </label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                                Uploaded Runs ({runs.length})
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleSelectionAction}
+                                    className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 transition-colors"
+                                >
+                                    {selectedRunIds.size > 0 ? "Invert Selection" : "Select All"}
+                                </button>
+                                {selectedRunIds.size > 0 && (
+                                    <>
+                                        <span className="text-[9px] text-slate-300 dark:text-slate-700">|</span>
+                                        <button
+                                            onClick={handleDeleteSelected}
+                                            className="text-[10px] font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                        >
+                                            Delete Selected ({selectedRunIds.size})
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
                         {runs.map(run => {
                             const runKey = getRunBenchmarkKey ? getRunBenchmarkKey(run.runId) : null;
                             const isBaseline = !!runKey && runKey === baselineBenchmarkKey;
@@ -134,38 +303,47 @@ export const BenchmarkReportPanel = ({
                                     }`}
                                 >
                                     <div className="flex items-center justify-between gap-2">
-                                        {/* Inline label — click to rename */}
-                                        {editingRunId === run.runId ? (
-                                            <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                                                <input
-                                                    autoFocus
-                                                    value={editingValue}
-                                                    onChange={e => setEditingValue(e.target.value)}
-                                                    onBlur={commitEdit}
-                                                    onKeyDown={e => {
-                                                        if (e.key === 'Enter') commitEdit();
-                                                        if (e.key === 'Escape') cancelEdit();
-                                                    }}
-                                                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-cyan-400 rounded px-1.5 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none"
-                                                />
-                                                {collisionEdit && (
-                                                    <span className="text-[9px] text-amber-500">
-                                                        Duplicate name — give this run a unique name
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            {/* Selection Checkbox */}
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedRunIds.has(run.runId)}
+                                                onChange={() => toggleRunSelection(run.runId)}
+                                                className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                                            />
+                                            {/* Inline label — click to rename */}
+                                            {editingRunId === run.runId ? (
+                                                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                                                    <input
+                                                        autoFocus
+                                                        value={editingValue}
+                                                        onChange={e => setEditingValue(e.target.value)}
+                                                        onBlur={commitEdit}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') commitEdit();
+                                                            if (e.key === 'Escape') cancelEdit();
+                                                        }}
+                                                        className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-cyan-400 rounded px-1.5 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none"
+                                                    />
+                                                    {collisionEdit && (
+                                                        <span className="text-[9px] text-amber-500">
+                                                            Duplicate name — give this run a unique name
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => startEdit(run)}
+                                                    title="Click to rename"
+                                                    className="flex-1 flex items-center gap-1.5 min-w-0 text-left group"
+                                                >
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate text-xs">
+                                                        {getLabel(run)}
                                                     </span>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => startEdit(run)}
-                                                title="Click to rename"
-                                                className="flex-1 flex items-center gap-1.5 min-w-0 text-left group"
-                                            >
-                                                <span className="font-medium text-slate-800 dark:text-slate-200 truncate text-xs">
-                                                    {getLabel(run)}
-                                                </span>
-                                                <Pencil size={10} className="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-cyan-400 transition-colors" />
-                                            </button>
-                                        )}
+                                                    <Pencil size={10} className="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-1 shrink-0">
                                             <button
                                                 onClick={() => {
