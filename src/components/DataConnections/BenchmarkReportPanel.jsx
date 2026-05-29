@@ -11,7 +11,7 @@
 // limitations under the License.
 
 import React from "react";
-import { FileJson, X, AlertCircle, Pencil, Star, Loader } from "lucide-react";
+import { FileJson, X, AlertCircle, Pencil, Star, Loader, CheckSquare, Square, RefreshCw, Trash2 } from "lucide-react";
 
 const stageSummary = (stage) => {
     if (!stage) return '—';
@@ -272,18 +272,29 @@ export const BenchmarkReportPanel = ({
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleSelectionAction}
-                                    className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 transition-colors"
+                                    className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 transition-colors flex items-center gap-1"
                                 >
-                                    {selectedRunIds.size > 0 ? "Invert Selection" : "Select All"}
+                                    {selectedRunIds.size > 0 ? (
+                                        <>
+                                            <RefreshCw size={10} />
+                                            Invert
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckSquare size={10} />
+                                            Select All
+                                        </>
+                                    )}
                                 </button>
                                 {selectedRunIds.size > 0 && (
                                     <>
                                         <span className="text-[9px] text-slate-300 dark:text-slate-700">|</span>
                                         <button
                                             onClick={handleDeleteSelected}
-                                            className="text-[10px] font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                            className="text-[10px] font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors flex items-center gap-1"
                                         >
-                                            Delete Selected ({selectedRunIds.size})
+                                            <Trash2 size={10} />
+                                            Delete ({selectedRunIds.size})
                                         </button>
                                     </>
                                 )}
