@@ -55,12 +55,12 @@ const PrismHome = ({ onNavigate }) => {
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
-                                        <span className="text-slate-400">TTFT reduction</span>
-                                        <span className="text-cyan-400 font-mono font-bold">-210ms</span>
+                                        <span className="text-slate-400">SLA compliance</span>
+                                        <span className="text-cyan-400 font-mono font-bold">98.5%</span>
                                     </div>
                                     <div className="flex justify-between text-[10px]">
-                                         <span className="text-slate-400">Efficiency</span>
-                                         <span className="text-cyan-400 font-mono font-bold">1.4x gain</span>
+                                         <span className="text-slate-400">Context scale</span>
+                                         <span className="text-cyan-400 font-mono font-bold">163k Tok</span>
                                     </div>
                                 </div>
                                 {/* Monochromatic Preview Chart */}
@@ -225,12 +225,12 @@ const PrismHome = ({ onNavigate }) => {
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
-                                        <span className="text-slate-400">Primary tier</span>
-                                        <span className="text-cyan-400 font-mono font-bold">HBM</span>
+                                        <span className="text-slate-400">Capacity Wall</span>
+                                        <span className="text-cyan-400 font-mono font-bold">OOM Avoided</span>
                                     </div>
                                     <div className="flex justify-between text-[10px]">
-                                         <span className="text-slate-400">Offload tier</span>
-                                         <span className="text-cyan-400 font-mono font-bold">CPU RAM</span>
+                                         <span className="text-slate-400">Max Prompt</span>
+                                         <span className="text-cyan-400 font-mono font-bold">32k Tok</span>
                                     </div>
                                 </div>
                                 <div className="flex justify-center space-x-0.5 h-6 items-center">
