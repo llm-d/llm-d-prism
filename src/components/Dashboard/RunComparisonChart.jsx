@@ -63,15 +63,15 @@ const METRICS = [
     // Observability — only present in v0.2 reports
     { id: 'kv_cache_usage', label: 'KV cache usage', unit: '%', dec: 1, higher: false,
       stats: [
-        { id: 'mean', label: 'mean', fn: d => pct(d.metrics?.observability?.kvCacheUsageMean) },
-        { id: 'p50',  label: 'p50',  fn: d => pct(d.metrics?.observability?.kvCacheUsageP50) },
-        { id: 'p99',  label: 'p99',  fn: d => pct(d.metrics?.observability?.kvCacheUsageP99) },
+        { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.kvCacheUsageMean },
+        { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.kvCacheUsageP50 },
+        { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.kvCacheUsageP99 },
       ] },
     { id: 'prefix_cache_hit', label: 'Prefix cache hit', unit: '%', dec: 1, higher: true,
       stats: [
-        { id: 'mean', label: 'mean', fn: d => pct(d.metrics?.observability?.prefixCacheHitMean) },
-        { id: 'p50',  label: 'p50',  fn: d => pct(d.metrics?.observability?.prefixCacheHitP50) },
-        { id: 'p99',  label: 'p99',  fn: d => pct(d.metrics?.observability?.prefixCacheHitP99) },
+        { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.prefixCacheHitMean },
+        { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.prefixCacheHitP50 },
+        { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.prefixCacheHitP99 },
       ] },
     { id: 'epp_queue', label: 'EPP queue size', unit: '', dec: 1, higher: false,
       stats: [
@@ -94,17 +94,10 @@ const STAT_COLORS = {
     p99:  '#8b5cf6', // violet-500
 };
 
-// vllm cache rates are emitted as fractions for kv_cache_usage but as
-// percentages for prefix_cache_hit_rate. Detect and normalize to 0-100.
-function pct(v) {
-    if (v === null || v === undefined || isNaN(v)) return null;
-    return v <= 1 ? v * 100 : v;
-}
-
 const aggregateValue = (entries, statFn, higher) => {
     const vals = entries
         .map(statFn)
-        .filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
+        .filter(v => v !== null && v !== undefined && !isNaN(v));
     if (vals.length === 0) return null;
     if (vals.length === 1) return vals[0];
     return higher ? Math.max(...vals) : Math.min(...vals);

@@ -37,6 +37,14 @@ const toMs = (val) => {
     return n !== null ? n * 1000 : null;
 };
 
+// vllm cache rates are emitted as fractions for kv_cache_usage but as
+// percentages for prefix_cache_hit_rate. Detect and normalize to 0-100.
+const pct = (val) => {
+    const v = safeNum(val);
+    if (v === null) return null;
+    return v <= 1 ? v * 100 : v;
+};
+
 // Derive a stable run ID from a report document.
 //
 // run.eid and cfg_id are shared across all runs in the same experiment, so
@@ -164,7 +172,7 @@ export function parseReportV02(yamlText, filename) {
         isl: safeNum(load.input_seq_len?.value),
         osl: safeNum(load.output_seq_len?.value),
         rateQps: safeNum(load.rate_qps),
-        concurrency: isFinite(load.concurrency) ? safeNum(load.concurrency) : null,
+        concurrency: Number.isFinite(load.concurrency) ? safeNum(load.concurrency) : null,
     };
 
     // --- Performance ---
@@ -209,15 +217,15 @@ export function parseReportV02(yamlText, filename) {
         const podStartup = obs.pod_startup_times?.aggregate || {};
 
         const obsValues = {
-            kvCacheUsageMean:    safeNum(kvAgg.mean),
-            kvCacheUsageP50:     safeNum(kvAgg.p50),
-            kvCacheUsageP99:     safeNum(kvAgg.p99),
-            prefixCacheHitMean:  safeNum(prefixAgg.mean),
-            prefixCacheHitP50:   safeNum(prefixAgg.p50),
-            prefixCacheHitP99:   safeNum(prefixAgg.p99),
-            eppKvMean:           safeNum(eppKvAgg.mean),
-            eppKvP50:            safeNum(eppKvAgg.p50),
-            eppKvP99:            safeNum(eppKvAgg.p99),
+            kvCacheUsageMean:    pct(kvAgg.mean),
+            kvCacheUsageP50:     pct(kvAgg.p50),
+            kvCacheUsageP99:     pct(kvAgg.p99),
+            prefixCacheHitMean:  pct(prefixAgg.mean),
+            prefixCacheHitP50:   pct(prefixAgg.p50),
+            prefixCacheHitP99:   pct(prefixAgg.p99),
+            eppKvMean:           pct(eppKvAgg.mean),
+            eppKvP50:            pct(eppKvAgg.p50),
+            eppKvP99:            pct(eppKvAgg.p99),
             eppQueueMean:        safeNum(eppQAgg.mean),
             eppQueueP50:         safeNum(eppQAgg.p50),
             eppQueueP99:         safeNum(eppQAgg.p99),
@@ -298,16 +306,16 @@ export function stageToEntry(stage) {
     const modelName  = normalizeModelName(scenario.model);
     const hardware   = normalizeHardware(scenario.hardware);
     const ts         = timestamp || new Date().toISOString();
-    const throughput = performance.outputTokenRate || 0;
+    const throughput = performance.outputTokenRate ?? null;
     const latency    = {
-        mean: performance.e2eMean || 0,
-        p50: performance.e2eP50 || 0,
-        p99: performance.e2eP99 || 0,
+        mean: performance.e2eMean ?? null,
+        p50: performance.e2eP50 ?? null,
+        p99: performance.e2eP99 ?? null,
     };
     const ttft       = {
-        mean: performance.ttftMean || 0,
-        p50: performance.ttftP50 || 0,
-        p99: performance.ttftP99 || 0,
+        mean: performance.ttftMean ?? null,
+        p50: performance.ttftP50 ?? null,
+        p99: performance.ttftP99 ?? null,
     };
 
     return createEntry({
@@ -354,24 +362,24 @@ export function stageToEntry(stage) {
         },
 
         metrics: {
-            throughput,
-            output_tput: throughput,
-            input_tput: performance.inputTokenRate || 0,
-            request_rate: performance.requestRate || 0,
+            throughput: throughput ?? null,
+            output_tput: throughput ?? null,
+            input_tput: performance.inputTokenRate ?? null,
+            request_rate: performance.requestRate ?? null,
             latency,
             ttft,
-            tpot: performance.tpotMean || 0,
-            tpot_ms: performance.tpotMean || 0,
-            tpot_p50: performance.tpotP50 || 0,
-            tpot_p99: performance.tpotP99 || 0,
-            ntpot: performance.tpotMean || 0,
-            ntpot_ms: performance.tpotMean || 0,
-            itl: performance.itlMean || 0,
-            itl_ms: performance.itlMean || 0,
-            itl_p50: performance.itlP50 || 0,
-            itl_p99: performance.itlP99 || 0,
-            e2e_latency: performance.e2eMean || 0,
-            error_count: performance.failures || 0,
+            tpot: performance.tpotMean ?? null,
+            tpot_ms: performance.tpotMean ?? null,
+            tpot_p50: performance.tpotP50 ?? null,
+            tpot_p99: performance.tpotP99 ?? null,
+            ntpot: performance.tpotMean ?? null,
+            ntpot_ms: performance.tpotMean ?? null,
+            itl: performance.itlMean ?? null,
+            itl_ms: performance.itlMean ?? null,
+            itl_p50: performance.itlP50 ?? null,
+            itl_p99: performance.itlP99 ?? null,
+            e2e_latency: performance.e2eMean ?? null,
+            error_count: performance.failures ?? 0,
             // Observability metrics (only present for v0.2 reports that
             // include the observability section).
             observability: stage.observability || null,
