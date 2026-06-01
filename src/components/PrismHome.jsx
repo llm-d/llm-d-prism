@@ -28,109 +28,159 @@ const PrismHome = ({ onNavigate }) => {
 
 
 
-                {/* Section: Well-lit paths (UX Clarity) */}
-                <section className="mb-20 w-full">
+                {/* Tier 1: Workload Hub */}
+                <section className="mb-16 w-full">
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
-                          Select a well-lit path to begin
-                     </h2>
-                     <p className="text-xs text-slate-500 text-center mb-6">Standardized workloads optimized for rapid evaluation and deployment.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 w-full max-w-[96%] mx-auto">
+                        Tier 1: Workload Hub
+                    </h2>
+                    <p className="text-xs text-slate-500 text-center mb-8">Wide, premium paths aligned with how users deploy real-world production workloads.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-[92%] mx-auto">
                         {/* Path 1: Inference scheduling (Primary M1 Path - Popping) */}
                         <div 
                             onClick={() => onNavigate('inference-scheduling')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-transparent"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
+                            <h3 className="text-base font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors leading-tight">
                                 Intelligent inference scheduling
                             </h3>
-                            <div className="flex flex-wrap gap-1 mb-2">
+                            <div className="flex flex-wrap gap-1.5 mb-3">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Prefix-cache</span>
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Load balance</span>
                             </div>
-                            <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
-                                Optimize vLLM/SGLang on Kubernetes. Reduce tail latency with load-aware routing.
+                            <p className="text-slate-400 text-xs leading-relaxed mb-4 flex-1">
+                                Optimize vLLM/SGLang on Kubernetes. Reduce tail latency and balance hot prefix loads with load-aware routing.
                             </p>
                             
                             {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
-                                <div className="space-y-0.5 mb-1.5">
-                                    <div className="flex justify-between text-[10px]">
+                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-3 mb-4">
+                                <div className="space-y-1 mb-2.5">
+                                    <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">SLA compliance</span>
                                         <span className="text-cyan-400 font-mono font-bold">98.5%</span>
                                     </div>
-                                    <div className="flex justify-between text-[10px]">
+                                    <div className="flex justify-between text-xs">
                                          <span className="text-slate-400">Context scale</span>
                                          <span className="text-cyan-400 font-mono font-bold">163k Tok</span>
                                     </div>
                                 </div>
                                 {/* Monochromatic Preview Chart */}
-                                <div className="h-6 flex items-end justify-between space-x-0.5 border-b border-slate-700/30 pb-px">
-                                    <div className="w-full bg-cyan-500 h-1.5 rounded-t-sm opacity-30"></div>
-                                    <div className="w-full bg-cyan-500 h-3 rounded-t-sm opacity-50"></div>
-                                    <div className="w-full bg-cyan-500 h-4.5 rounded-t-sm opacity-80"></div>
-                                    <div className="w-full bg-cyan-500 h-3.5 rounded-t-sm opacity-60"></div>
-                                    <div className="w-full bg-cyan-500 h-6 rounded-t-sm"></div>
+                                <div className="h-8 flex items-end justify-between space-x-1 border-b border-slate-700/30 pb-px">
+                                    <div className="w-full bg-cyan-500 h-2.5 rounded-t-sm opacity-30"></div>
+                                    <div className="w-full bg-cyan-500 h-4 rounded-t-sm opacity-50"></div>
+                                    <div className="w-full bg-cyan-500 h-6 rounded-t-sm opacity-80"></div>
+                                    <div className="w-full bg-cyan-500 h-5 rounded-t-sm opacity-60"></div>
+                                    <div className="w-full bg-cyan-500 h-7 rounded-t-sm"></div>
                                 </div>
                             </div>
-
-                            <button className="w-full py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
-                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+ 
+                            <button className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold text-xs flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
+                                Launch <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </button>
                         </div>
-
+ 
                         {/* Path 5: Agentic Workloads (M2 Path) */}
                         <div 
                             onClick={() => onNavigate('agentic-workloads')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-transparent"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
+                            <h3 className="text-base font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors leading-tight">
                                 Agentic Workloads
                             </h3>
-                            <div className="flex flex-wrap gap-1 mb-2">
+                            <div className="flex flex-wrap gap-1.5 mb-3">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Burst capacity</span>
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Queue metrics</span>
                             </div>
-                            <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
-                                Optimize system resilience against step-function RL and micro-burst demands.
+                            <p className="text-slate-400 text-xs leading-relaxed mb-4 flex-1">
+                                Optimize system resilience and evaluate scheduler queues against step-function RL and micro-burst demands.
                             </p>
-
+ 
                             {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
-                                <div className="space-y-0.5 mb-1.5">
-                                    <div className="flex justify-between text-[10px]">
+                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-3 mb-4">
+                                <div className="space-y-1 mb-2.5">
+                                    <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Target backlog</span>
                                         <span className="text-cyan-400 font-mono font-bold">4k+ Prompts</span>
                                     </div>
-                                    <div className="flex justify-between text-[10px]">
+                                    <div className="flex justify-between text-xs">
                                         <span className="text-slate-400">Profile</span>
                                         <span className="text-cyan-400 font-mono font-bold">Step-Fn</span>
                                     </div>
                                 </div>
-                                <div className="h-6 flex items-end justify-between space-x-0.5 px-0.5 relative border-b border-slate-700/30 pb-px">
-                                     <div className="w-1/6 bg-cyan-500 h-1 rounded-t-sm opacity-20"></div>
-                                     <div className="w-1/6 bg-cyan-500 h-1 rounded-t-sm opacity-20"></div>
-                                     <div className="w-2/6 bg-cyan-500 h-4.5 rounded-t-sm relative opacity-90">
+                                <div className="h-8 flex items-end justify-between space-x-1 px-0.5 relative border-b border-slate-700/30 pb-px">
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm relative opacity-90">
                                          <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Burst</span>
                                      </div>
-                                     <div className="w-1/6 bg-cyan-500 h-1 rounded-t-sm opacity-20"></div>
-                                     <div className="w-1/6 bg-cyan-500 h-1 rounded-t-sm opacity-20"></div>
-                                     <div className="w-2/6 bg-cyan-500 h-4.5 rounded-t-sm opacity-90 relative">
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm opacity-90 relative">
                                          <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Burst</span>
                                      </div>
                                 </div>
                             </div>
-
-                            <button className="w-full py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-[10px] rounded-lg flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
+ 
+                            <button className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-xs rounded-lg flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
+                                Launch <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                </section>
+ 
+                {/* Tier 2: Technology Enablers (Lego Bricks) */}
+                <section className="mb-20 w-full">
+                    <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
+                        Tier 2: Technology Enablers
+                    </h2>
+                    <p className="text-xs text-slate-500 text-center mb-8">Underlying building blocks and features powering the workload suites.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-[92%] mx-auto">
+                        {/* Prefix Cache Offloading */}
+                        <div 
+                            onClick={() => onNavigate('prefix-cache-offloading')}
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden"
+                        >
+                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
+                                Prefix Cache Offloading
+                            </h3>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">KV-cache</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Tiered storage</span>
+                            </div>
+                            <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
+                                Offload KV cache to CPU memory to extend accelerator capacity limit.
+                            </p>
+ 
+                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
+                                <div className="space-y-0.5 mb-1.5">
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="text-slate-400">Capacity Wall</span>
+                                        <span className="text-cyan-400 font-mono font-bold">OOM Avoided</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px]">
+                                         <span className="text-slate-400">Max Prompt</span>
+                                         <span className="text-cyan-400 font-mono font-bold">32k Tok</span>
+                                    </div>
+                                </div>
+                                <div className="flex justify-center space-x-0.5 h-6 items-center">
+                                     <div className="w-8 h-5 bg-cyan-500/20 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">HBM</div>
+                                     <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
+                                     <div className="w-8 h-5 bg-cyan-500/30 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">CPU</div>
+                                     <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
+                                     <div className="w-8 h-5 bg-cyan-500/10 rounded border border-cyan-500/20 flex items-center justify-center text-[8px] font-bold text-cyan-400">Disk</div>
+                                 </div>
+                            </div>
+ 
+                            <button className="w-full py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
                                 Launch <ArrowRight className="ml-1 h-3 w-3" />
                             </button>
                         </div>
-
-                        {/* Path 2: P/D Disaggregation */}
+ 
+                        {/* P/D Disaggregation */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden border border-transparent"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70"
                         >
                             <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Prefill / Decode (P/D) Disagg Serving
+                                Prefill / Decode (P/D) Disagg
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Interactivity</span>
@@ -139,7 +189,7 @@ const PrismHome = ({ onNavigate }) => {
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
                                 Improve interactivity and eliminate prefill interference for large models.
                             </p>
-
+ 
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
@@ -157,15 +207,15 @@ const PrismHome = ({ onNavigate }) => {
                                      <div className="w-8 h-5 bg-cyan-500/30 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">D</div>
                                 </div>
                             </div>
-
+ 
                             <button className="w-full py-1.5 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-[10px] flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
                                 Coming soon
                             </button>
                         </div>
-
-                        {/* Path 3: Wide-EP */}
+ 
+                        {/* Wide Expert Parallelism */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70"
                         >
                             <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
                                 Wide Expert Parallelism
@@ -177,7 +227,7 @@ const PrismHome = ({ onNavigate }) => {
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
                                 Deploy large MoE models across multi-node GPU clusters with Wide EP.
                             </p>
-
+ 
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
@@ -200,50 +250,9 @@ const PrismHome = ({ onNavigate }) => {
                                      <div className="bg-pink-500/10 rounded-sm"></div>
                                 </div>
                             </div>
-
+ 
                             <button className="w-full py-1.5 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-[10px] flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
                                 Coming soon
-                            </button>
-                        </div>
-
-                        {/* Path 4: Prefix Cache Offloading */}
-                        <div 
-                            onClick={() => onNavigate('prefix-cache-offloading')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden"
-                        >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Prefix Cache Offloading
-                            </h3>
-                            <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">KV-cache</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Tiered storage</span>
-                            </div>
-                            <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
-                                Offload KV cache to CPU memory to extend accelerator capacity.
-                            </p>
-
-                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
-                                <div className="space-y-0.5 mb-1.5">
-                                    <div className="flex justify-between text-[10px]">
-                                        <span className="text-slate-400">Capacity Wall</span>
-                                        <span className="text-cyan-400 font-mono font-bold">OOM Avoided</span>
-                                    </div>
-                                    <div className="flex justify-between text-[10px]">
-                                         <span className="text-slate-400">Max Prompt</span>
-                                         <span className="text-cyan-400 font-mono font-bold">32k Tok</span>
-                                    </div>
-                                </div>
-                                <div className="flex justify-center space-x-0.5 h-6 items-center">
-                                     <div className="w-8 h-5 bg-cyan-500/20 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">HBM</div>
-                                     <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                     <div className="w-8 h-5 bg-cyan-500/30 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">CPU</div>
-                                     <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                     <div className="w-8 h-5 bg-cyan-500/10 rounded border border-cyan-500/20 flex items-center justify-center text-[8px] font-bold text-cyan-400">Disk</div>
-                                 </div>
-                            </div>
-
-                            <button className="w-full py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
-                                Launch <ArrowRight className="ml-1 h-3 w-3" />
                             </button>
                         </div>
                     </div>
