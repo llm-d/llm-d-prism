@@ -28,10 +28,10 @@ const PrismHome = ({ onNavigate }) => {
 
 
 
-                {/* Tier 1: Workload Hub */}
+                {/* Workload Hub */}
                 <section className="mb-16 w-full">
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
-                        Tier 1: Workload Hub
+                        Workload Hub
                     </h2>
                     <p className="text-xs text-slate-500 text-center mb-8">Wide, premium paths aligned with how users deploy real-world production workloads.</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-[92%] mx-auto">
@@ -127,10 +127,10 @@ const PrismHome = ({ onNavigate }) => {
                     </div>
                 </section>
  
-                {/* Tier 2: Technology Enablers (Lego Bricks) */}
+                {/* Well-lit paths */}
                 <section className="mb-20 w-full">
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
-                        Tier 2: Technology Enablers
+                        Well-lit paths
                     </h2>
                     <p className="text-xs text-slate-500 text-center mb-8">Underlying building blocks and features powering the workload suites.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-[92%] mx-auto">
