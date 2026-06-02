@@ -193,6 +193,7 @@ const RichPrefixCacheTooltip = ({ active, payload, xMetric, yMetric, viewMode, w
 export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggleMobileNav }) {
     const [shareToast, setShareToast] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [openFAQIndex, setOpenFAQIndex] = useState(null);
     
     // Primary Controls State
     const [workloadSize, setWorkloadSize] = useState('1k'); // '1k' | '5k' | '10k' | '50k' | '100k'
@@ -1208,6 +1209,115 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </div>
+
+                {/* FAQ Section */}
+                <div className="mt-10 border-t border-slate-800/60 pt-10">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-base font-bold text-white">Frequently Asked Questions</h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-6">Extrapolating baseline telemetry and optimization paths to your custom constraints.</p>
+                    
+                    <div className="space-y-3">
+                        {[
+                            {
+                                category: "Model Architectures & Sizes",
+                                q: "The benchmarks show Qwen 3 32B. How do the benefits of cache-aware routing scale to smaller models like Gemma 4 (9B/26B) or Qwen 3.5 (27B)?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>TTFT Overhead:</strong> Smaller models have significantly lower baseline prefill times. Because the absolute time saved by hitting a cache is smaller, the relative benefit of routing to a warm cache is reduced for low-concurrency workloads.</p>
+                                        <p><strong>Throughput Gains:</strong> Under high QPS, cache-aware routing remains highly beneficial even for smaller models. By preventing redundant prefill computations, it frees up GPU compute cycles, increasing overall system throughput and preventing queue buildup.</p>
+                                        <p><strong>Recommendation:</strong> If your average Input Sequence Length (ISL) is &lt; 2k tokens, standard round-robin routing may suffice for small models. If ISL &gt; 4k or you experience bursty traffic, cache-aware routing is still recommended.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Model Architectures & Sizes",
+                                q: "How does Intelligent Routing handle massive models or Mixture of Experts (MoE) like Qwen 3 Coder (480B-A35B-Instruct)?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Memory Footprint:</strong> Large models and MoEs require high Tensor Parallelism (TP) and Pipeline Parallelism (PP), often spanning multiple nodes.</p>
+                                        <p><strong>Routing Complexity:</strong> For a 480B MoE, the routing decision must align with the model replica boundaries (e.g., routing to the master node of a specific TP/PP group).</p>
+                                        <p><strong>Latency Sensitivity:</strong> Prefill cost (TTFT) for a 480B model is extremely high. A cache miss on a large prefix is highly penalized. Therefore, precise cache-aware routing (e.g., tracking exact prefix matches) is critical to avoid multi-second TTFT spikes.</p>
+                                        <p><strong>Recommendation:</strong> For models &gt; 100B parameters, default load balancing is highly inefficient. We recommend using Precise Cache Aware Routing or Predicted Latency Balancing to ensure requests with shared prompts are strictly routed to the same replica group.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Model Architectures & Sizes",
+                                q: "How do long-context models like Kimi K2.5 or GLM 5.1 impact routing decisions?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Cache Volatility:</strong> Long-context models can ingest 100k+ tokens. The KV cache for a single request can easily consume gigabytes of VRAM, leading to rapid cache eviction on the serving nodes.</p>
+                                        <p><strong>Routing Strategy:</strong> Heuristic routing that only checks prefix matches might fail if the cache has already been evicted due to memory pressure. Here, the router must combine prefix awareness with real-time KV cache capacity tracking from the pods to avoid routing to a node that has the prefix but must evict it to process the new request.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Hardware Infrastructure",
+                                q: "We don't use H100s. How does cache-aware routing perform on lower-tier hardware like RTX-PRO-6000 or L4 GPUs?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Compute Constraints:</strong> Slower GPUs take longer to process prefills. This means the penalty for a cache miss (recomputation) is much higher in absolute latency. Cache-aware routing actually provides a larger relative latency improvement on lower-tier hardware.</p>
+                                        <p><strong>VRAM Constraints:</strong> RTX-PRO-6000 (48GB) and L4 (24GB) have much smaller VRAM capacity than H100 (80GB). The KV cache pool is smaller, leading to frequent evictions.</p>
+                                        <p><strong>Recommendation:</strong> On constrained hardware, you must pair cache-aware routing with aggressive KV Cache Offloading (to CPU or Local SSD) to keep prefixes warm longer. The router should be configured to prioritize nodes where the prefix is at least in CPU RAM, as fetching from CPU is still faster than full recomputation on a slower GPU.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Hardware Infrastructure",
+                                q: "What is the expected behavior on next-gen hardware like NVIDIA Blackwell (B200) or TPU v7?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>High Bandwidth Interconnects:</strong> Next-gen architectures feature faster NVLink or TPU ICI, significantly accelerating memory transfers. Prefill computation times are vastly reduced, but cache-aware routing is still key under massive concurrency to preserve high-bandwidth memory (HBM) capacity.</p>
+                                        <p><strong>Dynamic Capacity Allocation:</strong> Newer platforms support hardware-level virtualization and dynamic partitioning. Cache-aware routing must align with dynamic slices to maintain high cache hits without fragmenting HBM pools across partitioned instances.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Workloads & Traffic Patterns",
+                                q: "How does traffic burstiness affect the performance of prefix caching and intelligent scheduling?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Queue Demands:</strong> High burstiness causes spikes in concurrent requests, leading to queuing delays at target replicas. Standard routers struggle because queue depths spike uniformly.</p>
+                                        <p><strong>Optimized Mitigation:</strong> Pair queue-depth routing with prefix caching. By ensuring that bursty requests sharing a system prompt are routed to prefix-warm replicas, you reduce the compute footprint of the burst by up to 90%, quickly draining queue backlogs.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Workloads & Traffic Patterns",
+                                q: "When is prefix caching NOT recommended for inference workloads?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Zero Prefix Overlap:</strong> If requests are fully unique and do not share common system prompts, few-shot examples, or document contexts, the cache hit rate will approach 0%.</p>
+                                        <p><strong>System Overhead:</strong> Maintaining and checking prefix trees at the router introduces a microsecond routing latency overhead. While negligible for long prompts, it offers no benefit if prefix reuse is absent.</p>
+                                        <p><strong>Recommendation:</strong> Default to simple load-balanced scheduling if average prefix length is &lt; 100 tokens and prompt reuse is &lt; 5%.</p>
+                                    </div>
+                                )
+                            }
+                        ].map((faq, idx) => {
+                            const isOpen = openFAQIndex === idx;
+                            return (
+                                <div key={idx} className="border border-slate-800/80 rounded-xl bg-slate-900/40 overflow-hidden hover:border-slate-700/50 transition-colors">
+                                    <button
+                                        onClick={() => setOpenFAQIndex(isOpen ? null : idx)}
+                                        className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800/20 transition-colors cursor-pointer"
+                                    >
+                                        <div>
+                                            <span className="text-[8px] font-extrabold uppercase tracking-widest text-cyan-400/80 block mb-1">{faq.category}</span>
+                                            <span className="text-xs font-bold text-slate-200">{faq.q}</span>
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-4 ${isOpen ? 'rotate-180 text-cyan-400' : ''}`} />
+                                    </button>
+                                    {isOpen && (
+                                        <div className="px-4 pb-4 pt-1 border-t border-slate-800/60 bg-slate-950/10">
+                                            {faq.a}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </main>
