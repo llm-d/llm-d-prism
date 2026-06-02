@@ -18,14 +18,14 @@ import { GIQPanel } from "./DataConnections/GIQPanel";
 import { LPGPanel } from "./DataConnections/LPGPanel";
 import { CustomGCSPanel } from "./DataConnections/CustomGCSPanel";
 import { BenchmarkReportPanel } from "./DataConnections/BenchmarkReportPanel";
-import { getBenchmarkKey } from "../utils/dashboardHelpers";
+import { getBenchmarkKey, getIntegrationSourceType, getSourceTypeStyle } from "../utils/dashboardHelpers";
 
 const DataConnectionsPanel = (props) => {
   const [localSampleError, setLocalSampleError] = React.useState(false);
   const [localSampleColor, setLocalSampleColor] = React.useState(null);
-    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast, brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run, brv02CustomLabels, setBrv02CustomLabels } = props;
-  const activationOrderRef = React.useRef(null);
-  const prevActiveIdsRef = React.useRef(new Set());
+    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast, brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run, brv02CustomLabels, setBrv02CustomLabels, brv02Loading } = props;
+  const [activeOrder, setActiveOrder] = React.useState(() => INTEGRATIONS ? INTEGRATIONS.map(i => i.id) : []);
+  const [prevActiveIds, setPrevActiveIds] = React.useState(new Set());
   
     const handleClearCache = async () => {
         try {
@@ -42,10 +42,6 @@ const DataConnectionsPanel = (props) => {
             console.error(e);
         }
     };
-
-  if (!activationOrderRef.current && INTEGRATIONS) {
-      activationOrderRef.current = INTEGRATIONS.map(i => i.id);
-  }
 
   // Helper to count logical benchmarks (unique curves) instead of raw data points
   const countLogicalBenchmarks = React.useCallback((items) => {
@@ -77,80 +73,93 @@ const DataConnectionsPanel = (props) => {
       return uniqueKeys.size;
   }, []);
 
-  const currentActiveIds = new Set();
-  const mappedIntegrations = INTEGRATIONS.map(integ => {
-      let isConnected = false;
-      let matchCount = 0;
-      let connectedBucket = null;
+  const mappedIntegrations = React.useMemo(() => {
+      return INTEGRATIONS.map(integ => {
+          let isConnected = false;
+          let matchCount = 0;
+          let connectedBucket = null;
 
-      const uniqueSources = Array.from(new Set(data.map(d => d.source || 'undefined')));
-      console.log("[DataConnections] Unique Sources in 'data':", uniqueSources);
+          if (integ.id === 'google_giq') {
+              isConnected = apiConfigs.length > 0;
+               const projectId = apiConfigs[0]?.projectId || (typeof apiConfigs[0] === 'string' ? apiConfigs[0] : null);
+               const pInfo = projectId ? gcsProfiles.find(p => p.bucketName === projectId) : null;
 
-      if (integ.id === 'google_giq') {
-          isConnected = apiConfigs.length > 0;
-           const projectId = apiConfigs[0]?.projectId || (typeof apiConfigs[0] === 'string' ? apiConfigs[0] : null);
-           const pInfo = projectId ? gcsProfiles.find(p => p.bucketName === projectId) : null;
-
-           if (pInfo && pInfo.profileCount !== undefined) {
-               matchCount = pInfo.profileCount;
-           } else {
-               const filtered = data.filter(d => d.source && d.source.startsWith('giq:'));
-               const uniqueProfiles = new Set(filtered.map(d => d.profile_id).filter(Boolean));
-               matchCount = uniqueProfiles.size;
-           }
-       } else if (integ.id === 'inferencemax') {
-          const config = bucketConfigs.find(b => {
-              if (typeof b === 'object' && b.alias === 'InferenceMax') return true;
-              const bName = typeof b === 'string' ? b : b.bucket;
-              return bName === 'seanhorgan-prism-inferencemax';
-          });
-          connectedBucket = config ? (typeof config === 'string' ? config : config.bucket) : null;
-          isConnected = !!connectedBucket;
-          if (connectedBucket) {
-              const filtered = data.filter(d => d.source === `gcs:${connectedBucket}`);
+               if (pInfo && pInfo.profileCount !== undefined) {
+                   matchCount = pInfo.profileCount;
+               } else {
+                   const filtered = data.filter(d => d.source && d.source.startsWith('giq:'));
+                   const uniqueProfiles = new Set(filtered.map(d => d.profile_id).filter(Boolean));
+                   matchCount = uniqueProfiles.size;
+               }
+           } else if (integ.id === 'inferencemax') {
+              const config = bucketConfigs.find(b => {
+                  if (typeof b === 'object' && b.alias === 'InferenceMax') return true;
+                  const bName = typeof b === 'string' ? b : b.bucket;
+                  return bName === 'seanhorgan-prism-inferencemax';
+              });
+              connectedBucket = config ? (typeof config === 'string' ? config : config.bucket) : null;
+              isConnected = !!connectedBucket;
+              if (connectedBucket) {
+                  const filtered = data.filter(d => d.source === `gcs:${connectedBucket}`);
+                  matchCount = countLogicalBenchmarks(filtered);
+              }
+          } else if (integ.id === 'lpg_lifecycle') {
+              const filtered = data.filter(d => d.source && (d.source === 'infperf' || d.source === 'inference-perf' || d.source.startsWith('lpg:')));
               matchCount = countLogicalBenchmarks(filtered);
+              isConnected = matchCount > 0;
+          } else if (integ.id === 'local_sample') {
+              const filtered = data.filter(d => d.source === 'local');
+              matchCount = countLogicalBenchmarks(filtered);
+              isConnected = showSampleData && matchCount > 0;
+          } else if (integ.id === 'llmd_results') {
+              const filtered = data.filter(d => d.source === 'llm-d-results:google_drive' || d.source === 'llmd_drive');
+              matchCount = countLogicalBenchmarks(filtered);
+              isConnected = enableLLMDResults || matchCount > 0;
+              integ.isArchive = matchCount > 0 && !enableLLMDResults;
+          } else if (integ.id === 'quality_scores') {
+              isConnected = selectedSources.has('quality_scores');
+              matchCount = qualityMetrics && isConnected ? qualityMetrics.modelCount || Object.keys(qualityMetrics.data).length : 0;
+          } else if (integ.id === 'benchmark_report_v02') {
+              matchCount = brv02Runs.length;
+              isConnected = matchCount > 0;
           }
-      } else if (integ.id === 'lpg_lifecycle') {
-          const filtered = data.filter(d => d.source && (d.source === 'infperf' || d.source === 'inference-perf' || d.source.startsWith('lpg:')));
-          matchCount = countLogicalBenchmarks(filtered);
-          isConnected = matchCount > 0;
-      } else if (integ.id === 'local_sample') {
-          const filtered = data.filter(d => d.source === 'local');
-          matchCount = countLogicalBenchmarks(filtered);
-          isConnected = showSampleData && matchCount > 0;
-      } else if (integ.id === 'llmd_results') {
-          const filtered = data.filter(d => d.source === 'llm-d-results:google_drive' || d.source === 'llmd_drive');
-          matchCount = countLogicalBenchmarks(filtered);
-          isConnected = enableLLMDResults || matchCount > 0;
-          integ.isArchive = matchCount > 0 && !enableLLMDResults;
-      } else if (integ.id === 'quality_scores') {
-          isConnected = selectedSources.has('quality_scores');
-          matchCount = qualityMetrics && isConnected ? qualityMetrics.modelCount || Object.keys(qualityMetrics.data).length : 0;
-      } else if (integ.id === 'benchmark_report_v02') {
-          matchCount = brv02Runs.length;
-          isConnected = matchCount > 0;
+
+          return { ...integ, isConnected, matchCount, connectedBucket };
+      });
+  }, [INTEGRATIONS, data, apiConfigs, gcsProfiles, bucketConfigs, countLogicalBenchmarks, showSampleData, enableLLMDResults, selectedSources, qualityMetrics, brv02Runs]);
+
+  React.useEffect(() => {
+      const currentActive = new Set(mappedIntegrations.filter(i => i.isConnected).map(i => i.id));
+      let changed = false;
+      const nextOrder = [...activeOrder];
+      currentActive.forEach(id => {
+          if (!prevActiveIds.has(id)) {
+              const idx = nextOrder.indexOf(id);
+              if (idx !== -1) {
+                  nextOrder.splice(idx, 1);
+                  nextOrder.push(id);
+                  changed = true;
+              }
+          }
+      });
+      if (changed) {
+          setActiveOrder(nextOrder);
       }
-
-      if (isConnected) currentActiveIds.add(integ.id);
-      return { ...integ, isConnected, matchCount, connectedBucket };
-  });
-
-  currentActiveIds.forEach(id => {
-      if (!prevActiveIdsRef.current.has(id)) {
-          activationOrderRef.current = activationOrderRef.current.filter(x => x !== id);
-          activationOrderRef.current.push(id);
+      
+      const hasDiff = currentActive.size !== prevActiveIds.size || [...currentActive].some(x => !prevActiveIds.has(x));
+      if (hasDiff) {
+          setPrevActiveIds(currentActive);
       }
-  });
-  prevActiveIdsRef.current = currentActiveIds;
+  }, [mappedIntegrations, prevActiveIds, activeOrder]);
 
-  const sortedIntegrations = mappedIntegrations.sort((a, b) => {
+  const sortedIntegrations = [...mappedIntegrations].sort((a, b) => {
       // 1. Active (Connected) first
       if (a.isConnected && !b.isConnected) return -1;
       if (!a.isConnected && b.isConnected) return 1;
       
       // 2. Both active: sort by activation order
       if (a.isConnected && b.isConnected) {
-          return activationOrderRef.current.indexOf(a.id) - activationOrderRef.current.indexOf(b.id);
+          return activeOrder.indexOf(a.id) - activeOrder.indexOf(b.id);
       }
       
       // 3. Both inactive: sort by default order
@@ -192,8 +201,17 @@ const DataConnectionsPanel = (props) => {
                                                     </div>
                                                     <div>
                                                         <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{integ.name}</h4>
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1">
                                                              <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">{integ.type}</span>
+                                                             {(() => {
+                                                                 const type = getIntegrationSourceType(integ.id);
+                                                                 const style = getSourceTypeStyle(type);
+                                                                 return (
+                                                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                                         {type}
+                                                                     </span>
+                                                                 );
+                                                             })()}
                                                              {isConnected && (
                                                                  matchCount > 0 
                                                                  ? <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
@@ -272,12 +290,18 @@ const DataConnectionsPanel = (props) => {
                                                                     }
                                                                 }
                                                             }}
-                                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${integ.id === 'benchmark_report_v02' ? (isExpanded ? 'bg-violet-500' : 'bg-slate-200 dark:bg-slate-700') : isConnected ? 'bg-blue-600' : (localSampleColor === integ.id ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700')}`}
+                                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${
+                                                                integ.id === 'benchmark_report_v02'
+                                                                    ? ((isExpanded || isConnected) ? 'bg-violet-500' : 'bg-slate-200 dark:bg-slate-700')
+                                                                    : integ.id === 'lpg_lifecycle'
+                                                                        ? ((isExpanded || isConnected) ? 'bg-green-600' : 'bg-slate-200 dark:bg-slate-700')
+                                                                        : isConnected ? 'bg-blue-600' : (localSampleColor === integ.id ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700')
+                                                            }`}
                                                         >
                                                             <span className="sr-only">Toggle Connection</span>
                                                             <span
                                                                 aria-hidden="true"
-                                                                className={`${(integ.id === 'benchmark_report_v02' ? isExpanded : isConnected) ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
+                                                                className={`${((integ.id === 'benchmark_report_v02' || integ.id === 'lpg_lifecycle') ? (isExpanded || isConnected) : isConnected) ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
                                                             />
                                                         </button>
                                                     ) : (
@@ -364,30 +388,30 @@ const DataConnectionsPanel = (props) => {
                                                             );
                                                         }
 
-                                                        return (
-                                                            <div className="flex items-center justify-between text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/10 p-2 rounded">
-                                                                <div className="flex items-center gap-2">
-                                                                    <CheckCircle size={12} />
-                                                                    <span>Active ({matchCount} {integ.id === 'quality_scores' ? (matchCount === 1 ? 'model' : 'models') :
-                                                                        integ.id === 'google_giq' ? (matchCount === 1 ? 'profile' : 'profiles') :
-                                                                            (matchCount === 1 ? 'benchmark' : 'benchmarks')})</span>
-                                                                </div>
-                                                                {integ.id === 'lpg_lifecycle' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setData(prev => prev.filter(d => !d.source?.startsWith('lpg:') && d.source !== 'infperf' && d.source !== 'inference-perf'));
-                                                          setSelectedSources(prev => new Set([...prev].filter(s => !s.startsWith('lpg:') && s !== 'infperf' && s !== 'inference-perf')));
-                                                          setAvailableSources(prev => new Set([...prev].filter(s => !s.startsWith('lpg:') && s !== 'infperf' && s !== 'inference-perf')));
-                                                                            if (setGcsSuccess) setGcsSuccess(null);
-                                                                        }}
-                                                                        className="text-red-600 dark:text-red-400 hover:underline px-1 py-0.5"
-                                                                    >
-                                                                        Clear
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        );
+                                                         return (
+                                                             <div className="flex items-center justify-between text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/10 p-2 rounded">
+                                                                 <div className="flex items-center gap-2">
+                                                                     <CheckCircle size={12} />
+                                                                     <span>Active ({matchCount} {integ.id === 'quality_scores' ? (matchCount === 1 ? 'model' : 'models') :
+                                                                         integ.id === 'google_giq' ? (matchCount === 1 ? 'profile' : 'profiles') :
+                                                                             (matchCount === 1 ? 'benchmark' : 'benchmarks')})</span>
+                                                                 </div>
+                                                                 {integ.id === 'lpg_lifecycle' && (
+                                                                     <button
+                                                                         onClick={(e) => {
+                                                                             e.stopPropagation();
+                                                                             setData(prev => prev.filter(d => !d.source?.startsWith('lpg:') && d.source !== 'infperf' && d.source !== 'inference-perf'));
+                                                                             setSelectedSources(prev => new Set([...prev].filter(s => !s.startsWith('lpg:') && s !== 'infperf' && s !== 'inference-perf')));
+                                                                             setAvailableSources(prev => new Set([...prev].filter(s => !s.startsWith('lpg:') && s !== 'infperf' && s !== 'inference-perf')));
+                                                                             if (setGcsSuccess) setGcsSuccess(null);
+                                                                         }}
+                                                                         className="text-red-600 dark:text-red-400 hover:underline px-1 py-0.5"
+                                                                     >
+                                                                         Clear
+                                                                     </button>
+                                                                 )}
+                                                             </div>
+                                                         );
                                                     })()}
                                                 </div>
                                             )}
@@ -421,22 +445,13 @@ const DataConnectionsPanel = (props) => {
                                             />
                                         )}
 
-                                        {isExpanded && integ.id === 'benchmark_report_v02' && (
+                                         {((isExpanded || isConnected) && integ.id === 'benchmark_report_v02') && (
                                             <BenchmarkReportPanel
-                                                runs={brv02Runs}
                                                 error={brv02Error}
                                                 setError={setBrv02Error}
                                                 onUpload={handleBrv02Upload}
-                                                onRemoveRun={removeBrv02Run}
-                                                customLabels={brv02CustomLabels}
-                                                setCustomLabels={setBrv02CustomLabels}
-                                                getRunBenchmarkKey={(runId) => {
-                                                    const entry = (data || []).find(d => d.source === `brv02:${runId}`);
-                                                    return entry ? getBenchmarkKey(entry) : null;
-                                                }}
-                                                baselineBenchmarkKey={state?.baselineBenchmarkKey}
-                                                setBaselineBenchmarkKey={state?.setBaselineBenchmarkKey}
-                                            />
+                                                loading={brv02Loading}
+                                             />
                                         )}
                                     </div>
                                 </div>

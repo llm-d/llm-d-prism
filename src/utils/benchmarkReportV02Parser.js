@@ -54,12 +54,27 @@ const pct = (val) => {
 // Stage grouping (multiple files → one run) requires the directory name as
 // context, which will be available once the directory-picker upload path is
 // implemented.
-const deriveRunId = (doc) => doc.run?.uid || crypto.randomUUID();
+const deriveRunId = (doc, filename) => {
+    const uid = doc.run?.uid || crypto.randomUUID();
+    if (!filename || !filename.includes('/')) return uid;
+    
+    const parts = filename.split('/');
+    parts.pop(); // Remove the file name itself
+    const dirPrefix = parts.join('_');
+    
+    return `${dirPrefix}_${uid}`;
+};
 
 // Derive a human-readable label from scenario context so the user can tell
 // runs apart without seeing raw UUIDs or uninformative filenames.
 const deriveRunLabel = (doc, filename) => {
     if (doc.run?.description) return doc.run.description;
+
+    if (filename && filename.includes('/')) {
+        const pathParts = filename.split('/');
+        pathParts.pop(); // Remove the file name itself
+        return pathParts.join('/');
+    }
 
     // Build label from scenario: model · hardware · QPS · stage
     const stack = doc.scenario?.stack || [];
@@ -82,9 +97,9 @@ const deriveRunLabel = (doc, filename) => {
     if (parts.length > 0) return parts.join(' · ');
 
     // Last resort: filename stripped of the common prefix
-    return filename
-        .replace(/^benchmark_report_v0\.2,_/, '')
-        .replace(/\.yaml$/, '');
+    return (filename || "upload")
+        .replace(/^benchmark_report_v0\.2[,_]*/i, "")
+        .replace(/\.ya?ml$/i, "");
 };
 
 // ---------------------------------------------------------------------------
@@ -139,17 +154,43 @@ const deriveRunLabel = (doc, filename) => {
  *   } | null,
  * }
  */
+const extractComponents = (stack) => {
+    const components = [];
+    if (!Array.isArray(stack)) return components;
+    for (const c of stack) {
+        const label = String(c.metadata?.label || '');
+        const tool = String(c.standardized?.tool || '');
+        const kind = String(c.standardized?.kind || '');
+        
+        const isGateway = label.toLowerCase().includes('gateway') || tool.toLowerCase().includes('gateway') || kind.toLowerCase().includes('gateway');
+        const isScheduler = label.toLowerCase().includes('scheduler') || tool.toLowerCase().includes('scheduler') || kind.toLowerCase().includes('scheduler');
+        const isLws = label.toLowerCase().includes('lws') || label.toLowerCase().includes('leaderworkerset') || tool.toLowerCase().includes('lws') || tool.toLowerCase().includes('leaderworkerset');
+        
+        if (isGateway && !components.includes("Inference Gateway")) {
+            components.push("Inference Gateway");
+        }
+        if (isScheduler && !components.includes("Inference Scheduler")) {
+            components.push("Inference Scheduler");
+        }
+        if (isLws && !components.includes("LeaderWorkerSet")) {
+            components.push("LeaderWorkerSet");
+        }
+    }
+    return components;
+};
+
 export function parseReportV02(yamlText, filename) {
     let doc;
     try {
         doc = yaml.load(yamlText);
-    } catch (_) {
+    } catch {
         return null;
     }
     if (!doc || doc.version !== '0.2') return null;
 
     // --- Scenario ---
     const stack = doc.scenario?.stack || [];
+    const components = extractComponents(stack);
     const primaryComponent = (
         stack.find(c => c.standardized?.role === 'aggregate') ||
         stack.find(c => c.standardized?.role === 'decode') ||
@@ -243,7 +284,7 @@ export function parseReportV02(yamlText, filename) {
     }
 
     return {
-        runId: deriveRunId(doc),
+        runId: deriveRunId(doc, filename),
         runLabel: deriveRunLabel(doc, filename),
         filename,
         runUid: doc.run?.uid || null,
@@ -253,6 +294,7 @@ export function parseReportV02(yamlText, filename) {
         scenario,
         performance,
         observability,
+        components,
     };
 }
 
@@ -275,21 +317,37 @@ export function groupStagesIntoRuns(stageRecords) {
         if (!map.has(record.runId)) {
             map.set(record.runId, {
                 runId: record.runId,
-                runLabel: record.runLabel,
+                runLabel: record.runLabel || record.runId || "Unknown Run",
                 stages: [],
             });
         }
         map.get(record.runId).stages.push(record);
     }
+    
     // Sort stages within each run
-    for (const run of map.values()) {
+    const runsList = Array.from(map.values());
+    for (const run of runsList) {
         run.stages.sort((a, b) => {
             if (a.stageIndex === null) return 1;
             if (b.stageIndex === null) return -1;
             return a.stageIndex - b.stageIndex;
         });
     }
-    return Array.from(map.values());
+
+    // Since we're grouping stages by runId (which is the directory name)
+    // we no longer want to automatically append numeric suffixes. 
+    // They are unique inherently by their runId.
+    for (const run of runsList) {
+        let uniqueLabel = run.runLabel || run.runId || "Unknown Run";
+        run.runLabel = uniqueLabel;
+        
+        // Propagate unique runLabel to all stage records of this run
+        for (const stage of run.stages) {
+            stage.runLabel = uniqueLabel;
+        }
+    }
+
+    return runsList;
 }
 
 /**
@@ -301,7 +359,7 @@ export function groupStagesIntoRuns(stageRecords) {
  * user removes a run from the comparison panel.
  */
 export function stageToEntry(stage) {
-    const { scenario, performance, runId, runLabel, timestamp } = stage;
+    const { scenario, performance, runId, timestamp, components } = stage;
 
     const modelName  = normalizeModelName(scenario.model);
     const hardware   = normalizeHardware(scenario.hardware);
@@ -320,6 +378,7 @@ export function stageToEntry(stage) {
 
     return createEntry({
         // Top-level fields read directly by Dashboard / filter logic
+        run_id: stage.runId,
         model: modelName,
         model_name: modelName,
         hardware: hardware,
@@ -331,11 +390,12 @@ export function stageToEntry(stage) {
         throughput,
         latency,
         ttft,
+        components: components || [],
 
         source: `brv02:${runId}`,
         source_info: {
             type: 'benchmark_report_v02',
-            origin: 'local-upload',
+            origin: 'brv02:' + (stage.runLabel || runId || 'local-upload'),
             file_identifier: stage.filename,
             experiment_id: stage.runEid,
         },
@@ -351,6 +411,7 @@ export function stageToEntry(stage) {
             timestamp: ts,
             tp: scenario.tp || 1,
             architecture: scenario.role || 'aggregate',
+            components: components || [],
         },
 
         workload: {
