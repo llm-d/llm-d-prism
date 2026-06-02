@@ -1219,8 +1219,9 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                     </div>
                     <p className="text-xs text-slate-500 mb-6">Extrapolating baseline telemetry and optimization paths to your custom constraints.</p>
                     
-                    <div className="space-y-3">
-                        {[
+                    <div className="space-y-6">
+                        {Object.entries(
+                            [
                             {
                                 category: "Model Architectures & Sizes",
                                 q: "The benchmarks show Qwen 3 32B. How do the benefits of cache-aware routing scale to smaller models like Gemma 4 (9B/26B) or Qwen 3.5 (27B)?",
@@ -1296,28 +1297,42 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     </div>
                                 )
                             }
-                        ].map((faq, idx) => {
-                            const isOpen = openFAQIndex === idx;
-                            return (
-                                <div key={idx} className="border border-slate-800/80 rounded-xl bg-slate-900/40 overflow-hidden hover:border-slate-700/50 transition-colors">
-                                    <button
-                                        onClick={() => setOpenFAQIndex(isOpen ? null : idx)}
-                                        className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800/20 transition-colors cursor-pointer"
-                                    >
-                                        <div>
-                                            <span className="text-[8px] font-extrabold uppercase tracking-widest text-cyan-400/80 block mb-1">{faq.category}</span>
-                                            <span className="text-xs font-bold text-slate-200">{faq.q}</span>
+                        ].reduce((acc, faq) => {
+                            if (!acc[faq.category]) {
+                                acc[faq.category] = [];
+                            }
+                            acc[faq.category].push(faq);
+                            return acc;
+                        }, {})
+                    ).map(([category, faqs], catIdx) => (
+                        <div key={catIdx} className="space-y-3">
+                            <h4 className="text-xs font-extrabold uppercase tracking-widest text-cyan-400/80 border-b border-slate-800/80 pb-2 mb-3 mt-6">
+                                {category}
+                            </h4>
+                            <div className="space-y-3">
+                                {faqs.map((faq, faqIdx) => {
+                                    const uniqueKey = `${catIdx}-${faqIdx}`;
+                                    const isOpen = openFAQIndex === uniqueKey;
+                                    return (
+                                        <div key={faqIdx} className="border border-slate-800/80 rounded-xl bg-slate-900/40 overflow-hidden hover:border-slate-700/50 transition-colors">
+                                            <button
+                                                onClick={() => setOpenFAQIndex(isOpen ? null : uniqueKey)}
+                                                className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800/20 transition-colors cursor-pointer"
+                                            >
+                                                <span className="text-xs font-bold text-slate-200">{faq.q}</span>
+                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-4 ${isOpen ? 'rotate-180 text-cyan-400' : ''}`} />
+                                            </button>
+                                            {isOpen && (
+                                                <div className="px-4 pb-4 pt-1 border-t border-slate-800/60 bg-slate-950/10">
+                                                    {faq.a}
+                                                </div>
+                                            )}
                                         </div>
-                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-4 ${isOpen ? 'rotate-180 text-cyan-400' : ''}`} />
-                                    </button>
-                                    {isOpen && (
-                                        <div className="px-4 pb-4 pt-1 border-t border-slate-800/60 bg-slate-950/10">
-                                            {faq.a}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
                     </div>
                 </div>
             </main>
