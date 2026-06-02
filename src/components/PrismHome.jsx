@@ -44,35 +44,36 @@ const PrismHome = ({ onNavigate }) => {
                                 Agentic Workloads
                             </h3>
                             <div className="flex flex-wrap gap-1.5 mb-3">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Burst capacity</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Queue metrics</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Multi-Turn</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">TPU v7</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Qwen3-480B</span>
                             </div>
                             <p className="text-slate-400 text-xs leading-relaxed mb-4 flex-1">
-                                Optimize system resilience and evaluate scheduler queues against step-function RL and micro-burst demands.
+                                Deploy Qwen3-Coder-480B over 8 TPU v7 replicas. Harness prefix-aware routing, CPU DRAM KV-offloading, and queue depth load balancing to optimize multi-turn conversations.
                             </p>
  
                             {/* Visual Preview / Metrics */}
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-3 mb-4">
                                 <div className="space-y-1 mb-2.5">
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-slate-400">Target backlog</span>
-                                        <span className="text-cyan-400 font-mono font-bold">4k+ Prompts</span>
+                                        <span className="text-slate-400">Platform</span>
+                                        <span className="text-cyan-400 font-mono font-bold">TPU v7 (2x2x1)</span>
                                     </div>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-slate-400">Profile</span>
-                                        <span className="text-cyan-400 font-mono font-bold">Step-Fn</span>
+                                        <span className="text-slate-400">Conversation Type</span>
+                                        <span className="text-cyan-400 font-mono font-bold">Multi-Turn + Tools</span>
                                     </div>
                                 </div>
                                 <div className="h-8 flex items-end justify-between space-x-1 px-0.5 relative border-b border-slate-700/30 pb-px">
                                      <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
                                      <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
                                      <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm relative opacity-90">
-                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Burst</span>
+                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Active</span>
                                      </div>
                                      <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
                                      <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
                                      <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm opacity-90 relative">
-                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Burst</span>
+                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Offload</span>
                                      </div>
                                 </div>
                             </div>
