@@ -18,7 +18,8 @@ import {
 } from 'recharts';
 import { 
     ArrowLeft, Menu, Share2, Zap, Download, Info, 
-    ExternalLink, Cpu, Server, Layers, HardDrive, ChevronDown, ChevronUp, Check, MessageCircle
+    ExternalLink, Cpu, Server, Layers, HardDrive, ChevronDown, ChevronUp, Check, MessageCircle,
+    X, Code, BookOpen
 } from 'lucide-react';
 import { CustomXAxis, CustomYAxis } from './common';
 
@@ -84,6 +85,29 @@ const HEATMAP_DATA = [
 
 const HOURLY_COST_BASE = 3.50; // g4-standard-384 approx
 const HOURLY_COST_LUSTRE = 1.20; // Managed Lustre overhead
+
+const OUTCOMES_MAP = {
+    '1k': {
+        cpu: { throughput: '-5%', latency: '+25%' },
+        ssd: { throughput: '-15%', latency: '+62%' }
+    },
+    '5k': {
+        cpu: { throughput: '+35%', latency: '-18%' },
+        ssd: { throughput: '+10%', latency: '-8%' }
+    },
+    '10k': {
+        cpu: { throughput: '+50%', latency: '-22%' },
+        ssd: { throughput: '+25%', latency: '-12%' }
+    },
+    '50k': {
+        cpu: { throughput: 'OOM', latency: 'OOM' },
+        ssd: { throughput: '+180%', latency: '-38%' }
+    },
+    '100k': {
+        cpu: { throughput: 'OOM', latency: 'OOM' },
+        ssd: { throughput: '+264%', latency: '-45%' }
+    }
+};
 
 const RichPrefixCacheTooltip = ({ active, payload, xMetric, yMetric, viewMode, workloadSize }) => {
     if (!active || !payload || !payload.length) return null;
@@ -190,10 +214,82 @@ const RichPrefixCacheTooltip = ({ active, payload, xMetric, yMetric, viewMode, w
     );
 };
 
+const RECIPE_VLLM = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gemma4-prefix-cache
+spec:
+  replicas: 8
+  template:
+    spec:
+      containers:
+      - name: vllm-server
+        image: vllm/vllm-openai:v0.7.2-fs
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        args:
+        - --model=google/gemma4-31b-instruct-fp8
+        - --tensor-parallel-size=8
+        - --gpu-memory-utilization=0.90
+        - --enable-prefix-caching
+        - --max-model-len=32768
+        - --kv-cache-dtype=fp8
+        - --kv-offload-device=cpu
+        - --kv-offload-ratio=0.8
+        - --storage-backend=lmcache`;
+
+const RECIPE_K8S = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gke-tiered-prefix-cache
+spec:
+  template:
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
+        cloud.google.com/gke-local-ssd: "true"
+      volumes:
+      - name: local-ssd-volume
+        hostPath:
+          path: /mnt/disks/local-ssd
+      - name: lustre-volume
+        persistentVolumeClaim:
+          claimName: lustre-pvc
+      containers:
+      - name: vllm-server
+        volumeMounts:
+        - name: local-ssd-volume
+          mountPath: /var/cache/lmcache
+        - name: lustre-volume
+          mountPath: /mnt/lustre`;
+
+const RECIPE_TRAFFIC = `use_case: Shared Prefix KV Cache Offloading Evaluation
+test_harness: inference-perf
+concurrency: 128
+request_distribution: poisson
+payload_profile:
+  system_prompt_tokens: 28000
+  user_prompt_tokens: 4000
+  output_tokens: 1024
+  kv_quantization: fp8
+  offloading_ratio: 0.8`;
+
 export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggleMobileNav }) {
     const [shareToast, setShareToast] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeRecipeTab, setActiveRecipeTab] = useState(0);
+    const [copiedStates, setCopiedStates] = useState({});
     const [openFAQIndex, setOpenFAQIndex] = useState(null);
+
+    const handleCopy = (text, key) => {
+        navigator.clipboard.writeText(text);
+        setCopiedStates(prev => ({ ...prev, [key]: true }));
+        setTimeout(() => {
+            setCopiedStates(prev => ({ ...prev, [key]: false }));
+        }, 2500);
+    };
     
     // Primary Controls State
     const [workloadSize, setWorkloadSize] = useState('1k'); // '1k' | '5k' | '10k' | '50k' | '100k'
@@ -212,8 +308,6 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
     
     // CUJ 2 AI Integration State
     const [openFaq, setOpenFaq] = useState(0);
-    const [agentCopied, setAgentCopied] = useState(false);
-    const [agentNote, setAgentNote] = useState('');
     
     // Chart Filters Pattern State
     const [showChartFilters, setShowChartFilters] = useState(true);
@@ -225,10 +319,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
     const [xMetric, setXMetric] = useState('output'); // 'output' | 'input' | 'total' | 'qps'
     const [yMetric, setYMetric] = useState('ttft'); // 'ntpot' | 'tpot' | 'ttft' | 'itl' | 'e2e'
     
-    // Elite UX Enhancements State
     const [kvQuantization, setKvQuantization] = useState('FP8'); // 'FP16' | 'FP8' | 'INT4'
-    const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
-    const [showPayloadPreview, setShowPayloadPreview] = useState(false);
 
     const handleExportData = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(chartData, null, 2));
@@ -245,28 +336,6 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
         setShareToast(true);
         setTimeout(() => setShareToast(false), 2000);
     };
-
-    const handleShareAgent = () => {
-        const payload = {
-            scenario: "Tiered Prefix Cache Offloading",
-            hardware: "g4-standard-384 (8x rtx-pro-6000)",
-            model: "gemma4-31B (FP8)",
-            workloadSize: workloadSize,
-            targetMetric: targetMetric,
-            activeOptimizations: Object.keys(activeTiers).filter(k => activeTiers[k]),
-            userCustomNote: agentNote,
-            engineMetadata: {
-                vllmVersion: "v0.7.2-fs",
-                plugins: ["LMCache", "tpu-inference"],
-                lustreDirectIO: "o_direct",
-                ioParallelism: "Tuned 16MB"
-            }
-        };
-        navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-        setAgentCopied(true);
-        setTimeout(() => setAgentCopied(false), 2500);
-    };
-
 
     // Process data based on selected metric and view mode (Performance vs Cost)
     // Process data based on selected metric and view mode (Performance vs Cost)
@@ -442,13 +511,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
                         <span className="hidden sm:inline">Contact us</span>
                     </a>
-                    <button 
-                        onClick={() => setIsAgentPanelOpen(true)} 
-                        className="px-3.5 py-1.5 text-xs font-bold rounded-lg text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 transition-all flex items-center shadow-lg shadow-cyan-900/20 border border-cyan-400/30 cursor-pointer"
-                    >
-                        <Share2 className="w-3.5 h-3.5 mr-1.5 text-cyan-200" />
-                        <span>Share with AI Agent</span>
-                    </button>
+
                     <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative cursor-pointer">
                         <Share2 className="w-3.5 h-3.5 mr-1.5" />
                         <span>Share link</span>
@@ -485,7 +548,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         {/* Col 2: Selectable Optimizations (Active Overlays) */}
                         <div className="space-y-2">
                             <div className="text-[10px] font-extrabold text-cyan-400/90 uppercase tracking-widest mb-1">
-                                Selectable Optimizations
+                                Selectable optimizations
                             </div>
 
                             {/* Baseline */}
@@ -498,10 +561,14 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 }`}
                             >
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Baseline (HBM Only)</div>
+                                    <div className="text-xs font-semibold text-slate-200">Baseline (HBM only)</div>
                                     <p className="text-[10px] text-slate-500">Native HBM VRAM without offloading</p>
                                 </div>
-                                <div className={`w-2 h-2 rounded-full ${activeTiers.baseline ? 'bg-orange-500' : 'bg-slate-700'}`}></div>
+                                {activeTiers.baseline ? (
+                                    <span className="text-[9px] bg-orange-500/20 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                ) : (
+                                    <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                )}
                             </button>
 
                             {/* Opt 1: CPU RAM */}
@@ -514,7 +581,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 }`}
                             >
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Tiered Cache: CPU RAM</div>
+                                    <div className="text-xs font-semibold text-slate-200">Tiered cache: CPU RAM</div>
                                     <p className="text-[10px] text-slate-500">Host memory offloading layer</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -528,7 +595,11 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <div className={`w-2 h-2 rounded-full ${activeTiers.cpu ? 'bg-sky-500' : 'bg-slate-700'}`}></div>
+                                    {activeTiers.cpu ? (
+                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                    ) : (
+                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                    )}
                                 </div>
                             </button>
 
@@ -542,7 +613,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 }`}
                             >
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Tiered Cache: CPU + Lustre</div>
+                                    <div className="text-xs font-semibold text-slate-200">Tiered cache: CPU + Lustre</div>
                                     <p className="text-[10px] text-slate-500">Managed Lustre & SSD remote layer</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -556,7 +627,11 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <div className={`w-2 h-2 rounded-full ${activeTiers.ssd ? 'bg-emerald-500' : 'bg-slate-700'}`}></div>
+                                    {activeTiers.ssd ? (
+                                        <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                    ) : (
+                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                    )}
                                 </div>
                             </button>
                         </div>
@@ -564,13 +639,13 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         {/* Col 3: Upcoming / Contribute */}
                         <div className="space-y-2">
                             <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1">
-                                <span>Upcoming & Roadmap</span>
+                                <span>Upcoming & roadmap</span>
                             </div>
 
                             {/* Opt 3: Local SSD */}
                             <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-400">Tiered Cache: Local SSD</div>
+                                    <div className="text-xs font-semibold text-slate-400">Tiered cache: local SSD</div>
                                     <p className="text-[10px] text-slate-500">Direct persistent NVMe offloading</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -578,14 +653,14 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Specs</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
                                 </div>
                             </div>
 
                             {/* Opt 4: Cloud Storage */}
                             <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-400">Cloud Storage Rapid Cache</div>
+                                    <div className="text-xs font-semibold text-slate-400">Cloud storage rapid cache</div>
                                     <p className="text-[10px] text-slate-500">GCS / Object storage remote layer</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -593,7 +668,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Specs</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
                                 </div>
                             </div>
                         </div>
@@ -606,22 +681,36 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                     <div className="lg:col-span-6 border border-slate-800/80 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
                         <div className="absolute -top-12 -left-12 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl pointer-events-none" />
 
-                        <div className="mb-3">
+                        <div className="mb-3 flex justify-between items-center">
                             <span className="text-[11px] font-extrabold text-sky-400/90 uppercase tracking-widest block">
-                                Benchmark Scenario
+                                Benchmark scenario
                             </span>
+                            <button 
+                                onClick={() => setIsModalOpen(true)}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 font-bold text-[10px] rounded-lg border border-slate-700/80 transition-all flex items-center gap-1.5 shadow cursor-pointer"
+                            >
+                                <Code className="w-3 h-3" /> View configuration
+                            </button>
                         </div>
 
                         <div className="grid grid-cols-12 gap-2">
                             {/* Column 1: Infra Layer (col-span-4) */}
                             <div className="flex flex-col gap-3 col-span-4 border-r border-slate-800/60 pr-2">
                                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">
-                                    Infra Layer
+                                    Infra layer
                                 </div>
                                 <div className="flex flex-col gap-2 text-xs">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Provider / Machine</span>
-                                        <span className="font-mono font-bold text-white truncate block">g4-standard-384</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Provider / machine</span>
+                                        <span className="font-mono font-bold text-white truncate flex items-center gap-1.5">
+                                            <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                            </svg>
+                                            g4-standard-384
+                                        </span>
                                     </div>
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Accelerator</span>
@@ -637,11 +726,11 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             {/* Column 2: Model Serving Layer (col-span-4) */}
                             <div className="flex flex-col gap-3 col-span-4 border-r border-slate-800/60 pr-2">
                                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">
-                                    Model Serving
+                                    Model serving
                                 </div>
                                 <div className="flex flex-col gap-2 text-xs">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Model Name</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Model name</span>
                                         <span className="font-mono font-bold text-white truncate block">gemma4-31B (FP8)</span>
                                     </div>
                                     <div>
@@ -667,25 +756,25 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                                 <div className="flex flex-col gap-2 text-xs">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Test Harness</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Test harness</span>
                                         <span className="font-mono font-bold text-white truncate block">inference-perf</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Use Case</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Use case</span>
                                         <span className="font-mono font-bold text-white truncate block">Shared Prefix</span>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Context Length</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5 truncate">Context length</span>
                                         <select 
                                             value={workloadSize} 
                                             onChange={(e) => setWorkloadSize(e.target.value)}
                                             className="bg-slate-950 text-white font-mono font-bold text-[11px] border border-slate-700 rounded-lg p-1.5 w-full outline-none focus:border-sky-500 cursor-pointer truncate"
                                         >
-                                            <option value="1k">1k Tokens (Baseline Sweet Spot)</option>
-                                            <option value="5k">5k Tokens (CPU RAM Offload)</option>
-                                            <option value="10k">10k Tokens (CPU RAM Offload)</option>
-                                            <option value="50k">50k Tokens (Lustre / SSD)</option>
-                                            <option value="100k">100k Tokens (Lustre / SSD)</option>
+                                            <option value="1k">1k tokens (baseline sweet spot)</option>
+                                            <option value="5k">5k tokens (CPU RAM offload)</option>
+                                            <option value="10k">10k tokens (CPU RAM offload)</option>
+                                            <option value="50k">50k tokens (Lustre / SSD)</option>
+                                            <option value="100k">100k tokens (Lustre / SSD)</option>
                                         </select>
                                     </div>
                                 </div>
@@ -697,50 +786,120 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                     <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none transition-all group-hover:bg-emerald-500/10" />
                         <div>
-                            <div className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-3">
-                                Primary Outcomes
+                            <div className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-3 flex justify-between items-center">
+                                Primary outcomes
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        document.getElementById('summary-table')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                    className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer normal-case font-semibold"
+                                >
+                                    View table
+                                </button>
                             </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-emerald-500/20 transition-all flex justify-between items-center">
-                                    <div>
-                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
-                                            Context Scale
-                                        </h3>
-                                        <div className="text-[10px] text-slate-500 font-normal truncate">
-                                            (total tokens)
+                            {(() => {
+                                const activeOpts = [];
+                                if (activeTiers.cpu) activeOpts.push({ id: 'cpu', label: 'CPU RAM', colorClass: 'text-sky-400', hoverBorderClass: 'hover:border-sky-500/20' });
+                                if (activeTiers.ssd) activeOpts.push({ id: 'ssd', label: 'CPU+Lustre', colorClass: 'text-emerald-400', hoverBorderClass: 'hover:border-emerald-500/20' });
+
+                                if (activeOpts.length === 0) {
+                                    return (
+                                        <div className="h-full flex flex-col justify-center items-center text-slate-500 text-center py-6">
+                                            <p className="text-xs">No optimizations selected</p>
+                                            <p className="text-[10px] text-slate-650 mt-1">Enable optimizations in the sidebar to compare performance.</p>
+                                        </div>
+                                    );
+                                }
+
+                                if (activeOpts.length === 1) {
+                                    const opt = activeOpts[0];
+                                    const outcomes = OUTCOMES_MAP[workloadSize]?.[opt.id] || { throughput: 'N/A', latency: 'N/A' };
+                                    return (
+                                        <div className="grid grid-cols-1 gap-2 font-sans text-xs">
+                                            {/* Throughput Box */}
+                                            <div className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all ${opt.hoverBorderClass}`}>
+                                                <div>
+                                                    <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                                                        Throughput increase
+                                                    </h3>
+                                                    <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
+                                                        (output tokens/sec)
+                                                    </div>
+                                                </div>
+                                                <h4 className={`text-base font-black font-mono ${outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass}`}>
+                                                    {outcomes.throughput}
+                                                </h4>
+                                            </div>
+
+                                            {/* Latency Box */}
+                                            <div className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all ${opt.hoverBorderClass}`}>
+                                                <div>
+                                                    <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                                                        Latency reduction
+                                                    </h3>
+                                                    <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
+                                                        (TTFT P50)
+                                                    </div>
+                                                </div>
+                                                <h4 className={`text-base font-black font-mono ${outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400'}`}>
+                                                    {outcomes.latency}
+                                                </h4>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="flex flex-col space-y-3 font-sans text-xs pt-1">
+                                        {/* Throughput section */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between items-center text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                                                <span>Throughput increase</span>
+                                                <span className="text-[8px] text-slate-500 lowercase font-normal">(output tokens/sec)</span>
+                                            </div>
+                                            <div className={`grid gap-2 ${activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                {activeOpts.map(opt => {
+                                                    const outcomes = OUTCOMES_MAP[workloadSize]?.[opt.id] || { throughput: 'N/A' };
+                                                    return (
+                                                        <div key={opt.id} className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all ${opt.hoverBorderClass}`}>
+                                                            <h4 className={`text-base font-black font-mono ${outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass}`}>
+                                                                {outcomes.throughput}
+                                                            </h4>
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate max-w-full">
+                                                                {opt.label}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Latency section */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between items-center text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                                                <span>Latency reduction</span>
+                                                <span className="text-[8px] text-slate-500 lowercase font-normal">(TTFT P50)</span>
+                                            </div>
+                                            <div className={`grid gap-2 ${activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                {activeOpts.map(opt => {
+                                                    const outcomes = OUTCOMES_MAP[workloadSize]?.[opt.id] || { latency: 'N/A' };
+                                                    return (
+                                                        <div key={opt.id} className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all ${opt.hoverBorderClass}`}>
+                                                            <h4 className={`text-base font-black font-mono ${outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400'}`}>
+                                                                {outcomes.latency}
+                                                            </h4>
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate max-w-full">
+                                                                {opt.label}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     </div>
-                                    <h4 className="text-base font-black text-emerald-400 font-mono">
-                                        100k Tok
-                                    </h4>
-                                </div>
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-sky-500/20 transition-all flex justify-between items-center">
-                                    <div>
-                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
-                                            Throughput Increase
-                                        </h3>
-                                        <div className="text-[10px] text-slate-500 font-normal truncate">
-                                            (output tokens/sec)
-                                        </div>
-                                    </div>
-                                    <h4 className="text-base font-black text-sky-400 font-mono">
-                                        +264%
-                                    </h4>
-                                </div>
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-amber-500/20 transition-all flex justify-between items-center">
-                                    <div>
-                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
-                                            Latency reduction
-                                        </h3>
-                                        <div className="text-[10px] text-slate-500 font-normal truncate">
-                                            (TTFT P50)
-                                        </div>
-                                    </div>
-                                    <h4 className="text-base font-black text-amber-400 font-mono">
-                                        -45%
-                                    </h4>
-                                </div>
-                            </div>
+                                );
+                            })()}
                         </div>
                     </div>
 
@@ -758,9 +917,15 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             </p>
                         </div>
 
-                        <button onClick={() => setIsModalOpen(true)} className="w-full mt-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex justify-center items-center gap-1.5 truncate">
-                            <Zap className="w-3.5 h-3.5 mr-1 shrink-0" /> View instructions
-                        </button>
+                        <a 
+                            href="https://llm-d.ai/docs/guide/Installation/tiered-prefix-cache/cpu"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full mt-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex items-center justify-center gap-1.5 truncate cursor-pointer no-underline"
+                        >
+                            <span>View instructions</span>
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-80" />
+                        </a>
                     </div>
                 </div>
 
@@ -773,8 +938,8 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             </div>
                             <div>
                                 <h4 className="text-xs font-bold text-red-200 uppercase tracking-wider flex items-center gap-2">
-                                    <span>Memory Wall Detected</span>
-                                    <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded border border-red-500/30">Native HBM Exhausted</span>
+                                    <span>Memory wall detected</span>
+                                    <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded border border-red-500/30">Native HBM exhausted</span>
                                 </h4>
                                 <p className="text-xs text-red-300/80 mt-0.5 leading-relaxed">
                                     At {workloadSize} context scale under <strong className="text-white">{kvQuantization}</strong> KV Cache precision, native HBM VRAM exceeds capacity resulting in Out-of-Memory (OOM) crashes. 
@@ -783,7 +948,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             </div>
                         </div>
                         <div className="flex flex-col items-start md:items-end shrink-0 gap-1">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">KV Cache Quantization Sensitivity:</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">KV cache quantization sensitivity:</span>
                             <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800 gap-1">
                                 {['FP16', 'FP8', 'INT4'].map(prec => (
                                     <button
@@ -812,7 +977,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/80 flex justify-between items-start gap-6 shadow-sm">
                             <div className="flex flex-col gap-2.5">
                                 <h3 className="text-lg font-bold text-white">
-                                    {xAxisMode === 'throughput' ? `Input Token Throughput vs ${targetMetric === 'TTFT' ? 'TTFT (Prefill Latency)' : targetMetric === 'ITL' ? 'ITL (Decode Latency)' : 'E2E Latency'} ${viewMode === 'cost' ? '[TCO Efficiency ($)]' : ''}` : `${targetMetric === 'TTFT' ? 'TTFT (Prefill Latency)' : targetMetric === 'ITL' ? 'ITL (Decode Latency)' : 'E2E Latency'} vs Input Token Throughput`}
+                                    {xAxisMode === 'throughput' ? `Input token throughput vs ${targetMetric === 'TTFT' ? 'TTFT (prefill latency)' : targetMetric === 'ITL' ? 'ITL (decode latency)' : 'E2E latency'} ${viewMode === 'cost' ? '[TCO efficiency ($)]' : ''}` : `${targetMetric === 'TTFT' ? 'TTFT (prefill latency)' : targetMetric === 'ITL' ? 'ITL (decode latency)' : 'E2E latency'} vs input token throughput`}
                                 </h3>
                                 
                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
@@ -870,7 +1035,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             <div className="bg-slate-800/40 border-b border-slate-700/50 px-6 py-3 grid grid-cols-1 xl:grid-cols-12 gap-6 items-center overflow-hidden">
                                 <div className="xl:col-span-7 flex flex-col gap-3 xl:border-r border-slate-700/50 xl:pr-6 w-full overflow-hidden">
                                     <div className="flex items-center gap-2 w-full">
-                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-Axis:</span>
+                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-axis:</span>
                                         <div className="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5 whitespace-nowrap overflow-x-auto no-scrollbar w-full">
                                             {[
                                                 { id: 'ntpot', label: 'NTPOT' },
@@ -895,7 +1060,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     </div>
 
                                     <div className="flex items-center gap-2 w-full">
-                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-Axis:</span>
+                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-axis:</span>
                                         <div className="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5 whitespace-nowrap overflow-x-auto no-scrollbar w-full">
                                             {[
                                                 { id: 'output', label: 'Output' },
@@ -926,15 +1091,15 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                 onClick={() => setIsLogScaleX(!isLogScaleX)} 
                                                 className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
                                             >
-                                                Log Scale
+                                                Log scale
                                             </button>
                                             <div className="h-3 w-px bg-slate-700" />
                                             <button 
                                                 onClick={() => setShowPerChip(!showPerChip)} 
                                                 className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} 
-                                                title="Normalize per Chip"
+                                                title="Normalize per chip"
                                             >
-                                                Per Chip
+                                                Per chip
                                             </button>
                                         </div>
 
@@ -1106,12 +1271,12 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                 </div>
 
                 {/* Secondary View: Context Length vs Storage Tier Heatmap (Deploy Planner) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <div id="summary-table" className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
                     <div className="p-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-4">
                         <div>
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
                                 <HardDrive className="w-4 h-4 text-cyan-400" />
-                                <span>Summary architecture comparison</span>
+                                <span>Summary metrics comparison</span>
                             </h3>
                             <p className="text-xs text-slate-400 mt-0.5">
                                 Comparing Baseline HBM workloads against Tiered Cache offloading architectures side-by-side across prompt sizes.
@@ -1134,11 +1299,11 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         <table className="w-full text-left border-collapse text-xs">
                             <thead>
                                 <tr className="bg-slate-950 text-slate-400 font-mono border-b border-slate-800 uppercase tracking-wider text-[10px]">
-                                    <th className="p-4">Context Scale</th>
-                                    <th className="p-4">Baseline (HBM Only)</th>
-                                    <th className="p-4">Host CPU RAM Offload</th>
-                                    <th className="p-4">Managed Lustre / Local SSD</th>
-                                    <th className="p-4 bg-slate-950/50">Recommended Tier</th>
+                                    <th className="p-4">Context scale</th>
+                                    <th className="p-4">Baseline (HBM only)</th>
+                                    <th className="p-4">Host CPU RAM offload</th>
+                                    <th className="p-4">Managed Lustre / local SSD</th>
+                                    <th className="p-4 bg-slate-950/50">Recommended tier</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/60 font-medium font-mono">
@@ -1147,7 +1312,8 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     return (
                                         <tr 
                                             key={idx} 
-                                            className={`hover:bg-slate-800/30 transition-colors ${
+                                            onClick={() => setWorkloadSize(row.context)}
+                                            className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${
                                                 isCurrent ? 'bg-slate-800/70' : ''
                                             }`}
                                         >
@@ -1178,7 +1344,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 <Zap className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="text-base font-bold text-white">AI Insight & Custom Comparisons FAQ</h3>
+                                <h3 className="text-base font-bold text-white">AI insight & custom comparisons FAQ</h3>
                                 <p className="text-xs text-slate-400">Prepopulated guidance for custom model/infrastructure evaluation.</p>
                             </div>
                         </div>
@@ -1215,7 +1381,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                 {/* FAQ Section */}
                 <div className="mt-10 border-t border-slate-800/60 pt-10">
                     <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-base font-bold text-white">Frequently Asked Questions</h3>
+                        <h3 className="text-base font-bold text-white">Frequently asked questions</h3>
                     </div>
                     <p className="text-xs text-slate-500 mb-6">Extrapolating baseline telemetry and optimization paths to your custom constraints.</p>
                     
@@ -1223,7 +1389,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         {Object.entries(
                             [
                             {
-                                category: "Model Architectures & Sizes",
+                                category: "Model architectures & sizes",
                                 q: "The benchmarks show Qwen 3 32B. How do the benefits of cache-aware routing scale to smaller models like Gemma 4 (9B/26B) or Qwen 3.5 (27B)?",
                                 a: (
                                     <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
@@ -1256,7 +1422,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 )
                             },
                             {
-                                category: "Hardware Infrastructure",
+                                category: "Hardware infrastructure",
                                 q: "We don't use H100s. How does cache-aware routing perform on lower-tier hardware like RTX-PRO-6000 or L4 GPUs?",
                                 a: (
                                     <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
@@ -1277,7 +1443,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 )
                             },
                             {
-                                category: "Workloads & Traffic Patterns",
+                                category: "Workloads & traffic patterns",
                                 q: "How does traffic burstiness affect the performance of prefix caching and intelligent scheduling?",
                                 a: (
                                     <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
@@ -1337,221 +1503,124 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                 </div>
             </main>
 
-            {/* Share with AI Agent Drawer Side Panel */}
-            {isAgentPanelOpen && (
-                <div className="fixed inset-0 z-[10000] flex justify-end bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-lg bg-slate-900 border-l border-slate-800 p-6 shadow-2xl flex flex-col justify-between h-full overflow-y-auto animate-in slide-in-from-right duration-300">
-                        <div className="space-y-6">
-                            <header className="flex items-center justify-between border-b border-slate-800 pb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-cyan-500/20 text-cyan-400 rounded-xl shadow-inner">
-                                        <Share2 className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                            <span>AI Agent Connector</span>
-                                            <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-mono uppercase tracking-wider">Webhook Active</span>
-                                        </h3>
-                                        <p className="text-xs text-slate-400 mt-0.5">Transmit multidimensional benchmark context directly to IDE or LLM workspace.</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => setIsAgentPanelOpen(false)} 
-                                    className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                                >
-                                    ✕
-                                </button>
-                            </header>
-
-                            <div className="space-y-3">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">⚡ One-Click Quick-Task Prompt Presets:</span>
-                                <div className="flex flex-col gap-2">
-                                    <button 
-                                        onClick={() => setAgentNote("Analyze this vLLM benchmark state and draft a 1-page financial ROI summary comparing baseline HBM costs against Managed Lustre offloading savings.")}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-teal-300 font-bold shrink-0">[TCO ROI Report]</span>
-                                        <span className="truncate text-slate-400">Draft executive ROI summary vs baseline</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setAgentNote("Generate a production-ready Kubernetes Deployment YAML for vLLM v0.7.2-fs incorporating LMCache volume mounts and tuned 16MB I/O parallelism flags based on this payload.")}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-sky-300 font-bold shrink-0">[K8s Manifest]</span>
-                                        <span className="truncate text-slate-400">Generate production vLLM deployment yaml</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setAgentNote("Explain the exact VRAM saturation mechanics causing native HBM to OOM at 50k tokens under FP8 quantization and recommend optimal chunked prefill configurations.")}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-red-300 font-bold shrink-0">[Diagnose OOM]</span>
-                                        <span className="truncate text-slate-400">Explain Memory Wall saturation mechanics</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Custom AI Agent Prompt Instructions:</span>
-                                <textarea
-                                    value={agentNote}
-                                    onChange={(e) => setAgentNote(e.target.value)}
-                                    placeholder="Select a preset above or type custom analysis instructions..."
-                                    className="w-full h-28 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-cyan-500 resize-none placeholder:text-slate-600 font-mono leading-relaxed"
-                                />
-                            </div>
-
-                            <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/40 transition-all">
-                                <button 
-                                    onClick={() => setShowPayloadPreview(!showPayloadPreview)}
-                                    className="w-full p-3 text-left flex justify-between items-center font-semibold text-xs text-slate-300 hover:text-white hover:bg-slate-800/30 transition-colors cursor-pointer"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <Info className="w-3.5 h-3.5 text-cyan-400" />
-                                        <span>Inspect Live Serialized JSON Payload</span>
-                                    </span>
-                                    {showPayloadPreview ? <ChevronUp className="w-4 h-4 text-cyan-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                                </button>
-                                {showPayloadPreview && (
-                                    <div className="p-3 bg-slate-950 border-t border-slate-800 max-h-48 overflow-y-auto font-mono text-[10px] text-cyan-300 leading-relaxed animate-in fade-in duration-200">
-                                        <pre>{JSON.stringify({
-                                            scenario: "Tiered Prefix Cache Offloading",
-                                            hardware: "g4-standard-384 (8x rtx-pro-6000)",
-                                            model: "gemma4-31B (FP8)",
-                                            workloadSize: workloadSize,
-                                            targetMetric: targetMetric,
-                                            activeOptimizations: Object.keys(activeTiers).filter(k => activeTiers[k]),
-                                            anomalyTag: hasOOM ? "Memory Wall Detected" : "None",
-                                            userCustomNote: agentNote,
-                                            engineMetadata: {
-                                                vllmVersion: "v0.7.2-fs",
-                                                plugins: ["LMCache", "tpu-inference"],
-                                                lustreDirectIO: "o_direct",
-                                                ioParallelism: "Tuned 16MB"
-                                            }
-                                        }, null, 2)}</pre>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="space-y-4 pt-6 border-t border-slate-800 mt-6">
-                            <div className="flex flex-col gap-2">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Direct Webhook Connectors:</span>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <a 
-                                        href="cursor://open?url=window.location.href"
-                                        onClick={(e) => { e.preventDefault(); handleShareAgent(); }}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer no-underline block"
-                                    >
-                                        🚀 Cursor IDE
-                                    </a>
-                                    <button 
-                                        onClick={handleShareAgent}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer block"
-                                    >
-                                        🚀 Vertex AI
-                                    </button>
-                                    <button 
-                                        onClick={handleShareAgent}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer block"
-                                    >
-                                        🚀 GitHub Chat
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleShareAgent}
-                                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-cyan-900/30 transition-all flex items-center justify-center gap-2 relative cursor-pointer"
-                            >
-                                <Share2 className="w-4 h-4" />
-                                <span>Generate JSON & Copy Payload</span>
-                                {agentCopied && (
-                                    <div className="absolute inset-0 bg-emerald-600 text-white font-bold flex items-center justify-center rounded-xl shadow-xl animate-in fade-in duration-200">
-                                        Payload copied to clipboard!
-                                    </div>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Reproducibility Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full shadow-2xl flex flex-col overflow-hidden">
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full shadow-[0_0_50px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden max-h-[90vh]">
                         <header className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/80">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-sky-500/20 text-sky-400 rounded-lg">
-                                    <Zap className="w-5 h-5" />
+                            <div className="flex items-center">
+                                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg mr-3">
+                                    <Code className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">Reproducibility Profile</h3>
-                                    <p className="text-xs text-slate-400 mt-0.5">Validate tiered cache offloading boundaries natively.</p>
+                                    <h3 className="text-base font-bold text-white">Benchmark test configuration</h3>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">View and copy the exact recipes used for tiered prefix cache offloading.</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors">
-                                ✕
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         </header>
 
-                        <div className="p-6 space-y-4 text-xs text-slate-300 leading-relaxed">
-                            <div>
-                                <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider mb-1">Direct Reproducibility Action</h4>
-                                <p className="text-slate-400">
-                                    Manual benchmarks on G4 hardware are time-consuming due to small HBM ceilings. Replicate this exact profile seamlessly using the `llm-d` engine framework.
-                                </p>
-                            </div>
+                        <div className="flex border-b border-slate-800 bg-slate-900/60 px-6 pt-2 gap-1 overflow-x-auto no-scrollbar">
+                            {['Model server flags', 'K8s manifest', 'Traffic YAML', 'Raw benchmark JSON'].map((tab, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setActiveRecipeTab(idx)}
+                                    className={`px-4 py-2 text-xs font-bold border-b-2 transition-all shrink-0 ${
+                                        activeRecipeTab === idx
+                                            ? 'border-emerald-500 text-emerald-400'
+                                            : 'border-transparent text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
 
-                            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 font-mono text-xs text-slate-200 shadow-inner">
-                                <div className="text-slate-400 text-[10px] select-none uppercase font-bold tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                                    <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>Managed Lustre & Cache Tuning Metadata</span>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] font-sans">
-                                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80 space-y-1">
-                                        <span className="font-mono font-bold text-sky-400 block">Direct I/O (o_direct)</span>
-                                        <span className="text-slate-400 block leading-tight">Bypasses file system cache to manage host memory and VRAM effectively.</span>
-                                    </div>
-                                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80 space-y-1">
-                                        <span className="font-mono font-bold text-teal-400 block">Tuned I/O Parallelism</span>
-                                        <span className="text-slate-400 block leading-tight">Reads KV chunk files with enhanced parallelism to maximize decode throughput.</span>
-                                    </div>
-                                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80 space-y-1">
-                                        <span className="font-mono font-bold text-amber-400 block">vLLM v0.7.2-fs</span>
-                                        <span className="text-slate-400 block leading-tight">Engine configured with FS-connectors and LMCache plugins.</span>
-                                    </div>
-                                    <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80 space-y-1">
-                                        <span className="font-mono font-bold text-emerald-400 block">Storage Tier</span>
-                                        <span className="text-slate-400 block leading-tight">Host CPU RAM + Managed Lustre / Local SSD.</span>
-                                    </div>
-                                </div>
-                                <div className="border-t border-slate-800/80 pt-3 mt-3 text-slate-400 text-[10px] select-none uppercase font-bold tracking-wider">
-                                    Execute CLI Command:
-                                </div>
-                                <div className="text-xs bg-slate-900 p-2 rounded border border-slate-800 font-mono text-emerald-300 select-all">
-                                    llm-d bench --profile=tiered-prefix-g4 --context-scales=10k,50k,100k --layers=vram,ram,ssd --o-direct --fs-connector
-                                </div>
-                            </div>
-
-                            <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between border-t border-slate-800/60 pt-4 mt-2">
-                                <a href="https://llm-d.ai/docs/guide/Installation/tiered-prefix-cache/cpu" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-bold text-sky-400 hover:text-sky-300 transition-colors text-xs bg-sky-500/10 px-3 py-1.5 rounded-lg border border-sky-500/20">
-                                    <span>View llm-d CPU Offloading Guide</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                                <a href="https://github.com/llm-d/llm-d" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-bold text-slate-400 hover:text-slate-200 transition-colors text-xs">
-                                    <span>Reproduce benchmark on GitHub</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                            </div>
+                        <div className="p-6 flex-1 overflow-y-auto bg-slate-950 font-mono text-[10px] text-slate-300 relative">
+                            {activeRecipeTab === 0 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_VLLM, 'vllm')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['vllm'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['vllm'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_VLLM}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 1 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_K8S, 'k8s')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['k8s'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['k8s'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_K8S}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 2 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_TRAFFIC, 'traffic')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['traffic'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['traffic'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_TRAFFIC}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 3 && (
+                                <>
+                                    <button 
+                                        onClick={() => {
+                                            const jsonStr = JSON.stringify({
+                                                workload: "Prefix Cache Tiered Storage Evaluation",
+                                                provider: "Google Cloud GKE",
+                                                machine: "g4-standard-384",
+                                                accelerators: "8x nvidia-rtx-pro-6000",
+                                                concurrency: 128,
+                                                parameters: { kv_quantization: "fp8", cache_ratio: 0.8 },
+                                                verified_gains: {
+                                                    context_100k_ttft_reduction: "-45%",
+                                                    throughput_increase: "+264%"
+                                                }
+                                            }, null, 2);
+                                            handleCopy(jsonStr, 'json');
+                                        }}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['json'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['json'] ? 'Copied!' : 'Copy JSON'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">
+                                        {JSON.stringify({
+                                            workload: "Prefix Cache Tiered Storage Evaluation",
+                                            provider: "Google Cloud GKE",
+                                            machine: "g4-standard-384",
+                                            accelerators: "8x nvidia-rtx-pro-6000",
+                                            concurrency: 128,
+                                            parameters: { kv_quantization: "fp8", cache_ratio: 0.8 },
+                                            verified_gains: {
+                                                context_100k_ttft_reduction: "-45%",
+                                                throughput_increase: "+264%"
+                                            }
+                                        }, null, 2)}
+                                    </pre>
+                                </>
+                            )}
                         </div>
 
                         <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end">
-                            <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs transition-colors border border-slate-700">
+                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-xs transition-colors border border-slate-700">
                                 Close
                             </button>
                         </div>

@@ -10,7 +10,7 @@ export default function GuidedWizard({ onApplyPath, onSkip }) {
             <div className="flex justify-between items-center border-b border-slate-800 pb-4">
                 <div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-amber-400" /> Guided Configuration Wizard
+                        <Sparkles className="w-5 h-5 text-amber-400" /> Guided configuration wizard
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">Answer a few questions to find the best well-lit path for your workload.</p>
                 </div>
@@ -21,9 +21,9 @@ export default function GuidedWizard({ onApplyPath, onSkip }) {
                 <label className="text-sm font-bold text-white">1. What is your primary goal for this workload?</label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {[
-                        { id: 'throughput', label: 'Maximize Throughput', desc: 'Highest token generation rate' },
-                        { id: 'latency', label: 'Minimize Latency', desc: 'Lowest response time (TTFT)' },
-                        { id: 'cost', label: 'Minimize Cost', desc: 'Most economical hardware' }
+                        { id: 'throughput', label: 'Maximize throughput', desc: 'Highest token generation rate' },
+                        { id: 'latency', label: 'Minimize latency', desc: 'Lowest response time (TTFT)' },
+                        { id: 'cost', label: 'Minimize cost', desc: 'Most economical hardware' }
                     ].map((opt) => (
                         <button
                             key={opt.id}
@@ -63,12 +63,12 @@ export default function GuidedWizard({ onApplyPath, onSkip }) {
             {/* Recommendations */}
             {workloadGoal && modelScale && (
                 <div className="space-y-3 animate-fade-in">
-                    <label className="text-sm font-bold text-white">Recommended "Well-Lit Paths"</label>
+                    <label className="text-sm font-bold text-white">Recommended "well-lit paths"</label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {[
-                            { title: 'Path 1: Cost Optimized', desc: 'Best balance of cost and speed', applied: { model: 'Qwen-3-Dense', hardware: '4x RTX A6000 (Spot)', batch: 16, prompt: 4000 } },
-                            { title: 'Path 2: Performance Max', desc: 'Lowest latency, highest throughput', applied: { model: 'Llama-3-70B', hardware: '4x L40S (Spot)', batch: 32, prompt: 8000 } },
-                            { title: 'Path 3: Balanced', desc: 'Optimized for mixed workloads', applied: { model: 'Gemma-4-Ultra', hardware: '2x RTX 4090 Heterogeneous', batch: 8, prompt: 8000 } }
+                            { title: 'Path 1: cost optimized', desc: 'Best balance of cost and speed', applied: { model: 'Qwen-3-Dense', hardware: '4x RTX A6000 (Spot)', batch: 16, prompt: 4000 } },
+                            { title: 'Path 2: performance max', desc: 'Lowest latency, highest throughput', applied: { model: 'Llama-3-70B', hardware: '4x L40S (Spot)', batch: 32, prompt: 8000 } },
+                            { title: 'Path 3: balanced', desc: 'Optimized for mixed workloads', applied: { model: 'Gemma-4-Ultra', hardware: '2x RTX 4090 Heterogeneous', batch: 8, prompt: 8000 } }
                         ].map((path, idx) => (
                             <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
                                 <div>
@@ -79,7 +79,7 @@ export default function GuidedWizard({ onApplyPath, onSkip }) {
                                     onClick={() => onApplyPath(path.applied)}
                                     className="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition-colors"
                                 >
-                                    Apply This Path
+                                    Apply this path
                                 </button>
                             </div>
                         ))}

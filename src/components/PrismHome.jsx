@@ -28,65 +28,8 @@ const PrismHome = ({ onNavigate }) => {
 
 
 
-                {/* Workload Hub */}
-                <section className="mb-16 w-full">
-                    <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
-                        Workload Hub
-                    </h2>
-                    <p className="text-xs text-slate-500 text-center mb-8">Wide, premium paths aligned with how users deploy real-world production workloads.</p>
-                    <div className="w-full max-w-[46%] mx-auto">
-                        {/* Path 5: Agentic Workloads (M2 Path) */}
-                        <div 
-                            onClick={() => onNavigate('agentic-workloads')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
-                        >
-                            <h3 className="text-base font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Agentic Workloads
-                            </h3>
-                            <div className="flex flex-wrap gap-1.5 mb-3">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Multi-Turn</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">TPU v7</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Qwen3-480B</span>
-                            </div>
-                            <p className="text-slate-400 text-xs leading-relaxed mb-4 flex-1">
-                                Deploy Qwen3-Coder-480B over 8 TPU v7 replicas. Harness prefix-aware routing, CPU DRAM KV-offloading, and queue depth load balancing to optimize multi-turn conversations.
-                            </p>
- 
-                            {/* Visual Preview / Metrics */}
-                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-3 mb-4">
-                                <div className="space-y-1 mb-2.5">
-                                    <div className="flex justify-between text-xs">
-                                        <span className="text-slate-400">Platform</span>
-                                        <span className="text-cyan-400 font-mono font-bold">TPU v7 (2x2x1)</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs">
-                                        <span className="text-slate-400">Conversation Type</span>
-                                        <span className="text-cyan-400 font-mono font-bold">Multi-Turn + Tools</span>
-                                    </div>
-                                </div>
-                                <div className="h-8 flex items-end justify-between space-x-1 px-0.5 relative border-b border-slate-700/30 pb-px">
-                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
-                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
-                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm relative opacity-90">
-                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Active</span>
-                                     </div>
-                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
-                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
-                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm opacity-90 relative">
-                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Offload</span>
-                                     </div>
-                                </div>
-                            </div>
- 
-                            <button className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-xs rounded-lg flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
-                                Launch <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                            </button>
-                        </div>
-                    </div>
-                </section>
- 
                 {/* Well-lit paths */}
-                <section className="mb-20 w-full">
+                <section className="mb-16 w-full">
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
                         Well-lit paths
                     </h2>
@@ -98,14 +41,14 @@ const PrismHome = ({ onNavigate }) => {
                             className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
                         >
                             <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Intelligent inference scheduling
+                                Intelligent routing
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Prefix-cache</span>
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Load balance</span>
                             </div>
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
-                                Optimize vLLM/SGLang on Kubernetes. Reduce tail latency with load-aware routing.
+                                Optimize request routing to maximize performance. Leverage GKE Inference Gateway and cache introspection to reduce tail latency.
                             </p>
                             
                             {/* Visual Preview / Metrics */}
@@ -134,16 +77,18 @@ const PrismHome = ({ onNavigate }) => {
                                 Launch <ArrowRight className="ml-1 h-3 w-3" />
                             </button>
                         </div>
+
+                        {/* Path 2: Prefix Cache Offloading */}
                         <div 
                             onClick={() => onNavigate('prefix-cache-offloading')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-emerald-500/30"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Prefix Cache Offloading
+                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-emerald-400 transition-colors leading-tight">
+                                Prefix cache offloading
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">KV-cache</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Tiered storage</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20 whitespace-nowrap">KV-cache</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full font-medium border border-emerald-500/20 whitespace-nowrap">Tiered storage</span>
                             </div>
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
                                 Offload KV cache to CPU memory to extend accelerator capacity limit.
@@ -152,38 +97,38 @@ const PrismHome = ({ onNavigate }) => {
                             <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-2 mb-3">
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
-                                        <span className="text-slate-400">Capacity Wall</span>
-                                        <span className="text-cyan-400 font-mono font-bold">OOM Avoided</span>
+                                        <span className="text-slate-400">Capacity wall</span>
+                                        <span className="text-emerald-400 font-mono font-bold">OOM Avoided</span>
                                     </div>
                                     <div className="flex justify-between text-[10px]">
-                                         <span className="text-slate-400">Max Prompt</span>
-                                         <span className="text-cyan-400 font-mono font-bold">32k Tok</span>
+                                         <span className="text-slate-400">Max prompt</span>
+                                         <span className="text-emerald-400 font-mono font-bold">32k Tok</span>
                                     </div>
                                 </div>
                                 <div className="flex justify-center space-x-0.5 h-6 items-center">
-                                     <div className="w-8 h-5 bg-cyan-500/20 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">HBM</div>
+                                     <div className="w-8 h-5 bg-emerald-500/20 rounded border border-emerald-500/30 flex items-center justify-center text-[8px] font-bold text-emerald-400">HBM</div>
                                      <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                     <div className="w-8 h-5 bg-cyan-500/30 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">CPU</div>
+                                     <div className="w-8 h-5 bg-emerald-500/30 rounded border border-emerald-500/30 flex items-center justify-center text-[8px] font-bold text-emerald-400">CPU</div>
                                      <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                     <div className="w-8 h-5 bg-cyan-500/10 rounded border border-cyan-500/20 flex items-center justify-center text-[8px] font-bold text-cyan-400">Disk</div>
+                                     <div className="w-8 h-5 bg-emerald-500/10 rounded border border-emerald-500/20 flex items-center justify-center text-[8px] font-bold text-emerald-400">Disk</div>
                                  </div>
-                            </div>
+                             </div>
  
-                            <button className="w-full py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
+                            <button className="w-full py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-emerald-400 hover:to-teal-500 shadow-[0_0_15px_rgba(16,185,129,0.2)] transform group-hover:scale-[1.02] transition-all">
                                 Launch <ArrowRight className="ml-1 h-3 w-3" />
                             </button>
                         </div>
- 
-                        {/* P/D Disaggregation */}
+
+                        {/* Path 3: Prefill / Decode (P/D) Disagg */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70 hover:border-purple-500/20 hover:shadow-[0_0_30px_rgba(168,85,247,0.08)]"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Prefill / Decode (P/D) Disagg
+                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-purple-400 transition-colors leading-tight">
+                                Prefill / decode (P/D) disagg
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Interactivity</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Large models</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded-full font-medium border border-purple-500/20 whitespace-nowrap">Interactivity</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded-full font-medium border border-purple-500/20 whitespace-nowrap">Large models</span>
                             </div>
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
                                 Improve interactivity and eliminate prefill interference for large models.
@@ -193,17 +138,17 @@ const PrismHome = ({ onNavigate }) => {
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
                                         <span className="text-slate-400">Scale split</span>
-                                        <span className="text-cyan-400 font-mono font-bold">P-H100 : D-L4</span>
+                                        <span className="text-purple-400 font-mono font-bold">P-H100 : D-L4</span>
                                     </div>
                                     <div className="flex justify-between text-[10px]">
                                          <span className="text-slate-400">Idle GPU saver</span>
-                                         <span className="text-cyan-400 font-mono font-bold">Up to 30%</span>
+                                         <span className="text-purple-400 font-mono font-bold">Up to 30%</span>
                                     </div>
                                 </div>
                                 <div className="flex justify-center space-x-1 h-6 items-center">
-                                     <div className="w-8 h-5 bg-cyan-500/20 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">P</div>
+                                     <div className="w-8 h-5 bg-purple-500/20 rounded border border-purple-500/30 flex items-center justify-center text-[8px] font-bold text-purple-400">P</div>
                                      <div className="text-[8px] text-slate-600 font-bold font-mono">{"->"}</div>
-                                     <div className="w-8 h-5 bg-cyan-500/30 rounded border border-cyan-500/30 flex items-center justify-center text-[8px] font-bold text-cyan-400">D</div>
+                                     <div className="w-8 h-5 bg-purple-500/30 rounded border border-purple-500/30 flex items-center justify-center text-[8px] font-bold text-purple-400">D</div>
                                 </div>
                             </div>
  
@@ -211,17 +156,17 @@ const PrismHome = ({ onNavigate }) => {
                                 Coming soon
                             </button>
                         </div>
- 
-                        {/* Wide Expert Parallelism */}
+
+                        {/* Path 4: Wide Expert Parallelism */}
                         <div 
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70"
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg border border-slate-800 rounded-xl p-3.5 hover:-translate-y-1 transition-all duration-300 cursor-not-allowed flex flex-col h-full overflow-hidden opacity-70 hover:border-pink-500/20 hover:shadow-[0_0_30px_rgba(236,72,153,0.08)]"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Wide Expert Parallelism
+                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-pink-400 transition-colors leading-tight">
+                                Wide expert parallelism
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">LeaderWorkerSet</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">MoE scale</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20 whitespace-nowrap">LeaderWorkerSet</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-pink-500/10 text-pink-400 rounded-full font-medium border border-pink-500/20 whitespace-nowrap">MoE scale</span>
                             </div>
                             <p className="text-slate-400 text-[10px] leading-relaxed mb-3 flex-1">
                                 Deploy large MoE models across multi-node GPU clusters with Wide EP.
@@ -231,11 +176,11 @@ const PrismHome = ({ onNavigate }) => {
                                 <div className="space-y-0.5 mb-1.5">
                                     <div className="flex justify-between text-[10px]">
                                         <span className="text-slate-400">Experts</span>
-                                        <span className="text-cyan-400 font-mono font-bold">64+ Experts</span>
+                                        <span className="text-pink-400 font-mono font-bold">64+ Experts</span>
                                     </div>
                                     <div className="flex justify-between text-[10px]">
                                          <span className="text-slate-400">Scale</span>
-                                         <span className="text-cyan-400 font-mono font-bold">256+ Chips</span>
+                                         <span className="text-pink-400 font-mono font-bold">256+ Chips</span>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-4 gap-0.5 h-6">
@@ -247,11 +192,68 @@ const PrismHome = ({ onNavigate }) => {
                                      <div className="bg-pink-500/50 rounded-sm animate-pulse"></div>
                                      <div className="bg-pink-500/20 rounded-sm"></div>
                                      <div className="bg-pink-500/10 rounded-sm"></div>
-                                </div>
-                            </div>
+                                 </div>
+                             </div>
  
                             <button className="w-full py-1.5 bg-slate-800/50 text-slate-400 rounded-lg font-medium text-[10px] flex items-center justify-center border border-slate-700/50 cursor-not-allowed">
                                 Coming soon
+                            </button>
+                        </div>
+                    </div>
+                </section>
+ 
+                {/* Workload Hub */}
+                <section className="mb-20 w-full">
+                    <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
+                        Workload hub
+                    </h2>
+                    <p className="text-xs text-slate-500 text-center mb-8">Wide, premium paths aligned with how users deploy real-world production workloads.</p>
+                    <div className="w-full max-w-[46%] mx-auto">
+                        {/* Path 5: Agentic Workloads (M2 Path) */}
+                        <div 
+                            onClick={() => onNavigate('agentic-workloads')}
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
+                        >
+                            <h3 className="text-base font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors leading-tight">
+                                Agentic workloads
+                            </h3>
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Multi-turn</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">TPU v7</span>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Qwen3-480B</span>
+                            </div>
+                            <p className="text-slate-400 text-xs leading-relaxed mb-4 flex-1">
+                                Deploy Qwen3-Coder-480B over 8 TPU v7 replicas. Harness prefix-aware routing, CPU DRAM KV-offloading, and queue depth load balancing to optimize multi-turn conversations.
+                            </p>
+ 
+                            {/* Visual Preview / Metrics */}
+                            <div className="bg-slate-800/50 border border-slate-700/40 rounded-lg p-3 mb-4">
+                                <div className="space-y-1 mb-2.5">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Platform</span>
+                                        <span className="text-cyan-400 font-mono font-bold">TPU v7 (2x2x1)</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Conversation type</span>
+                                        <span className="text-cyan-400 font-mono font-bold">Multi-Turn + Tools</span>
+                                    </div>
+                                </div>
+                                <div className="h-8 flex items-end justify-between space-x-1 px-0.5 relative border-b border-slate-700/30 pb-px">
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm relative opacity-90">
+                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Active</span>
+                                     </div>
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-1/6 bg-cyan-500 h-1.5 rounded-t-sm opacity-20"></div>
+                                     <div className="w-2/6 bg-cyan-500 h-6 rounded-t-sm opacity-90 relative">
+                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-cyan-400 uppercase tracking-wide">Offload</span>
+                                     </div>
+                                </div>
+                            </div>
+ 
+                            <button className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-xs rounded-lg flex items-center justify-center hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_15px_rgba(34,211,238,0.2)] transform group-hover:scale-[1.02] transition-all">
+                                Launch <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </button>
                         </div>
                     </div>
@@ -261,7 +263,7 @@ const PrismHome = ({ onNavigate }) => {
 {/* Section: Utility Suite */}
                 <section className="mb-20 w-full max-w-6xl">
                     <h2 className="text-2xl font-bold mb-2 text-center text-slate-100">
-                          Utility Suite
+                          Utility suite
                     </h2>
                     <p className="text-sm text-slate-500 text-center mb-8">Access specialized tools for deeper analysis and schema browsing.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
@@ -273,7 +275,7 @@ const PrismHome = ({ onNavigate }) => {
                             <div>
                                 <div className="flex items-center mb-2">
                                     <BarChart2 className="h-4 w-4 text-emerald-400 mr-2" />
-                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Benchmark Browser</h3>
+                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Benchmark browser</h3>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mb-4">Browse and compare benchmark results across runs.</p>
                             </div>
@@ -290,7 +292,7 @@ const PrismHome = ({ onNavigate }) => {
                             <div>
                                 <div className="flex items-center mb-2">
                                     <FileCode className="h-4 w-4 text-emerald-400 mr-2" />
-                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Schema Explorer</h3>
+                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Schema explorer</h3>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mb-4">Explore data schemas and metric definitions.</p>
                             </div>
@@ -307,7 +309,7 @@ const PrismHome = ({ onNavigate }) => {
                             <div>
                                 <div className="flex items-center mb-2">
                                     <Zap className="h-4 w-4 text-emerald-400 mr-2" />
-                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Workload Catalog</h3>
+                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Workload catalog</h3>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mb-4">Explore standardized workloads for evaluation.</p>
                             </div>
@@ -324,7 +326,7 @@ const PrismHome = ({ onNavigate }) => {
                             <div>
                                 <div className="flex items-center mb-2">
                                     <Activity className="h-4 w-4 text-emerald-400 mr-2" />
-                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Regressions & Analysis</h3>
+                                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">Regressions & analysis</h3>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mb-4">Track nightly benchmark runs and detect regressions across well-lit paths.</p>
                             </div>
@@ -338,7 +340,7 @@ const PrismHome = ({ onNavigate }) => {
                             <div>
                                 <div className="flex items-center mb-2">
                                     <TrendingUp className="h-4 w-4 text-slate-500 mr-2" />
-                                    <h3 className="text-sm font-bold text-slate-500">Value Analysis</h3>
+                                    <h3 className="text-sm font-bold text-slate-500">Value analysis</h3>
                                     <span className="ml-auto text-[8px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded font-mono">SOON</span>
                                 </div>
                                 <p className="text-[10px] text-slate-600 mb-4">Cost vs performance optimization reports.</p>
@@ -356,10 +358,10 @@ const PrismHome = ({ onNavigate }) => {
                 {/* Section: How it works */}
                 <section className="mb-20 w-full max-w-6xl mx-auto pl-20">
                      <h2 className="text-3xl font-bold mb-2 text-center text-slate-100">
-                          How it works: The Full Benchmark Lifecycle
+                          How it works: the full benchmark lifecycle
                      </h2>
                      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">
-                         Designed for human insight and agent automation. Standardizing the end-to-end lifecycle from routing optimization to high-fidelity reproduction.
+                          Designed for human insight and agent automation. Standardizing the end-to-end lifecycle from routing optimization to high-fidelity reproduction.
                      </p>
                      
                      <div className="flex flex-col md:flex-row gap-4 justify-between items-center relative mb-6">
@@ -369,12 +371,12 @@ const PrismHome = ({ onNavigate }) => {
 
                          {/* Left Column: Roles & Actions */}
                          <div className="w-full md:w-1/3 space-y-3 flex flex-col items-center md:items-end">
-                             <div className="w-full max-w-[320px] text-center text-xs font-extrabold text-cyan-400/90 uppercase tracking-widest mb-2">User & Agent Roles</div>
+                             <div className="w-full max-w-[320px] text-center text-xs font-extrabold text-cyan-400/90 uppercase tracking-widest mb-2">User & agent roles</div>
                              
                              {/* Feature Developer */}
                              <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-xl p-3 w-full max-w-[320px] hover:border-cyan-500/30 transition-all group">
                                  <div className="mb-2">
-                                     <h4 className="text-sm font-bold text-white">Feature Developer</h4>
+                                     <h4 className="text-sm font-bold text-white">Feature developer</h4>
                                  </div>
                                  <div className="space-y-1 text-sm text-slate-400">
                                      <div className="flex items-start gap-1">
@@ -395,7 +397,7 @@ const PrismHome = ({ onNavigate }) => {
                              {/* Benchmark Developer */}
                              <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-xl p-3 w-full max-w-[320px] hover:border-cyan-500/30 transition-all group">
                                  <div className="mb-2">
-                                     <h4 className="text-sm font-bold text-white">Benchmark Developer</h4>
+                                     <h4 className="text-sm font-bold text-white">Benchmark developer</h4>
                                  </div>
                                  <div className="space-y-1 text-sm text-slate-400">
                                      <div className="flex items-start gap-1">
@@ -426,7 +428,7 @@ const PrismHome = ({ onNavigate }) => {
 
                              {/* Llm-d Results Store */}
                              <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-3 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-blue-500/50 transition-all">
-                                 <h4 className="text-sm font-bold text-blue-400 mb-0.5">llm-d Results Store</h4>
+                                 <h4 className="text-sm font-bold text-blue-400 mb-0.5">llm-d results store</h4>
                                  <p className="text-sm text-slate-400">Scalable OSS store for unified schema results.</p>
                              </div>
 
@@ -436,9 +438,9 @@ const PrismHome = ({ onNavigate }) => {
                                  target="_blank"
                                  rel="noopener noreferrer"
                                  className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-2 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-cyan-500/50 transition-all cursor-pointer"
-                             >
+                              >
                                  <h4 className="text-sm font-bold text-cyan-400 mb-0.5 flex items-center justify-center gap-1">
-                                     Standard Benchmark Report
+                                     Standard benchmark report
                                      <Link className="h-3 w-3 text-cyan-400 group-hover:scale-110 transition-transform" />
                                  </h4>
                                  <p className="text-sm text-slate-400">Unified JSON schema guarantees data interoperability.</p>
@@ -452,7 +454,7 @@ const PrismHome = ({ onNavigate }) => {
                                  className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-2 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-cyan-500/50 transition-all cursor-pointer"
                              >
                                  <h4 className="text-sm font-bold text-cyan-400 mb-0.5 flex items-center justify-center gap-1">
-                                     Test Harness
+                                     Test harness
                                      <Link className="h-3 w-3 text-cyan-400 group-hover:scale-110 transition-transform" />
                                  </h4>
                                  <p className="text-sm text-slate-400">Stress distributed systems with agentic workloads.</p>
@@ -466,7 +468,7 @@ const PrismHome = ({ onNavigate }) => {
                                  className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-2 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-cyan-500/50 transition-all cursor-pointer"
                              >
                                  <h4 className="text-sm font-bold text-cyan-400 mb-0.5 flex items-center justify-center gap-1">
-                                     Real World Workload Catalog
+                                     Real world workload catalog
                                      <Link className="h-3 w-3 text-cyan-400 group-hover:scale-110 transition-transform" />
                                  </h4>
                                  <p className="text-sm text-slate-400">Access standardized workloads for evaluation.</p>
@@ -476,12 +478,12 @@ const PrismHome = ({ onNavigate }) => {
 
                          {/* Right Column: Roles & Actions */}
                          <div className="w-full md:w-1/3 space-y-3 flex flex-col items-center lg:items-start">
-                             <div className="w-full max-w-[320px] text-center text-xs font-extrabold text-purple-400/90 uppercase tracking-widest mb-2">User & Agent Roles</div>
+                             <div className="w-full max-w-[320px] text-center text-xs font-extrabold text-purple-400/90 uppercase tracking-widest mb-2">User & agent roles</div>
                              
                              {/* Solutions Architect */}
                              <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-xl p-3 w-full max-w-[320px] hover:border-purple-500/30 transition-all group">
                                  <div className="mb-2">
-                                     <h4 className="text-sm font-bold text-white">Solutions Architect</h4>
+                                     <h4 className="text-sm font-bold text-white">Solutions architect</h4>
                                  </div>
                                  <div className="space-y-1 text-sm text-slate-400">
                                      <div className="flex items-start gap-1">
@@ -502,7 +504,7 @@ const PrismHome = ({ onNavigate }) => {
                              {/* Stack Operator */}
                              <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-xl p-3 w-full max-w-[320px] hover:border-purple-500/30 transition-all group">
                                  <div className="mb-2">
-                                     <h4 className="text-sm font-bold text-white">Stack Operator</h4>
+                                     <h4 className="text-sm font-bold text-white">Stack operator</h4>
                                  </div>
                                  <div className="space-y-1 text-sm text-slate-400">
                                      <div className="flex items-start gap-1">

@@ -99,7 +99,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     );
 };
 
-const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLogScale }) => {
+const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLogScale, activeTiers }) => {
     const [zoomXAxis, setZoomXAxis] = useState(initialXAxis || 'tpot');
     const [zoomYAxis, setZoomYAxis] = useState(initialYAxis || 'output');
     const [zoomColorMode, setZoomColorMode] = useState('default');
@@ -207,7 +207,7 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
     const step = Math.max(0.01, dataMax / 100);
     const currentMax = zoomXMax === Infinity ? dataMax : zoomXMax;
     const isPercentileAxis = ['ttft', 'tpot', 'itl', 'ntpot', 'e2e'].includes(zoomXAxis);
-    const visibleZoomData = derivedZoomData.filter(d => d.dynamic_x <= currentMax && (!isPercentileAxis || visiblePercentiles.includes(d.percentile)));
+    const visibleZoomData = derivedZoomData.filter(d => d.dynamic_x <= currentMax && (!isPercentileAxis || visiblePercentiles.includes(d.percentile)) && (activeTiers ? activeTiers[d.type] : true));
 
     let logTicks = [];
     if (zoomLogScale) {
@@ -223,17 +223,17 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
         tpot: 'TPOT (ms)',
         ntpot: 'Normalized TPOT (ms)',
         ttft: 'Mean TTFT (ms)',
-        itl: 'Inter-Token Latency (ms)',
-        e2e: 'E2E Latency (ms)',
-        quality: 'Quality Score',
-        qps: 'Queries Per Second'
+        itl: 'Inter-token latency (ms)',
+        e2e: 'E2E latency (ms)',
+        quality: 'Quality score',
+        qps: 'Queries per second'
     };
 
     const yLabels = {
-        output: 'Output Tokens/sec',
-        input: 'Input Tokens/sec',
-        total: 'Total Tokens/sec',
-        qps: 'Queries Per Second'
+        output: 'Output tokens/sec',
+        input: 'Input tokens/sec',
+        total: 'Total tokens/sec',
+        qps: 'Queries per second'
     };
 
     return (
@@ -322,9 +322,9 @@ const InferenceSchedulingChart = ({ data, initialXAxis, initialYAxis, initialLog
                     <div className="flex flex-col gap-3 md:items-end w-full md:w-auto">
                         <div className="flex flex-wrap items-center gap-4 justify-end">
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">
-                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log Scale</button>
+                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log scale</button>
                                 <div className="h-3 w-px bg-slate-700" />
-                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per Chip">Per Chip</button>
+                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per chip">Per chip</button>
                             </div>
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">

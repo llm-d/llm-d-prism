@@ -79,7 +79,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
           <div className="flex items-center gap-3">
             <Database className="text-blue-400" size={20} />
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Data Ingestion Inspector</h2>
+              <h2 className="text-lg font-bold text-slate-100">Data ingestion inspector</h2>
               <p className="text-xs text-slate-400">
                 Debugging {data.length} total entries | {filteredData.length} visible
               </p>
@@ -114,7 +114,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                     className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500 appearance-none"
                     style={{ backgroundImage: 'none' }} 
                  >
-                     <option value="all">All Sources</option>
+                     <option value="all">All sources</option>
                      {Array.from(new Set(data.map(d => d.source_info?.origin || 'Unknown')))
                         .sort()
                         .map(source => (
@@ -179,7 +179,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                 
                 {/* Status Banner */}
                 <div className="flex items-center justify-between">
-                   <h3 className="text-xl font-medium text-white">{selectedEntry.metadata?.model_name || 'Unknown Model'}</h3>
+                   <h3 className="text-xl font-medium text-white">{selectedEntry.metadata?.model_name || 'Unknown model'}</h3>
                    <div className="flex gap-2">
                       <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700 font-mono">
                         ID: {selectedEntry.id}
@@ -192,7 +192,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                   <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2">
                        <AlertTriangle size={16} />
-                       Ingestion Warnings
+                       Ingestion warnings
                     </h4>
                     <ul className="list-disc list-inside text-xs text-amber-200 space-y-1">
                       {selectedEntry._diagnostics.msg.map((msg, i) => (
@@ -205,15 +205,15 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                 {/* Source Details Card */}
                 <div className="bg-slate-900 rounded-lg border border-slate-700 p-4 grid grid-cols-2 gap-4">
                      <div>
-                        <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Source Origin</span>
+                        <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Source origin</span>
                         <div className="text-sm text-slate-300 font-mono mt-1 break-all">
-                            {selectedEntry.source_info?.origin || 'Unknown Origin'}
+                            {selectedEntry.source_info?.origin || 'Unknown origin'}
                         </div>
                      </div>
                      <div>
-                        <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">File Identifier / Path</span>
+                        <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">File identifier / path</span>
                         <div className="text-sm text-slate-300 font-mono mt-1 break-all">
-                            {selectedEntry.source_info?.file_identifier || 'Unknown File'}
+                            {selectedEntry.source_info?.file_identifier || 'Unknown file'}
                         </div>
                      </div>
                      {selectedEntry.source_info?.raw_url && (
@@ -239,7 +239,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                   <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
                     <div className="px-3 py-2 bg-slate-800 border-b border-slate-700 font-medium text-xs text-slate-300 flex items-center gap-2">
                        <CheckCircle size={14} className="text-green-400" />
-                       Normalized Schema (App State)
+                       Normalized schema (app state)
                     </div>
                     <div className="p-3 overflow-x-auto flex-1 h-[400px]">
                         <pre className="text-[10px] font-mono text-green-300 leading-relaxed">
@@ -257,7 +257,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                   <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
                     <div className="px-3 py-2 bg-slate-800 border-b border-slate-700 font-medium text-xs text-slate-300 flex items-center gap-2">
                        <FileJson size={14} className="text-blue-400" />
-                       Raw Source Snapshot
+                       Raw source snapshot
                     </div>
                     <div className="p-3 overflow-x-auto relative group flex-1 h-[400px]">
                         <pre className="text-[10px] font-mono text-blue-300 leading-relaxed whitespace-pre-wrap break-all">
@@ -281,13 +281,24 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                         <div className="bg-indigo-950/30 rounded-lg border border-indigo-500/30 p-4 mt-6">
                             <h4 className="text-sm font-semibold text-indigo-300 mb-3 flex items-center gap-2">
                                 <Database size={16} />
-                                Quality Scores (Merged)
+                                Quality scores (merged)
                             </h4>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 {Object.entries(qData).map(([key, value]) => {
                                     if (key === 'timestamp' || key === 'id') return null;
                                     
-                                    const formatLabel = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()).replace('Mmlu', 'MMLU').replace('Bench', 'Benchmark');
+                                    const formatLabel = (k) => {
+                                        let s = k.replace(/_/g, ' ');
+                                        if (s.length > 0) {
+                                            s = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                                        }
+                                        return s
+                                            .replace('mmlu pro', 'MMLU pro')
+                                            .replace('live code bench', 'Live Code benchmark')
+                                            .replace('live code benchmark', 'Live Code benchmark')
+                                            .replace('arena elo', 'Arena Elo')
+                                            .replace('gsm8k', 'GSM8K');
+                                    };
                                     const isPercentage = key.toLowerCase().includes('mmlu') || key.toLowerCase().includes('bench');
                                     const displayValue = isPercentage ? `${value}%` : value;
 

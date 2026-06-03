@@ -23,7 +23,7 @@ const WorkloadCatalog = ({ onNavigateBack }) => {
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-lg font-bold text-white tracking-wide">Workload Catalog</h1>
+                        <h1 className="text-lg font-bold text-white tracking-wide">Workload catalog</h1>
                     </div>
                 </div>
 
@@ -49,7 +49,7 @@ const WorkloadCatalog = ({ onNavigateBack }) => {
                 <iframe 
                     src="https://workload-catalog-app-369234493812.us-central1.run.app/" 
                     className="w-full h-full border-0" 
-                    title="Workload Catalog"
+                    title="Workload catalog"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                 />

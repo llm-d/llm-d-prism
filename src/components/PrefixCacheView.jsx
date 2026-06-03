@@ -51,7 +51,7 @@ export default function PrefixCacheView({ onNavigateBack }) {
         <div className="w-full p-6 flex flex-col gap-6 bg-sandbox-surface/50 rounded-2xl border border-slate-800/50">
             <div className="flex justify-between items-center border-b border-slate-800/50 pb-4">
                 <div className="flex flex-col gap-1">
-                    <h2 className="text-2xl font-bold text-white font-display">Prefix Cache Offloading</h2>
+                    <h2 className="text-2xl font-bold text-white font-display">Prefix cache offloading</h2>
                     <p className="text-xs text-slate-400 font-sans">Evaluate performance trade-offs of offloading KV cache to CPU RAM and Managed Lustre.</p>
                 </div>
                 <button onClick={onNavigateBack} className="px-3 py-1.5 rounded bg-black/20 border border-slate-800 text-slate-400 hover:text-white transition-all font-mono text-xs">← Back</button>

@@ -68,10 +68,6 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
     const [bugLoggedToast, setBugLoggedToast] = useState(false);
     const [viewSavedToast, setViewSavedToast] = useState(false);
     const [showFaq, setShowFaq] = useState(0);
-    const [isCopilotOpen, setIsCopilotOpen] = useState(false);
-    const [copilotNote, setCopilotNote] = useState('');
-    const [copilotCopied, setCopilotCopied] = useState(false);
-    const [showJsonPreview, setShowJsonPreview] = useState(false);
     const [selectedBuild, setSelectedBuild] = useState(null);
 
 
@@ -169,18 +165,6 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
         downloadAnchor.remove();
     };
 
-    const handleCopyCopilot = () => {
-        const payload = JSON.stringify({
-            dashboard: "Regressions & Analysis Testing Dashboard",
-            wellLitPath: selectedPath,
-            metricFocus: activeMetric,
-            recentAnomaly: "Builds b142-b144 exhibited +85% TTFT regression due to LMCache mutex contention. Resolved in b145 via o_direct bypass.",
-            userPrompt: copilotNote
-        }, null, 2);
-        navigator.clipboard.writeText(payload);
-        setCopilotCopied(true);
-        setTimeout(() => setCopilotCopied(false), 2500);
-    };
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full font-sans">
@@ -211,13 +195,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                 </div>
 
                 <div className="flex items-center space-x-3">
-                    <button 
-                        onClick={() => setIsCopilotOpen(true)} 
-                        className="px-3.5 py-1.5 text-xs font-bold rounded-lg text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 transition-all flex items-center shadow-lg shadow-cyan-900/20 border border-cyan-400/30 cursor-pointer"
-                    >
-                        <Share2 className="w-3.5 h-3.5 mr-1.5 text-cyan-200" />
-                        <span>Share with AI Agent</span>
-                    </button>
+
                     <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative cursor-pointer">
                         <Share2 className="w-3.5 h-3.5 mr-1.5" />
                         <span>Share link</span>
@@ -239,11 +217,11 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                     <div className="max-w-4xl">
                         <div className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                             <Activity className="w-3.5 h-3.5" />
-                            <span>Prism Utility Suite • Nightly Regression Tracking</span>
+                            <span>Prism utility suite • nightly regression tracking</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 mb-3">
                             <h2 className="text-2xl font-extrabold text-white tracking-tight m-0">
-                                Solidified End-to-End Well-Lit Path Lifecycle
+                                Solidified end-to-end well-lit path lifecycle
                             </h2>
                             <a 
                                 href="https://github.com/llm-d/llm-d-benchmark" 
@@ -270,7 +248,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                         <div className="border-b border-slate-800 pb-3 mb-4">
                             <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                                 <Layers className="w-4 h-4 text-cyan-400" />
-                                <span>Defined Test Runs</span>
+                                <span>Defined test runs</span>
                             </h3>
                             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                                 Select a nightly CI regression pipeline to load historical telemetry.
@@ -384,7 +362,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 <div className="flex flex-col gap-2.5">
                                     <h3 className="text-lg font-bold text-white flex items-center gap-2 font-sans">
                                         <Activity className="w-5 h-5 text-cyan-400" />
-                                        <span>Nightly Regression Tracker • {selectedPath}</span>
+                                        <span>Nightly regression tracker • {selectedPath}</span>
                                         <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Active Focus</span>
                                     </h3>
                                     
@@ -443,7 +421,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 {/* Row 1 */}
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
-                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-Axis:</span>
+                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-axis:</span>
                                         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 gap-0.5 font-bold whitespace-nowrap overflow-x-auto no-scrollbar w-full">
                                             {[
                                                 { id: 'output', label: 'Output' },
@@ -471,14 +449,14 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                 onClick={() => setIsLogScaleX(!isLogScaleX)} 
                                                 className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
                                             >
-                                                Log Scale
+                                                Log scale
                                             </button>
                                             <div className="h-3 w-px bg-slate-700" />
                                             <button 
                                                 onClick={() => setShowPerChip(!showPerChip)} 
                                                 className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
                                             >
-                                                Per Chip
+                                                Per chip
                                             </button>
                                         </div>
 
@@ -499,7 +477,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 {/* Row 2 */}
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
-                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-Axis:</span>
+                                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-axis:</span>
                                         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 gap-0.5 font-bold whitespace-nowrap overflow-x-auto no-scrollbar w-full">
                                             {[
                                                 { id: 'ntpot', label: 'NTPOT' },
@@ -891,7 +869,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                         <div>
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
                                 <FileCode className="w-4 h-4 text-cyan-400" />
-                                <span>Active Well-Lit Paths & SIG Ownership Matrix</span>
+                                <span>Active well-lit paths & SIG ownership matrix</span>
                             </h3>
                             <p className="text-xs text-slate-400 mt-0.5">
                                 Select any well-lit path below to instantly load its nightly regression history into the charts above.
@@ -914,12 +892,12 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                         <table className="w-full text-left border-collapse text-xs font-mono">
                             <thead>
                                 <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
-                                    <th className="p-4 font-sans">Well-Lit Path ID</th>
-                                    <th className="p-4 font-sans">SIG Ownership</th>
+                                    <th className="p-4 font-sans">Well-lit path ID</th>
+                                    <th className="p-4 font-sans">SIG ownership</th>
                                     <th className="p-4 font-sans">Maintainers (OWNERS.md)</th>
-                                    <th className="p-4 font-sans">Target Infrastructure</th>
-                                    <th className="p-4 font-sans">Nightly Status</th>
-                                    <th className="p-4 font-sans">Latest Build Status</th>
+                                    <th className="p-4 font-sans">Target infrastructure</th>
+                                    <th className="p-4 font-sans">Nightly status</th>
+                                    <th className="p-4 font-sans">Latest build status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/60 font-medium text-slate-300">
@@ -959,7 +937,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             <Zap className="w-4 h-4" />
                         </div>
                         <div>
-                            <h3 className="text-base font-bold text-white">Regressions & Analysis Governance FAQ</h3>
+                            <h3 className="text-base font-bold text-white">Regressions & analysis governance FAQ</h3>
                             <p className="text-xs text-slate-400">Prepopulated guidelines for SIG syncs and release criteria.</p>
                         </div>
                     </div>
@@ -994,139 +972,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
 
             </main>
 
-            {/* Share with AI Agent Drawer Side Panel */}
-            {isCopilotOpen && (
-                <div className="fixed inset-0 z-[10000] flex justify-end bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-lg bg-slate-900 border-l border-slate-800 p-6 shadow-2xl flex flex-col justify-between h-full overflow-y-auto animate-in slide-in-from-right duration-300">
-                        <div className="space-y-6">
-                            <header className="flex items-center justify-between border-b border-slate-800 pb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-cyan-500/20 text-cyan-400 rounded-xl shadow-inner">
-                                        <Share2 className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                            <span>AI Agent Connector</span>
-                                            <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-mono uppercase tracking-wider">Webhook Active</span>
-                                        </h3>
-                                        <p className="text-xs text-slate-400 mt-0.5">Transmit regression telemetry and anomaly state directly to AI workspace.</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => setIsCopilotOpen(false)} 
-                                    className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                                >
-                                    ✕
-                                </button>
-                            </header>
 
-                            <div className="space-y-3">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">⚡ One-Click Anomaly & Workflow Prompts:</span>
-                                <div className="flex flex-col gap-2">
-                                    <button 
-                                        onClick={() => setCopilotNote(`Analyze the nightly regression spike on build b142 for ${selectedPath} and draft a root-cause summary for the weekly SIG sync.`)}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-purple-300 font-bold shrink-0">[SIG Sync Report]</span>
-                                        <span className="truncate text-slate-400">Draft regression report for weekly SIG sync</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setCopilotNote("Generate a Kustomize patch to enforce o_direct bypass flags and eliminate LMCache mutex lock contention based on this regression log.")}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-sky-300 font-bold shrink-0">[Kustomize Patch]</span>
-                                        <span className="truncate text-slate-400">Generate Kustomize patch for o_direct fix</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setCopilotNote("Explain how llmdbenchmark standup automates cluster provisioning across SIG well-lit paths and recommend optimal GitHub Actions polling intervals.")}
-                                        className="text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800/50 border border-slate-800 transition-all text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer group"
-                                    >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-all shrink-0" />
-                                        <span className="font-mono text-emerald-300 font-bold shrink-0">[Workflow Docs]</span>
-                                        <span className="truncate text-slate-400">Explain llmdbenchmark standup lifecycle</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Custom AI Agent Prompt Instructions:</span>
-                                <textarea
-                                    value={copilotNote}
-                                    onChange={(e) => setCopilotNote(e.target.value)}
-                                    placeholder="Select a preset above or type custom analysis instructions..."
-                                    className="w-full h-28 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-cyan-500 resize-none placeholder:text-slate-600 font-mono leading-relaxed"
-                                />
-                            </div>
-
-                            <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/40 transition-all">
-                                <button 
-                                    onClick={() => setShowJsonPreview(!showJsonPreview)}
-                                    className="w-full p-3 text-left flex justify-between items-center font-semibold text-xs text-slate-300 hover:text-white hover:bg-slate-800/30 transition-colors cursor-pointer"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <Info className="w-3.5 h-3.5 text-cyan-400" />
-                                        <span>Inspect Live Serialized JSON Payload</span>
-                                    </span>
-                                    {showJsonPreview ? <ChevronUp className="w-4 h-4 text-cyan-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                                </button>
-                                {showJsonPreview && (
-                                    <div className="p-3 bg-slate-950 border-t border-slate-800 max-h-48 overflow-y-auto font-mono text-[10px] text-cyan-300 leading-relaxed animate-in fade-in duration-200">
-                                        <pre>{JSON.stringify({
-                                            dashboard: "Regressions & Analysis Testing Dashboard",
-                                            wellLitPath: selectedPath,
-                                            metricFocus: activeMetric,
-                                            recentAnomaly: "Builds b142-b144 exhibited +85% TTFT regression due to LMCache mutex contention. Resolved in b145 via o_direct bypass.",
-                                            userPrompt: copilotNote
-                                        }, null, 2)}</pre>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="space-y-4 pt-6 border-t border-slate-800 mt-6">
-                            <div className="flex flex-col gap-2">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Direct Webhook Connectors:</span>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <a 
-                                        href="cursor://open?url=window.location.href"
-                                        onClick={(e) => { e.preventDefault(); handleCopyCopilot(); }}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer no-underline block"
-                                    >
-                                        🚀 Cursor IDE
-                                    </a>
-                                    <button 
-                                        onClick={handleCopyCopilot}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer block"
-                                    >
-                                        🚀 Vertex AI
-                                    </button>
-                                    <button 
-                                        onClick={handleCopyCopilot}
-                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-[11px] font-bold text-slate-200 hover:text-white border border-slate-700 transition-colors cursor-pointer block"
-                                    >
-                                        🚀 GitHub Chat
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCopyCopilot}
-                                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-cyan-900/30 transition-all flex items-center justify-center gap-2 relative cursor-pointer"
-                            >
-                                <Share2 className="w-4 h-4" />
-                                <span>Generate JSON & Copy Payload</span>
-                                {copilotCopied && (
-                                    <div className="absolute inset-0 bg-emerald-600 text-white font-bold flex items-center justify-center rounded-xl shadow-xl animate-in fade-in duration-200">
-                                        Payload copied to clipboard!
-                                    </div>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
         </div>
     );

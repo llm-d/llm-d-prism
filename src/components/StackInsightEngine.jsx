@@ -55,7 +55,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
             title: "Llama 3 70B on 4x A6000s vs H100 WLP",
             model: "Llama-3-70B",
             quant: "4-bit INT4",
-            hardware: "4x RTX A6000 (Spot)",
+            hardware: "4x RTX A6000 (spot)",
             prompt: 4000,
             batch: 16
         },
@@ -70,10 +70,10 @@ export default function StackInsightEngine({ onNavigateBack }) {
         },
         {
             id: 3,
-            title: "Mixtral 8x7B MoE on 4x L40S Spot vs H100 WLP",
+            title: "Mixtral 8x7B MoE on 4x L40S spot vs H100 WLP",
             model: "Mixtral-8x7B-MoE",
             quant: "8-bit FP8",
-            hardware: "4x L40S (Spot)",
+            hardware: "4x L40S (spot)",
             prompt: 16000,
             batch: 32
         }
@@ -169,29 +169,29 @@ export default function StackInsightEngine({ onNavigateBack }) {
     const bottleneckInsight = useMemo(() => {
         if (computedMetrics.isMemoryCrash) {
             return { 
-                text: 'Physical Ceiling Breached: CUDA Out-of-Memory (OOM) Risk Enforced. Reduce VRAM footprints.', 
+                text: 'Physical ceiling breached: CUDA out-of-memory (OOM) risk enforced. Reduce VRAM footprints.', 
                 color: 'text-rose-400 bg-rose-950/30 border-rose-500/30',
-                actionLabel: '⚡ Auto-Optimize Quantization (INT4)',
+                actionLabel: '⚡ Auto-optimize quantization (INT4)',
                 actionType: 'fix-quant'
             };
         }
         if (promptLength > 16000 && customHardware.includes('A6000')) {
             return { 
-                text: 'Interconnect Bound: High context length over RTX A6000 PCIe splits saturates slots bandwidth.', 
+                text: 'Interconnect bound: High context length over RTX A6000 PCIe splits saturates slots bandwidth.', 
                 color: 'text-amber-400 bg-amber-950/30 border-amber-500/30',
-                actionLabel: '⚡ Scale-up Cluster Interconnect (4x L40S)',
+                actionLabel: '⚡ Scale-up cluster interconnect (4x L40S)',
                 actionType: 'fix-hardware-l40s'
             };
         }
         if (batchSize > 32) {
             return { 
-                text: 'Compute Bound: High concurrency stream volume scales thread saturation. Risk of processing delays.', 
+                text: 'Compute bound: High concurrency stream volume scales thread saturation. Risk of processing delays.', 
                 color: 'text-amber-400 bg-amber-950/30 border-amber-500/30',
-                actionLabel: '⚡ Set Optimal Concurrency Stream Bound',
+                actionLabel: '⚡ Set optimal concurrency stream bound',
                 actionType: 'fix-batch'
             };
         }
-        return { text: 'Infrastructure Optimized: Active scheduling filters fall within stable execution thresholds boundaries.', color: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/30' };
+        return { text: 'Infrastructure optimized: Active scheduling filters fall within stable execution thresholds boundaries.', color: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/30' };
     }, [computedMetrics.isMemoryCrash, promptLength, batchSize, customHardware]);
 
     const handleApplyProactiveFix = (type) => {
@@ -209,7 +209,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
         setTerminalLogs(['[SYSTEM] Starting sandbox deployment pipeline orchestration...']);
         
         const logs = [
-            '[INFO] Hooking GKE Sandbox Cluster topology controller instance...',
+            '[INFO] Hooking GKE sandbox cluster topology controller instance...',
             `[INFO] Provisioning spot node accelerators configuration: ${customHardware}...`,
             `[INFO] Loading transformer matrices context mapping at ${customQuant} quantization...`,
             `[INFO] Rehydrating container weight volumes targeting: ${customModel}...`,
@@ -260,7 +260,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                     )}
                     <div className="flex items-center gap-2">
                         <Terminal className="w-5 h-5 text-sky-400" />
-                        <h1 className="text-lg font-bold text-white tracking-wide">Guided Simulator</h1>
+                        <h1 className="text-lg font-bold text-white tracking-wide">Guided simulator</h1>
                     </div>
                 </div>
             </header>
@@ -273,7 +273,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                     <div className="bg-rose-950/70 border border-rose-500 text-rose-200 p-4 rounded-xl flex items-start gap-3 shadow-lg animate-bounce">
                         <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                         <div>
-                            <h4 className="text-sm font-bold text-white uppercase tracking-wider">Memory Constraint Warning</h4>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-wider">Memory constraint warning</h4>
                             <p className="text-xs text-rose-300 mt-0.5">
                                 Physically Impossible Allocation. The weights configuration for <span className="font-bold">{customModel}</span> ({customQuant}) requires approximately <span className="font-mono font-bold text-white">{Math.round(computedMetrics.requiredVRAM)}GB</span> VRAM, which exceeds the total target hardware ceiling of <span className="font-mono font-bold text-white">{computedMetrics.vramTotal}GB</span>. High probability of CUDA Out-of-Memory exception.
                             </p>
@@ -291,7 +291,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                         {/* AI Magic Intent Prompt Input Bar */}
                         <div className={`transition-all flex flex-col space-y-2 ${agentHighlight ? 'bg-sky-950/20 p-2 rounded-lg animate-pulse' : ''}`}>
                             <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 select-none">
-                                <span className="flex items-center gap-1.5 text-sky-400"><Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" /> Ask Agent</span>
+                                <span className="flex items-center gap-1.5 text-sky-400"><Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" /> Ask agent</span>
                             </div>
                             <div className="flex flex-col gap-2">
                                 <input
@@ -325,8 +325,8 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         onChange={(e) => setCustomModel(e.target.value)}
                                         className="w-full bg-slate-950 text-slate-200 font-mono font-bold text-[11px] p-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer"
                                     >
-                                        <option value="Qwen-3-Dense">Qwen 3 (Dense)</option>
-                                        <option value="Gemma-4-Ultra">Gemma 4 (Ultra)</option>
+                                        <option value="Qwen-3-Dense">Qwen 3 (dense)</option>
+                                        <option value="Gemma-4-Ultra">Gemma 4 (ultra)</option>
                                         <option value="Mixtral-8x7B-MoE">Mixtral 8x7B</option>
                                     </select>
                                 </div>
@@ -349,9 +349,9 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         onChange={(e) => setCustomHardware(e.target.value)}
                                         className="w-full bg-slate-950 text-slate-200 font-mono font-bold text-[11px] p-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer"
                                     >
-                                        <option value="4x RTX A6000 (Spot)">4x A6000 (Spot)</option>
-                                        <option value="4x L40S (Spot)">4x L40S (Spot)</option>
-                                        <option value="2x RTX 4090 Heterogeneous">2x 4090 Custom</option>
+                                        <option value="4x RTX A6000 (Spot)">4x A6000 (spot)</option>
+                                        <option value="4x L40S (Spot)">4x L40S (spot)</option>
+                                        <option value="2x RTX 4090 Heterogeneous">2x 4090 custom</option>
                                     </select>
                                 </div>
                             </div>
@@ -360,7 +360,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                             <div className="space-y-3 pt-1 border-t border-slate-800">
                                 <div>
                                     <div className="flex justify-between text-[10px] font-medium mb-0.5">
-                                        <span className="text-slate-500">Prompt Length:</span>
+                                        <span className="text-slate-500">Prompt length:</span>
                                         <span className="font-mono font-bold text-sky-400">{promptLength.toLocaleString()}</span>
                                     </div>
                                     <input 
@@ -371,7 +371,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                 </div>
                                 <div>
                                     <div className="flex justify-between text-[10px] font-medium mb-0.5">
-                                        <span className="text-slate-500">Batch Size:</span>
+                                        <span className="text-slate-500">Batch size:</span>
                                         <span className="font-mono font-bold text-sky-400">{batchSize}</span>
                                     </div>
                                     <input 
@@ -427,7 +427,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                         {/* UI Architecture Element: The Comparison Matrix Table */}
                             <div className="p-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-sm font-bold text-white">Price-Performance Comparison Matrix</h3>
+                                    <h3 className="text-sm font-bold text-white">Price-performance comparison matrix</h3>
                                     <p className="text-[11px] text-slate-400">Side-by-side mapping of WLP targets versus your custom infrastructure sandbox.</p>
                                     <p className="text-[10px] text-slate-500 mt-1">📌 Pinning snapshots your configuration so you can continue adjusting variables to compare multiple vectors side-by-side.</p>
                                 </div>
@@ -451,7 +451,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                             }}
                                             className={`px-2.5 py-1 font-mono font-bold border rounded-lg text-[10px] transition-all uppercase tracking-wide flex items-center gap-1 ${pinnedConfig ? 'bg-purple-600 text-white border-purple-500 hover:bg-purple-500' : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'}`}
                                         >
-                                            {pinnedConfig ? `❌ Clear Pin: ${pinnedConfig.model}` : '📌 Pin Configuration'}
+                                            {pinnedConfig ? `❌ Clear pin: ${pinnedConfig.model}` : '📌 Pin configuration'}
                                         </button>
                                     )}
                                 </div>
@@ -461,18 +461,18 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                     <table className="w-full text-left border-collapse text-xs font-mono">
                                         <thead>
                                             <tr className="bg-slate-950 text-slate-500 border-b border-slate-800 text-[10px] uppercase tracking-wider font-bold">
-                                                <th className="p-3.5">Evaluation Metric</th>
-                                                <th className="p-3.5 text-orange-400 bg-orange-950/5">Well-Lit Path Baseline</th>
-                                                {pinnedConfig && <th className="p-3.5 text-purple-400 bg-purple-950/5">Pinned Profile</th>}
-                                                <th className="p-3.5 text-sky-400 bg-sky-950/5">User Custom Config</th>
-                                                <th className="p-3.5 text-right">Parity Delta</th>
+                                                <th className="p-3.5">Evaluation metric</th>
+                                                <th className="p-3.5 text-orange-400 bg-orange-950/5">Well-lit path baseline</th>
+                                                {pinnedConfig && <th className="p-3.5 text-purple-400 bg-purple-950/5">Pinned profile</th>}
+                                                <th className="p-3.5 text-sky-400 bg-sky-950/5">User custom config</th>
+                                                <th className="p-3.5 text-right">Parity delta</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/50 text-slate-200 font-medium">
                                             <tr data-agent-metric="throughput" className="hover:bg-slate-800/20 transition-all">
                                                 <td className="p-3.5 font-bold font-sans flex items-center gap-2">
-                                                    Throughput Rate (TPS)
-                                                    {computedMetrics.customTPS > computedMetrics.wlpTPS && <span className="text-[8px] font-mono bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">🏆 Max Velocity</span>}
+                                                    Throughput rate (TPS)
+                                                    {computedMetrics.customTPS > computedMetrics.wlpTPS && <span className="text-[8px] font-mono bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">🏆 Max velocity</span>}
                                                 </td>
                                                 <td data-agent-value-role="baseline" className="p-3.5 text-slate-400">{computedMetrics.wlpTPS} tok/s</td>
                                                 {pinnedConfig && <td className="p-3.5 text-purple-300 font-bold">{pinnedConfig.tps} tok/s</td>}
@@ -485,8 +485,8 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                             </tr>
                                             <tr data-agent-metric="latency" className="hover:bg-slate-800/20 transition-all">
                                                 <td className="p-3.5 font-bold font-sans flex items-center gap-2">
-                                                    Tail Latency drops (P99)
-                                                    {computedMetrics.customP99 <= computedMetrics.wlpP99 && <span className="text-[8px] font-mono bg-sky-500/20 text-sky-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">⚡ Ultra Low Jitter</span>}
+                                                    Tail latency drops (P99)
+                                                    {computedMetrics.customP99 <= computedMetrics.wlpP99 && <span className="text-[8px] font-mono bg-sky-500/20 text-sky-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">⚡ Ultra low jitter</span>}
                                                 </td>
                                                 <td data-agent-value-role="baseline" className="p-3.5 text-slate-400">{computedMetrics.wlpP99} ms</td>
                                                 {pinnedConfig && <td className="p-3.5 text-purple-300 font-bold">{pinnedConfig.latency} ms</td>}
@@ -499,8 +499,8 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                             </tr>
                                             <tr data-agent-metric="cost" className="hover:bg-slate-800/20 transition-all">
                                                 <td className="p-3.5 font-bold font-sans flex items-center gap-2">
-                                                    Hourly Cluster Cost
-                                                    {computedMetrics.customCostPerHour < computedMetrics.wlpCostPerHour && <span className="text-[8px] font-mono bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">💎 Budget Champion</span>}
+                                                    Hourly cluster cost
+                                                    {computedMetrics.customCostPerHour < computedMetrics.wlpCostPerHour && <span className="text-[8px] font-mono bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">💎 Budget champion</span>}
                                                 </td>
                                                 <td data-agent-value-role="baseline" className="p-3.5 text-slate-400">${computedMetrics.wlpCostPerHour.toFixed(2)}/hr</td>
                                                 {pinnedConfig && <td className="p-3.5 text-purple-300 font-bold">${pinnedConfig.cost.toFixed(2)}/hr</td>}
@@ -513,8 +513,8 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                             </tr>
                                             <tr data-agent-metric="efficiency" className="bg-slate-900/50 hover:bg-slate-800/30 transition-all font-sans">
                                                 <td className="p-3.5 font-extrabold text-white flex items-center gap-1.5">
-                                                    <Zap className="w-3.5 h-3.5 text-amber-400" /> Price-Performance Efficiency
-                                                    {computedMetrics.efficiencyDelta > 0 && <span className="text-[8px] font-mono bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">🔥 Peak ROI Path</span>}
+                                                    <Zap className="w-3.5 h-3.5 text-amber-400" /> Price-performance efficiency
+                                                    {computedMetrics.efficiencyDelta > 0 && <span className="text-[8px] font-mono bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">🔥 Peak ROI path</span>}
                                                 </td>
                                                 <td data-agent-value-role="baseline" className="p-3.5 font-mono text-slate-400 font-semibold">{computedMetrics.wlpEfficiency} tokens/$</td>
                                                 {pinnedConfig && <td className="p-3.5 font-mono font-bold text-purple-450">{pinnedConfig.efficiency} tokens/$</td>}
@@ -533,21 +533,21 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                 <div className="p-5 bg-slate-950/30 flex flex-col space-y-5">
                                     {/* Visual Header Badges Upgrade Row */}
                                     <div className="flex flex-wrap items-center gap-2 select-none font-mono border-b border-slate-800/50 pb-3">
-                                        <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Active Path Characteristics //</span>
+                                        <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Active path characteristics //</span>
                                         {computedMetrics.customTPS > computedMetrics.wlpTPS && (
-                                            <span className="text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md">🏆 Max Velocity</span>
+                                            <span className="text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md">🏆 Max velocity</span>
                                         )}
                                         {computedMetrics.customP99 <= computedMetrics.wlpP99 && (
-                                            <span className="text-[9px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-md">⚡ Ultra Low Jitter</span>
+                                            <span className="text-[9px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-md">⚡ Ultra low jitter</span>
                                         )}
                                         {computedMetrics.customCostPerHour < computedMetrics.wlpCostPerHour && (
-                                            <span className="text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-md">💎 Budget Champion</span>
+                                            <span className="text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-md">💎 Budget champion</span>
                                         )}
                                         {computedMetrics.efficiencyDelta > 0 && (
-                                            <span className="text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-md">🔥 Peak ROI Path</span>
+                                            <span className="text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-md">🔥 Peak ROI path</span>
                                         )}
                                         {computedMetrics.tpsDelta <= 0 && computedMetrics.costDelta >= 0 && (
-                                            <span className="text-[9px] font-bold bg-slate-850 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-md">⚖️ Standard Profile Balance</span>
+                                            <span className="text-[9px] font-bold bg-slate-850 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-md">⚖️ Standard profile balance</span>
                                         )}
                                     </div>
 
@@ -556,7 +556,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         {/* Chart 1: Throughput */}
                                         <div className="p-3 rounded-xl bg-slate-950/50 h-44 flex flex-col">
                                             <div className="flex justify-between items-center mb-1">
-                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Throughput Rate (TPS)</span>
+                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Throughput rate (TPS)</span>
                                                 <span className={`text-[10px] font-mono font-bold ${computedMetrics.tpsDelta >= 0 ? 'text-green-400' : 'text-rose-400'}`}>
                                                     {computedMetrics.tpsDelta >= 0 ? `+${computedMetrics.tpsDelta}%` : `${computedMetrics.tpsDelta}%`}
                                                 </span>
@@ -585,7 +585,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         {/* Chart 2: Latency */}
                                         <div className="p-3 rounded-xl bg-slate-950/50 h-44 flex flex-col">
                                             <div className="flex justify-between items-center mb-1">
-                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Tail Latency (P99)</span>
+                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Tail latency (P99)</span>
                                                 <span className={`text-[10px] font-mono font-bold ${computedMetrics.customP99 <= computedMetrics.wlpP99 ? 'text-green-400' : 'text-rose-400'}`}>
                                                     {computedMetrics.customP99 > computedMetrics.wlpP99 ? `+${Math.round((computedMetrics.customP99-computedMetrics.wlpP99)/computedMetrics.wlpP99*100)}%` : `-${Math.round((computedMetrics.wlpP99-computedMetrics.customP99)/computedMetrics.wlpP99*100)}%`}
                                                 </span>
@@ -614,7 +614,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         {/* Chart 3: Cost */}
                                         <div className="p-3 rounded-xl bg-slate-950/50 h-44 flex flex-col">
                                             <div className="flex justify-between items-center mb-1">
-                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Hourly Cluster Cost</span>
+                                                <span className="text-[10px] font-bold font-sans text-slate-400 uppercase">Hourly cluster cost</span>
                                                 <span className="text-[10px] font-mono font-bold text-green-400">
                                                     {computedMetrics.costDelta}% savings
                                                 </span>
@@ -644,7 +644,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                         <div className="p-3 rounded-xl bg-slate-950/50 h-44 flex flex-col">
                                             <div className="flex justify-between items-center mb-1">
                                                 <span className="text-[10px] font-bold font-sans text-slate-400 uppercase flex items-center gap-1">
-                                                    <Zap className="w-3 h-3 text-amber-400" /> Price-Perf Efficiency
+                                                    <Zap className="w-3 h-3 text-amber-400" /> Price-perf efficiency
                                                 </span>
                                                 <span className={`text-[10px] font-mono font-bold ${computedMetrics.efficiencyDelta >= 0 ? 'text-green-400' : 'text-rose-400'}`}>
                                                     {computedMetrics.efficiencyDelta >= 0 ? `+${computedMetrics.efficiencyDelta}%` : `${computedMetrics.efficiencyDelta}%`}
@@ -685,7 +685,7 @@ export default function StackInsightEngine({ onNavigateBack }) {
                                 onClick={() => setShowInsights(!showInsights)}
                                 className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors cursor-pointer"
                             >
-                                {showInsights ? 'Hide Insights & Actions' : 'Show Insights & Actions'}
+                                {showInsights ? 'Hide insights & actions' : 'Show insights & actions'}
                             </button>
                         </div>
 
@@ -695,18 +695,18 @@ export default function StackInsightEngine({ onNavigateBack }) {
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-5 flex flex-col justify-between min-h-[240px]">
                         <div className="space-y-3 text-xs">
                             <div className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                <Layers className="w-3 h-3" /> Architecture Tips // Specialized Optimization Rules
+                                <Layers className="w-3 h-3" /> Architecture tips // Specialized optimization rules
                             </div>
                             <div className="space-y-2.5">
                                 {customHardware.includes('A6000') && (
                                     <div className="bg-slate-950/40 p-2.5 rounded-lg border-l-2 border-amber-500">
-                                        <div className="font-bold text-slate-200 mb-0.5">PCIe Interconnect Bottlenecks</div>
+                                        <div className="font-bold text-slate-200 mb-0.5">PCIe interconnect bottlenecks</div>
                                         <p className="text-slate-400 text-[11px]">RTX A6000 topologies encounter limits over standard PCIe lanes. Limit execution to batch concurrency limits below 32 to prevent context stall.</p>
                                     </div>
                                 )}
                                 {customQuant.includes('4-bit') && (
                                     <div className="bg-slate-950/40 p-2.5 rounded-lg border-l-2 border-sky-500">
-                                        <div className="font-bold text-slate-200 mb-0.5">Quantization Accuracy</div>
+                                        <div className="font-bold text-slate-200 mb-0.5">Quantization accuracy</div>
                                         <p className="text-slate-400 text-[11px]">4-bit INT4 quantization preserves ~95% accuracy while reducing VRAM footprint by half. Ideal for large models on limited hardware.</p>
                                     </div>
                                 )}
@@ -723,14 +723,14 @@ export default function StackInsightEngine({ onNavigateBack }) {
                         <div className="flex flex-col space-y-2.5 flex-1">
                             <div className="flex justify-between items-center">
                                 <span className="text-[10px] font-extrabold text-sky-400 uppercase tracking-wider flex items-center gap-1">
-                                    <Code className="w-3 h-3" /> Agent Handoff // Automated Downstream Handoff
+                                    <Code className="w-3 h-3" /> Agent handoff // Automated downstream handoff
                                 </span>
                                 <button 
                                     onClick={handleCopyAgentSpec}
                                     className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-all flex items-center gap-1 text-[10px] font-bold"
                                 >
                                     {copiedState ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                    {copiedState ? 'Copied' : 'Copy Specs'}
+                                    {copiedState ? 'Copied' : 'Copy specs'}
                                 </button>
                             </div>
                             <textarea 
@@ -747,26 +747,26 @@ export default function StackInsightEngine({ onNavigateBack }) {
                         <div className="flex flex-col justify-between flex-1 space-y-3.5 text-xs">
                             <div className="space-y-2">
                                 <div className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider flex items-center gap-1 select-none">
-                                    <Cpu className="w-3 h-3" /> Cluster Planner // Tiered Cache Spec Template
+                                    <Cpu className="w-3 h-3" /> Cluster planner // Tiered cache spec template
                                 </div>
                                 <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-400 space-y-1 font-mono">
-                                    <div className="flex justify-between text-slate-300 font-bold border-b border-slate-900 pb-0.5 mb-1"><span className="font-sans text-[10px] uppercase text-slate-500">Document Section</span><span>Metric Target</span></div>
-                                    <div className="flex justify-between"><span>1. Node Cluster Topology</span><span className="text-white font-bold">{customHardware.split(' ')[0]} Specs</span></div>
-                                    <div className="flex justify-between"><span>2. Weight VRAM Boundaries</span><span className="text-white font-bold">{customQuant} Quant</span></div>
-                                    <div className="flex justify-between"><span>3. Throughput Floor Target</span><span className="text-sky-400 font-bold">{computedMetrics.customTPS} tok/s</span></div>
-                                    <div className="flex justify-between"><span>4. Cost-Efficiency Ceiling</span><span className="text-emerald-400 font-bold">{computedMetrics.customEfficiency} t/$</span></div>
+                                    <div className="flex justify-between text-slate-300 font-bold border-b border-slate-900 pb-0.5 mb-1"><span className="font-sans text-[10px] uppercase text-slate-500">Document section</span><span>Metric target</span></div>
+                                    <div className="flex justify-between"><span>1. Node cluster topology</span><span className="text-white font-bold">{customHardware.split(' ')[0]} specs</span></div>
+                                    <div className="flex justify-between"><span>2. Weight VRAM boundaries</span><span className="text-white font-bold">{customQuant} quant</span></div>
+                                    <div className="flex justify-between"><span>3. Throughput floor target</span><span className="text-sky-400 font-bold">{computedMetrics.customTPS} tok/s</span></div>
+                                    <div className="flex justify-between"><span>4. Cost-efficiency ceiling</span><span className="text-emerald-400 font-bold">{computedMetrics.customEfficiency} t/$</span></div>
                                 </div>
                             </div>
                             <div className="flex gap-2">
                                 <button className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-xl shadow transition-all flex justify-center items-center gap-1 uppercase tracking-wider border border-slate-700/60">
-                                    <Download className="w-3.5 h-3.5" /> Export Blueprint
+                                    <Download className="w-3.5 h-3.5" /> Export blueprint
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={() => handleStartDeployment()}
                                     className={`flex-1 py-2 font-bold text-[11px] rounded-xl shadow transition-all flex justify-center items-center gap-1 uppercase tracking-wider border cursor-pointer ${isDeploying ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-sky-600 hover:bg-sky-500 text-white border-sky-500'}`}
                                 >
-                                    <Zap className="w-3.5 h-3.5 text-white" /> {isDeploying ? 'Provisioning Sandbox...' : 'Deploy Cluster'}
+                                    <Zap className="w-3.5 h-3.5 text-white" /> {isDeploying ? 'Provisioning sandbox...' : 'Deploy cluster'}
                                 </button>
                             </div>
                         </div>
@@ -776,11 +776,11 @@ export default function StackInsightEngine({ onNavigateBack }) {
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-5 flex flex-col justify-between min-h-[240px]">
                         <div className="space-y-3 text-xs flex flex-col flex-1">
                             <div className="text-[10px] font-extrabold text-purple-400 uppercase tracking-wider mb-1 flex items-center gap-1 select-none">
-                                <HelpCircle className="w-3 h-3" /> Agent Skills & FAQ // Comparison FAQ
+                                <HelpCircle className="w-3 h-3" /> Agent skills & FAQ // Comparison FAQ
                             </div>
                             <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 no-scrollbar max-h-[180px]">
                                 <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
-                                    <span className="font-bold text-slate-200 block mb-1 text-[11px]">Q: When is 4x RTX A6000 Spot preferred over H100 WLP?</span>
+                                    <span className="font-bold text-slate-200 block mb-1 text-[11px]">Q: When is 4x RTX A6000 spot preferred over H100 WLP?</span>
                                     <p className="text-slate-400 text-[11px] leading-relaxed">A: For sub-peak concurrency batch sizes (&lt;32) where spot infrastructure cost savings (&gt;60%) outweigh the severe PCIe interconnect bandwidth penalty encountered during text loops.</p>
                                 </div>
                                 <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
@@ -805,9 +805,9 @@ export default function StackInsightEngine({ onNavigateBack }) {
                         <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-slate-400 select-none text-[10px] font-bold">
                             <span className="flex items-center gap-2 text-emerald-400">
                                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-                                GKE Sandbox Container Provisioning Hub Stream
+                                GKE sandbox container provisioning hub stream
                             </span>
-                            <span>Borg Service Cluster Node V2 // Live telemetry</span>
+                            <span>Borg service cluster node V2 // Live telemetry</span>
                         </div>
                         <div className="space-y-1 max-h-[150px] overflow-y-auto no-scrollbar select-text pr-1 text-slate-300">
                             {terminalLogs.map((log, index) => (
