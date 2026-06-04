@@ -16,6 +16,8 @@ import express from 'express';
 import compression from 'compression';
 import { GoogleAuth, UserRefreshClient } from 'google-auth-library';
 import fs from 'fs';
+import yaml from 'js-yaml';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -248,6 +250,263 @@ app.all('/api/gcs/*', async (req, res) => {
     } catch (error) {
         console.error('[GCS Proxy Internal Error]', error);
         res.status(500).json({ error: 'Internal GCS Proxy Error', details: error.message });
+    }
+});
+
+const generateUUID = () => crypto.randomUUID();
+
+const parseServerRegressionReport = (content, filePath, metadataContent, jsonContent) => {
+    try {
+        const doc = yaml.load(content);
+        if (!doc) return null;
+
+        const aggregate = doc.results?.request_performance?.aggregate || {};
+        
+        const requests = aggregate.requests || {};
+        const totalReqs = requests.total || 0;
+        const failures = requests.failures || 0;
+        const successRate = totalReqs > 0 ? ((totalReqs - failures) / totalReqs) * 100 : 100;
+        
+        const throughput = aggregate.throughput || {};
+
+        const config = doc.config || {};
+        const latency = aggregate.latency || {};
+
+        const ttft = latency.time_to_first_token || {};
+        const tpot = latency.time_per_output_token || {};
+        const ntpot = latency.normalized_time_per_output_token || {};
+        const itl = latency.inter_token_latency || {};
+
+        const parts = filePath.split('/');
+        const stageMatch = filePath.match(/_stage_(\d+)_/);
+        const stage = stageMatch ? parseInt(stageMatch[1], 10) : 0;
+
+        let durationSeconds = 0;
+        if (jsonContent && (jsonContent.benchmark_time_seconds !== undefined || jsonContent.load_summary?.send_duration !== undefined)) {
+            durationSeconds = jsonContent.benchmark_time_seconds || jsonContent.load_summary?.send_duration || 0;
+        } else {
+            const durationStr = doc.run?.time?.duration || '';
+            const durationMatch = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?/);
+            if (durationMatch) {
+                const h = parseFloat(durationMatch[1] || 0);
+                const m = parseFloat(durationMatch[2] || 0);
+                const s = parseFloat(durationMatch[3] || 0);
+                durationSeconds = h * 3600 + m * 60 + s;
+            }
+        }
+
+        const requestRate = doc.scenario?.load?.standardized?.rate_qps || doc.scenario?.load?.rate_qps || doc.config?.rate_qps || 0;
+        
+        let date = 'Unknown';
+        let runId = 'Unknown';
+        let suite = 'Unknown';
+
+        if (parts[1] === 'optimized-baseline') {
+            date = parts[4] || 'Unknown';
+            runId = parts[5] || 'Unknown';
+            suite = `${parts[1]}/${parts[2]}/${parts[3]}`;
+        } else {
+            date = parts[3] || 'Unknown';
+            runId = parts[4] || 'Unknown';
+            suite = `${parts[1] || 'gke'}/${parts[2] || 'standalone'}`;
+        }
+
+        let model = 'Unknown';
+        let githubRunId = null;
+        if (metadataContent) {
+            try {
+                const metaDoc = yaml.load(metadataContent);
+                if (metaDoc) {
+                    if (metaDoc.model) {
+                        model = metaDoc.model;
+                    }
+                    if (metaDoc.github_run_id) {
+                        githubRunId = String(metaDoc.github_run_id);
+                    }
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        if (model === 'Unknown') {
+            model = config.model || (parts[1] === 'optimized-baseline' ? 'Qwen/Qwen3-32B' : parts[6]) || 'Unknown';
+        }
+        
+        const rawNameLower = filePath.toLowerCase();
+        let precision = config.precision || 'Unknown';
+        if (precision === 'Unknown') {
+            if (rawNameLower.includes('fp8')) precision = 'FP8';
+            else if (rawNameLower.includes('fp16')) precision = 'FP16';
+            else if (rawNameLower.includes('bf16')) precision = 'BF16';
+        }
+
+        let serving_engine = config.serving_engine || config.backend || 'Unknown';
+        if (serving_engine === 'Unknown') {
+            if (rawNameLower.includes('vllm')) serving_engine = 'vLLM';
+            else if (rawNameLower.includes('tgi')) serving_engine = 'TGI';
+            else if (rawNameLower.includes('tensorrt')) serving_engine = 'TensorRT-LLM';
+        }
+
+        return {
+            id: generateUUID(),
+            filePath,
+            date,
+            runId,
+            suite,
+            model,
+            model_name: model,
+            github_run_id: githubRunId,
+            precision,
+            serving_engine,
+            stage,
+            duration: durationSeconds,
+            request_rate: requestRate,
+            success_rate: successRate,
+            qps: throughput.request_rate?.mean || 0,
+            output_token_rate: throughput.output_token_rate?.mean || 0,
+            total_token_rate: throughput.total_token_rate?.mean || 0,
+            input_token_rate: (throughput.total_token_rate?.mean || 0) - (throughput.output_token_rate?.mean || 0),
+            ttft: {
+                p50: (ttft.p50 || 0) * 1000,
+                p90: (ttft.p90 || 0) * 1000,
+                p99: (ttft.p99 || 0) * 1000,
+            },
+            tpot: {
+                p50: (tpot.p50 || 0) * 1000,
+                p90: (tpot.p90 || 0) * 1000,
+                p99: (tpot.p99 || 0) * 1000,
+            },
+            ntpot: {
+                p50: (ntpot.p50 || 0) * 1000,
+                p90: (ntpot.p90 || 0) * 1000,
+                p99: (ntpot.p99 || 0) * 1000,
+            },
+            itl: {
+                p50: (itl.p50 || 0) * 1000,
+                p90: (itl.p90 || 0) * 1000,
+                p99: (itl.p99 || 0) * 1000,
+            }
+        };
+    } catch (e) {
+        return null;
+    }
+};
+
+let regressionsCache = null;
+let lastRegressionsFetch = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+app.get('/api/regressions', async (req, res) => {
+    const bypassCache = req.query.refresh === 'true';
+    const now = Date.now();
+    
+    if (regressionsCache && (now - lastRegressionsFetch < CACHE_TTL) && !bypassCache) {
+        console.log('[Regressions API] Returning cached data');
+        return res.json(regressionsCache);
+    }
+    
+    try {
+        console.log('[Regressions API] Fetching fresh data from GCS...');
+        let client;
+        const adcPath = process.env.GOOGLE_APPLICATION_DEFAULT_CREDENTIALS;
+        if (adcPath && fs.existsSync(adcPath)) {
+            try {
+                const creds = JSON.parse(fs.readFileSync(adcPath, 'utf8'));
+                if (creds.type === 'authorized_user') {
+                    client = new UserRefreshClient({
+                        clientId: creds.client_id,
+                        clientSecret: creds.client_secret,
+                        refreshToken: creds.refresh_token
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse ADC file for explicit auth:', e);
+            }
+        }
+
+        if (!client) {
+            client = await auth.getClient();
+        }
+        const token = await client.getAccessToken();
+        const accessToken = token.token;
+
+        let allItems = [];
+        let pageToken = '';
+        let hasMore = true;
+        
+        while (hasMore) {
+            const listUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o?prefix=regressions/optimized-baseline/` +
+                (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+            const response = await fetch(listUrl, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to list GCS bucket: ${response.status}`);
+            }
+            const data = await response.json();
+            if (data.items) {
+                allItems = allItems.concat(data.items);
+            }
+            if (data.nextPageToken) {
+                pageToken = data.nextPageToken;
+            } else {
+                hasMore = false;
+            }
+        }
+
+        const reportItems = allItems.filter(item => item.name.endsWith('.yaml') && item.name.includes('benchmark_report_v0.2'));
+        const reports = [];
+
+        await Promise.all(reportItems.map(async (item) => {
+            try {
+                const parentPath = item.name.substring(0, item.name.lastIndexOf('/'));
+                const metadataPath = parentPath + '/run_metadata.yaml';
+
+                const filename = item.name.substring(item.name.lastIndexOf('/') + 1);
+                const jsonFilename = filename.replace('benchmark_report_v0.2,_', '').replace('.yaml', '');
+                const jsonPath = parentPath + '/' + jsonFilename;
+
+                const reportUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(item.name)}?alt=media`;
+                const metadataUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(metadataPath)}?alt=media`;
+                const jsonUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(jsonPath)}?alt=media`;
+
+                const [reportRes, metadataRes, jsonRes] = await Promise.all([
+                    fetch(reportUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }),
+                    fetch(metadataUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null),
+                    fetch(jsonUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null)
+                ]);
+
+                if (!reportRes.ok) return;
+
+                const content = await reportRes.text();
+                let metadataContent = null;
+                if (metadataRes && metadataRes.ok) {
+                    metadataContent = await metadataRes.text();
+                }
+
+                let jsonContent = null;
+                if (jsonRes && jsonRes.ok) {
+                    try {
+                        jsonContent = await jsonRes.json();
+                    } catch (err) {
+                        console.warn('Failed to parse JSON content:', jsonPath, err);
+                    }
+                }
+
+                const parsed = parseServerRegressionReport(content, item.name, metadataContent, jsonContent);
+                if (parsed) reports.push(parsed);
+            } catch (e) {
+                console.warn(`Failed to parse file ${item.name}:`, e);
+            }
+        }));
+
+        regressionsCache = reports;
+        lastRegressionsFetch = now;
+        res.json(reports);
+    } catch (err) {
+        console.error('[Regressions API Error]', err);
+        res.status(500).json({ error: 'Failed to fetch regressions', details: err.message });
     }
 });
 

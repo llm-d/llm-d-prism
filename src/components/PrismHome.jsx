@@ -62,7 +62,7 @@ const PrismHome = ({ onNavigate }) => {
                                     <div className="flex justify-between text-xs">
                                          <span className="text-slate-400">Target efficiency</span>
                                          <span className="text-cyan-400 font-mono font-bold">1.4x gain</span>
-                                    </div>
+                                     </div>
                                 </div>
                                 {/* Monochromatic Preview Chart */}
                                 <div className="h-8 flex items-end justify-between space-x-1">
@@ -213,7 +213,7 @@ const PrismHome = ({ onNavigate }) => {
                           Utility Suite
                     </h2>
                     <p className="text-sm text-slate-500 text-center mb-8">Access specialized tools for deeper analysis and schema browsing.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
                         {/* Card 1: Benchmark Browser */}
                         <div 
                             onClick={() => onNavigate('benchmark-browser')}
@@ -225,6 +225,23 @@ const PrismHome = ({ onNavigate }) => {
                                     <h3 className="text-base font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">Benchmark Browser</h3>
                                 </div>
                                 <p className="text-xs text-slate-400 mb-4">Browse and compare benchmark results across runs.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800 hover:bg-cyan-600 text-white rounded-lg font-medium text-xs flex items-center justify-center transition-colors">
+                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+                            </button>
+                        </div>
+
+                        {/* Card 2: Regressions Analysis */}
+                        <div 
+                            onClick={() => onNavigate('regressions-analysis')}
+                            className="bg-slate-900 shadow-xl border border-slate-800 rounded-xl p-4 hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between h-full group"
+                        >
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <Activity className="h-5 w-5 text-cyan-400 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">Regressions Analysis</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-4">Scan Nightly GCS reports and catch performance regressions.</p>
                             </div>
                             <button className="w-full py-2 bg-slate-800 hover:bg-cyan-600 text-white rounded-lg font-medium text-xs flex items-center justify-center transition-colors">
                                 Launch <ArrowRight className="ml-1 h-3 w-3" />

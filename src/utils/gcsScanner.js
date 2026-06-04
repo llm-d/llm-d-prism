@@ -1,5 +1,16 @@
 import yaml from 'js-yaml';
 
+const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
+
 // Target GCS Bucket for Milestone 1
 const MILESTONE1_BUCKET = 'llm-d-benchmarks-m1';
 
@@ -82,7 +93,7 @@ export const parseReport = (content, filePath) => {
         const configOverrides = doc.config_overrides || doc.metadata?.config_overrides || {};
 
         return {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             filePath,
             ...parseFromUri(filePath), // Merge URI fallback defaults
             // Override with YAML data if available
@@ -145,7 +156,7 @@ export const parseFromUri = (filePath) => {
     }
 
     return {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         filePath,
         well_lit_path: wellLitPath,
         scenario_config: scenarioConfig,
@@ -254,7 +265,7 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
         const stage = stageMatch ? parseInt(stageMatch[1], 10) : (doc.scenario?.load?.standardized?.stage || 0);
 
         return {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             filePath,
             scenario,
             model,
@@ -268,6 +279,160 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
             stage,
             qps: throughput.request_rate?.mean || 0,
             output_token_rate: throughput.output_token_rate?.mean || 0,
+            ttft: {
+                p50: (ttft.p50 || 0) * 1000,
+                p90: (ttft.p90 || 0) * 1000,
+                p99: (ttft.p99 || 0) * 1000,
+            },
+            tpot: {
+                p50: (tpot.p50 || 0) * 1000,
+                p90: (tpot.p90 || 0) * 1000,
+                p99: (tpot.p99 || 0) * 1000,
+            },
+            ntpot: {
+                p50: (ntpot.p50 || 0) * 1000,
+                p90: (ntpot.p90 || 0) * 1000,
+                p99: (ntpot.p99 || 0) * 1000,
+            },
+            itl: {
+                p50: (itl.p50 || 0) * 1000,
+                p90: (itl.p90 || 0) * 1000,
+                p99: (itl.p99 || 0) * 1000,
+            }
+        };
+    } catch (e) {
+        console.warn(`YAML Parsing failed for ${filePath}:`, e);
+        return null;
+    }
+};
+
+export const scanRegressions = async () => {
+    try {
+        const response = await fetch('/api/regressions');
+        if (!response.ok) {
+            throw new Error(`Failed to load regressions from server API: ${response.status}`);
+        }
+        return await response.json();
+    } catch (e) {
+        console.error('Regressions GCS Scan Error:', e);
+        return [];
+    }
+};
+
+export const parseRegressionReport = (content, filePath, metadataContent, jsonContent) => {
+    try {
+        const doc = yaml.load(content);
+        if (!doc) return null;
+
+        const aggregate = doc.results?.request_performance?.aggregate || {};
+        
+        const requests = aggregate.requests || {};
+        const totalReqs = requests.total || 0;
+        const failures = requests.failures || 0;
+        const successRate = totalReqs > 0 ? ((totalReqs - failures) / totalReqs) * 100 : 100;
+        
+        const throughput = aggregate.throughput || {};
+
+        const config = doc.config || {};
+        const latency = aggregate.latency || {};
+
+        const ttft = latency.time_to_first_token || {};
+        const tpot = latency.time_per_output_token || {};
+        const ntpot = latency.normalized_time_per_output_token || {};
+        const itl = latency.inter_token_latency || {};
+
+        const parts = filePath.split('/');
+        const stageMatch = filePath.match(/_stage_(\d+)_/);
+        const stage = stageMatch ? parseInt(stageMatch[1], 10) : 0;
+
+        let durationSeconds = 0;
+        if (jsonContent && (jsonContent.benchmark_time_seconds !== undefined || jsonContent.load_summary?.send_duration !== undefined)) {
+            durationSeconds = jsonContent.benchmark_time_seconds || jsonContent.load_summary?.send_duration || 0;
+        } else {
+            const durationStr = doc.run?.time?.duration || '';
+            const durationMatch = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?/);
+            if (durationMatch) {
+                const h = parseFloat(durationMatch[1] || 0);
+                const m = parseFloat(durationMatch[2] || 0);
+                const s = parseFloat(durationMatch[3] || 0);
+                durationSeconds = h * 3600 + m * 60 + s;
+            }
+        }
+
+        const requestRate = doc.scenario?.load?.standardized?.rate_qps || doc.scenario?.load?.rate_qps || doc.config?.rate_qps || 0;
+        
+        let date = 'Unknown';
+        let runId = 'Unknown';
+        let suite = 'Unknown';
+
+        if (parts[1] === 'optimized-baseline') {
+            date = parts[4] || 'Unknown';
+            runId = parts[5] || 'Unknown';
+            suite = `${parts[1]}/${parts[2]}/${parts[3]}`;
+        } else {
+            date = parts[3] || 'Unknown';
+            runId = parts[4] || 'Unknown';
+            suite = `${parts[1] || 'gke'}/${parts[2] || 'standalone'}`;
+        }
+
+        console.log('parseRegressionReport diagnostic - file:', filePath, 'parts[1]:', parts[1], 'suite:', suite);
+
+        let model = 'Unknown';
+        let githubRunId = null;
+        if (metadataContent) {
+            try {
+                const metaDoc = yaml.load(metadataContent);
+                if (metaDoc) {
+                    if (metaDoc.model) {
+                        model = metaDoc.model;
+                    }
+                    if (metaDoc.github_run_id) {
+                        githubRunId = String(metaDoc.github_run_id);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to parse metadataContent:', e);
+            }
+        }
+
+        if (model === 'Unknown') {
+            model = config.model || (parts[1] === 'optimized-baseline' ? 'Qwen/Qwen3-32B' : parts[6]) || 'Unknown';
+        }
+        
+        const rawNameLower = filePath.toLowerCase();
+        let precision = config.precision || 'Unknown';
+        if (precision === 'Unknown') {
+            if (rawNameLower.includes('fp8')) precision = 'FP8';
+            else if (rawNameLower.includes('fp16')) precision = 'FP16';
+            else if (rawNameLower.includes('bf16')) precision = 'BF16';
+        }
+
+        let serving_engine = config.serving_engine || config.backend || 'Unknown';
+        if (serving_engine === 'Unknown') {
+            if (rawNameLower.includes('vllm')) serving_engine = 'vLLM';
+            else if (rawNameLower.includes('tgi')) serving_engine = 'TGI';
+            else if (rawNameLower.includes('tensorrt')) serving_engine = 'TensorRT-LLM';
+        }
+
+        return {
+            id: generateUUID(),
+            filePath,
+            date,
+            runId,
+            suite,
+            model,
+            model_name: model,
+            github_run_id: githubRunId,
+            precision,
+            serving_engine,
+            stage,
+            duration: durationSeconds,
+            request_rate: requestRate,
+            success_rate: successRate,
+            qps: throughput.request_rate?.mean || 0,
+            output_token_rate: throughput.output_token_rate?.mean || 0,
+            total_token_rate: throughput.total_token_rate?.mean || 0,
+            input_token_rate: (throughput.total_token_rate?.mean || 0) - (throughput.output_token_rate?.mean || 0),
             ttft: {
                 p50: (ttft.p50 || 0) * 1000,
                 p90: (ttft.p90 || 0) * 1000,
