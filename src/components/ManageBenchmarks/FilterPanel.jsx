@@ -44,8 +44,8 @@ export const FilterPanel = ({
     const [groupBy, setGroupBy] = useState(() => {
         try {
             const saved = localStorage.getItem('prism_manage_group_by');
-            return saved || 'Origin';
-        } catch { return 'Origin'; }
+            return saved || 'Model';
+        } catch { return 'Model'; }
     });
     
     const [sortByField, setSortByField] = useState(() => {
@@ -73,6 +73,7 @@ export const FilterPanel = ({
         const defaults = {
             hardware: true,
             timestamp: true,
+            stage: true,
             nodes: false,
             islOsl: false,
             maxTput: true,
@@ -193,6 +194,7 @@ export const FilterPanel = ({
                                             <option value="Model">Model</option>
                                             <option value="Hardware">Hardware</option>
                                             <option value="Origin">Source Connections</option>
+                                            <option value="OriginFolder">Origin/Folder</option>
                                         </select>
                                     </div>
                                     <span className="text-xs text-slate-500 font-medium">Sort by:</span>
@@ -231,6 +233,7 @@ export const FilterPanel = ({
                                 {Object.entries({
                                     hardware: 'Hardware',
                                     timestamp: 'Timestamp',
+                                    stage: 'Stage',
                                     nodes: 'Nodes & Parallelism',
                                     islOsl: 'ISL/OSL',
                                     maxTput: 'Max TPUT',

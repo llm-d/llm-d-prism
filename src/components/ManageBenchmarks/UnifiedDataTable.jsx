@@ -14,7 +14,7 @@
 
 import React, { useState } from 'react';
 import { RotateCcw, ChevronDown, ChevronUp, Star, CheckSquare, Square, Check, Pencil, Trash2 } from 'lucide-react';
-import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle } from '../../utils/dashboardHelpers';
+import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel } from '../../utils/dashboardHelpers';
 
 export const UnifiedDataTable = (props) => {
     const [editingRunId, setEditingRunId] = useState(null);
@@ -49,12 +49,13 @@ export const UnifiedDataTable = (props) => {
         hideShowSelectedOnly = false,
         renameClearToUnselectAll = false,
         brv02Runs = [], brv02CustomLabels = {}, setBrv02CustomLabels, removeBrv02Run,
-        groupBy = 'Origin',
+        groupBy = 'Model',
         sortByField = 'timestamp',
         sortDirection = 'desc',
         visibleSpecs = {
             hardware: true,
             timestamp: true,
+            stage: true,
             nodes: false,
             islOsl: false,
             maxTput: true,
@@ -265,11 +266,38 @@ export const UnifiedDataTable = (props) => {
                 valB = getPeakRunMetric(b, sortByField);
             }
             
+            let primaryResult = 0;
             if (typeof valA === 'string' && typeof valB === 'string') {
-                return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                primaryResult = sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            } else {
+                primaryResult = sortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+
+            if (primaryResult !== 0 && !isNaN(primaryResult)) {
+                return primaryResult;
+            }
+
+            // Fallback tie-breaker: Origin/Folder first, then Filename
+            const firstA = a.data?.[0];
+            const firstB = b.data?.[0];
+            
+            const originA = firstA?.source_info?.origin || firstA?.source || '';
+            const originB = firstB?.source_info?.origin || firstB?.source || '';
+            
+            const originCmp = originA.localeCompare(originB);
+            if (originCmp !== 0) {
+                return originCmp;
             }
             
-            return sortDirection === 'asc' ? valA - valB : valB - valA;
+            const fileA = firstA?.source_info?.file_identifier || firstA?.filename || '';
+            const fileB = firstB?.source_info?.file_identifier || firstB?.filename || '';
+            
+            const fileCmp = fileA.localeCompare(fileB);
+            if (fileCmp !== 0) {
+                return fileCmp;
+            }
+
+            return (a.benchmarkKey || '').localeCompare(b.benchmarkKey || '');
         });
     }, [filteredStats, sortByField, sortDirection]);
 
@@ -285,6 +313,10 @@ export const UnifiedDataTable = (props) => {
                 if (groupBy === 'Origin') {
                     const origin = stat.data?.[0]?.source_info?.origin || stat.data?.[0]?.source;
                     key = origin ? getSourceTag(stat.data[0]) : 'Unknown Origin';
+                }
+                if (groupBy === 'OriginFolder') {
+                    const origin = stat.data?.[0]?.source_info?.origin || stat.data?.[0]?.source;
+                    key = origin ? formatOriginLabel(origin) : 'Unknown Origin/Folder';
                 }
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(stat);
@@ -536,6 +568,18 @@ export const UnifiedDataTable = (props) => {
                                                                  }
                                                              }
 
+                                                             if (visibleSpecs.stage) {
+                                                                 const stageVal = benchmarkData[0]?.workload?.stage;
+                                                                 if (stageVal !== undefined && stageVal !== null && stageVal !== '') {
+                                                                     specs.push(
+                                                                         <span key="stage" className="inline-flex items-center gap-1">
+                                                                             <span className="text-slate-400 dark:text-slate-500 font-normal">Stage:</span>
+                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageVal}</span>
+                                                                         </span>
+                                                                     );
+                                                                 }
+                                                             }
+
                                                              if (visibleSpecs.hardware) {
                                                                 specs.push(
                                                                     <span key="hardware" className="inline-flex items-center gap-1">
@@ -711,39 +755,39 @@ export const UnifiedDataTable = (props) => {
                                                                 );
                                                             }
 
-                                                            return (
-                                                                <div className="flex-1 flex flex-col min-w-0">
-                                                                    {/* Line 1: Model Title on left, Source Tag & Date on right */}
-                                                                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 w-full">
-                                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                                            {editingRunId === runId && isBrv02 ? (
-                                                                                <div className="flex-1 flex flex-col gap-0.5 min-w-0" onClick={e => e.stopPropagation()}>
-                                                                                    <input
-                                                                                        autoFocus
-                                                                                        value={editingValue}
-                                                                                        onChange={e => setEditingValue(e.target.value)}
-                                                                                        onBlur={commitEdit}
-                                                                                        onKeyDown={e => {
-                                                                                            if (e.key === 'Enter') commitEdit();
-                                                                                            if (e.key === 'Escape') cancelEdit();
-                                                                                        }}
-                                                                                        className="w-full text-sm font-medium bg-white dark:bg-slate-800 border border-cyan-400 rounded px-1.5 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none"
-                                                                                    />
-                                                                                </div>
-                                                                            ) : (
-                                                                                <div className="flex items-center gap-1 min-w-0">
-                                                                                    <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
-                                                                                        {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
-                                                                                            ? brv02CustomLabels[runId] 
-                                                                                            : (stat.model_name || stat.model || meta.model_name)}
-                                                                                    </span>
-                                                                                    {isBrv02 && (
-                                                                                        <button
-                                                                                            onClick={(e) => {
-                                                                                                e.stopPropagation();
-                                                                                                setEditingRunId(runId);
-                                                                                                setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
-                                                                                            }}
+                                                             return (
+                                                                 <div className="flex-1 flex flex-col min-w-0">
+                                                                     {/* Line 1: Model Title on left, Source Tag & Date on right */}
+                                                                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 w-full">
+                                                                         <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                             {editingRunId === runId && isBrv02 ? (
+                                                                                 <div className="flex-1 flex flex-col gap-0.5 min-w-0" onClick={e => e.stopPropagation()}>
+                                                                                     <input
+                                                                                         autoFocus
+                                                                                         value={editingValue}
+                                                                                         onChange={e => setEditingValue(e.target.value)}
+                                                                                         onBlur={commitEdit}
+                                                                                         onKeyDown={e => {
+                                                                                             if (e.key === 'Enter') commitEdit();
+                                                                                             if (e.key === 'Escape') cancelEdit();
+                                                                                         }}
+                                                                                         className="w-full text-sm font-medium bg-white dark:bg-slate-800 border border-cyan-400 rounded px-1.5 py-0.5 text-slate-800 dark:text-slate-200 focus:outline-none"
+                                                                                     />
+                                                                                 </div>
+                                                                             ) : (
+                                                                                 <div className="flex items-center gap-1 min-w-0">
+                                                                                     <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
+                                                                                         {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
+                                                                                             ? brv02CustomLabels[runId] 
+                                                                                             : (stat.model_name || stat.model || meta.model_name)}
+                                                                                     </span>
+                                                                                     {isBrv02 && (
+                                                                                         <button
+                                                                                             onClick={(e) => {
+                                                                                                 e.stopPropagation();
+                                                                                                 setEditingRunId(runId);
+                                                                                                 setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
+                                                                                             }}
                                                                                             title="Rename run"
                                                                                             className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0"
                                                                                         >
