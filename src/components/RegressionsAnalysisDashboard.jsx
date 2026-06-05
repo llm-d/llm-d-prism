@@ -181,6 +181,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             model: modelName,
                             suite: d.suite || 'gke/standalone',
                             github_run_id: d.github_run_id || null,
+                            github_repository: d.github_repository || null,
+                            hardware: d.hardware || 'Unknown',
                             // Parse actual percentiles from GCS
                             ttft_p50: d.ttft?.p50 || 0,
                             ttft_p90: d.ttft?.p90 || d.tpot?.p90 || 0,
@@ -274,15 +276,34 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
             .filter(s => s.includes('optimized-baseline'));
         if (uniqueSuites.length === 0) {
             return [
-                { id: 'optimized-baseline/gke/kustomize', title: 'Optimized Baseline Gke Kustomize', sig: 'SIG-Serving', desc: 'Baseline optimization regressions tracking' }
+                { 
+                    id: 'optimized-baseline/gke/kustomize', 
+                    title: 'Optimized Baseline', 
+                    infraTag: 'GKE',
+                    methodTag: 'Kustomize',
+                    sig: 'SIG Router', 
+                    desc: 'Baseline optimization regressions tracking' 
+                }
             ];
         }
         return uniqueSuites.map(s => {
-            const title = s.split('/').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+            const parts = s.split('/');
+            const scenarioName = parts[0] ? parts[0].split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Unknown Scenario';
+            const infra = parts[1] ? parts[1].toUpperCase() : null;
+            const method = parts[2] ? parts[2].charAt(0).toUpperCase() + parts[2].slice(1) : null;
+            
+            const pathKey = parts[0];
+            const meta = WELL_LIT_PATH_METADATA[pathKey] || {
+                sig: 'SIG Router',
+                owners: '@gke-runner',
+                infra: 'GKE Cluster'
+            };
             return {
                 id: s,
-                title: title,
-                sig: s.includes('multi') ? 'SIG-Scale' : 'SIG-Serving',
+                title: scenarioName,
+                infraTag: infra,
+                methodTag: method,
+                sig: meta.sig,
                 desc: `Telemetry suite for benchmark scenario: ${s}`
             };
         });
@@ -508,29 +529,24 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                     >
                                         <div 
                                             onClick={() => setSelectedRunMenu(run.id)}
-                                            className="cursor-pointer flex flex-col gap-0.5 w-full"
+                                            className="cursor-pointer flex flex-col gap-1 w-full"
                                         >
-                                            <div className="flex items-center justify-between w-full gap-2">
-                                                <span className="font-bold text-xs font-sans truncate">{run.title}</span>
-                                                <span className="text-[9px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">{run.sig}</span>
+                                            <span className="font-bold text-xs font-sans text-slate-100 truncate">{run.title}</span>
+                                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                                {run.infraTag && (
+                                                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border bg-slate-950 text-cyan-400 border-cyan-950/50 shrink-0">
+                                                        {run.infraTag}
+                                                    </span>
+                                                )}
+                                                {run.methodTag && (
+                                                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border bg-slate-950 text-slate-400 border-slate-800 shrink-0">
+                                                        {run.methodTag}
+                                                    </span>
+                                                )}
+                                                <span className="text-[8px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
+                                                    {run.sig}
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400 leading-snug line-clamp-2 font-sans">{run.desc}</span>
-                                            {isSelected && (
-                                                <div className="flex items-center justify-start gap-3 text-[8px] text-slate-400 pt-0.5">
-                                                    <div className="flex items-center gap-0.5" title="Regression Detected">
-                                                        <AlertTriangle className="w-2.5 h-2.5 text-red-500" />
-                                                        <span>Regression</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-0.5" title="Regression Resolved">
-                                                        <CheckCircle className="w-2.5 h-2.5 text-emerald-500" />
-                                                        <span>Fixed</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-0.5" title="Stable Performance">
-                                                        <Shield className="w-2.5 h-2.5 text-blue-500" />
-                                                        <span>Stable</span>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
 
                                         {isSelected && (
@@ -555,29 +571,33 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                                 }`}>
                                                                     {isRunSelected && '✓'}
                                                                 </div>
-                                                                {runPoint.status === 'regression' ? (
-                                                                    <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
-                                                                ) : runPoint.status === 'fixed' ? (
-                                                                    <CheckCircle className="w-3 h-3 text-emerald-500 shrink-0" />
-                                                                ) : (
-                                                                    <Shield className="w-3 h-3 text-blue-500 shrink-0" />
-                                                                )}
-                                                                <span className="font-mono font-bold text-slate-200">{formatBuildId(runPoint.build)}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <a 
-                                                                    href={runPoint.github_run_id 
-                                                                        ? `https://github.com/llm-d/llm-d/actions/runs/${runPoint.github_run_id}` 
-                                                                        : `https://github.com/llm-d/llm-d/actions/runs/${runPoint.build.replace('b', '')}`
-                                                                    }
-                                                                    target="_blank" 
-                                                                    rel="noopener noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()} // Prevent selecting run when clicking link
-                                                                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5 font-semibold"
-                                                                >
-                                                                    <span>View</span>
-                                                                    <ExternalLink className="w-2.5 h-2.5" />
-                                                                </a>
+                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                    <a 
+                                                                        href={runPoint.github_run_id 
+                                                                            ? `https://github.com/${runPoint.github_repository || 'llm-d/llm-d'}/actions/runs/${runPoint.github_run_id}` 
+                                                                            : `https://github.com/llm-d/llm-d/actions/runs/${runPoint.build.replace('b', '')}`
+                                                                        }
+                                                                        target="_blank" 
+                                                                        rel="noopener noreferrer"
+                                                                        onClick={(e) => e.stopPropagation()} // Prevent selecting run when clicking link
+                                                                        className="font-mono font-bold text-slate-200 hover:text-cyan-400 hover:underline flex items-center gap-1.5 transition-colors w-fit"
+                                                                        title="View GitHub Action Run"
+                                                                    >
+                                                                        <span>{formatBuildId(runPoint.build)}</span>
+                                                                        <ExternalLink className="w-2.5 h-2.5 opacity-60 shrink-0" />
+                                                                    </a>
+                                                                    {runPoint.hardware && runPoint.hardware !== 'Unknown' && (
+                                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                                            <span className={`px-1 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border ${
+                                                                                runPoint.hardware.startsWith('TPU') 
+                                                                                    ? 'bg-purple-950/60 text-purple-300 border-purple-800/40' 
+                                                                                    : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40'
+                                                                            }`}>
+                                                                                {runPoint.hardware}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     );

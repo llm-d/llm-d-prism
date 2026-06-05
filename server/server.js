@@ -255,7 +255,7 @@ app.all('/api/gcs/*', async (req, res) => {
 
 const generateUUID = () => crypto.randomUUID();
 
-const parseServerRegressionReport = (content, filePath, metadataContent, jsonContent) => {
+const parseServerRegressionReport = (content, filePath, metadataContent, jsonContent, planConfigContent) => {
     try {
         const doc = yaml.load(content);
         if (!doc) return null;
@@ -313,9 +313,12 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
 
         let model = 'Unknown';
         let githubRunId = null;
+        let githubRepository = null;
+        let hardware = 'Unknown';
+        let metaDoc = null;
         if (metadataContent) {
             try {
-                const metaDoc = yaml.load(metadataContent);
+                metaDoc = yaml.load(metadataContent);
                 if (metaDoc) {
                     if (metaDoc.model) {
                         model = metaDoc.model;
@@ -323,9 +326,90 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
                     if (metaDoc.github_run_id) {
                         githubRunId = String(metaDoc.github_run_id);
                     }
+                    if (metaDoc.github_repository) {
+                        githubRepository = String(metaDoc.github_repository);
+                    }
+                    let accel = metaDoc.accelerator || null;
+                    if (accel) {
+                        accel = String(accel).toLowerCase();
+                        if (accel === 'tpu-v6' || accel.includes('v6')) {
+                            hardware = 'TPU v6e';
+                        } else if (accel === 'tpu-v7' || accel.includes('v7') || accel.includes('tpu7')) {
+                            hardware = 'TPU v7';
+                        } else if (accel.includes('h100')) {
+                            hardware = 'H100';
+                        } else if (accel.includes('a100')) {
+                            hardware = 'A100';
+                        } else if (accel.includes('l4')) {
+                            hardware = 'L4';
+                        } else if (accel === 'gpu') {
+                            hardware = 'GPU';
+                        } else {
+                            hardware = metaDoc.accelerator;
+                        }
+                    } else if (metaDoc.namespace) {
+                        const ns = String(metaDoc.namespace).toLowerCase();
+                        if (ns.includes('tpu')) {
+                            hardware = 'TPU';
+                        } else if (ns.includes('gpu')) {
+                            hardware = 'GPU';
+                        }
+                    }
                 }
             } catch (e) {
                 // Ignore
+            }
+        }
+
+        // Fallback to plan config.yaml if accelerator is still Unknown or generic TPU/GPU
+        if ((hardware === 'Unknown' || hardware === 'TPU' || hardware === 'GPU') && planConfigContent) {
+            console.log(`[Regressions API] Entering fallback block for run ${runId}. Current hardware: ${hardware}`);
+            try {
+                const planDoc = yaml.load(planConfigContent);
+                const accBackend = planDoc?.kustomize?.acceleratorBackend;
+                console.log(`[Regressions API] accBackend for ${runId}: ${accBackend}`);
+                let inferredHw = null;
+                if (accBackend) {
+                    const match = accBackend.match(/^(tpu-v\d+|h100|a100|l4)/i);
+                    if (match) {
+                        const accel = match[1].toLowerCase();
+                        if (accel.includes('v6')) inferredHw = 'TPU v6e';
+                        else if (accel.includes('v7')) inferredHw = 'TPU v7';
+                        else if (accel.includes('v5')) inferredHw = 'TPU v5e';
+                        else if (accel.includes('h100')) inferredHw = 'H100';
+                        else if (accel.includes('a100')) inferredHw = 'A100';
+                        else if (accel.includes('l4')) inferredHw = 'L4';
+                    }
+                }
+
+                if (!inferredHw) {
+                    const stdType = planDoc?.standalone?.acceleratorType?.labelValue || planDoc?.prefill?.acceleratorType?.labelValue;
+                    if (stdType) {
+                        const match = stdType.match(/(h100|a100|l4|tpu-v\d+)/i);
+                        if (match) {
+                            const accel = match[1].toLowerCase();
+                            if (accel.includes('v6')) inferredHw = 'TPU v6e';
+                            else if (accel.includes('v7')) inferredHw = 'TPU v7';
+                            else if (accel.includes('v5')) inferredHw = 'TPU v5e';
+                            else if (accel.includes('h100')) inferredHw = 'H100';
+                            else if (accel.includes('a100')) inferredHw = 'A100';
+                            else if (accel.includes('l4')) inferredHw = 'L4';
+                        }
+                    }
+                }
+
+                console.log(`[Regressions API] inferredHw for ${runId}: ${inferredHw}`);
+                if (inferredHw) {
+                    const isTpuNs = String(metaDoc?.namespace || '').toLowerCase().includes('tpu');
+                    const isGpuNs = String(metaDoc?.namespace || '').toLowerCase().includes('gpu') || String(metaDoc?.namespace || '').toLowerCase().includes('nvidia');
+                    const isInferredTpu = inferredHw.startsWith('TPU');
+                    if ((isTpuNs && isInferredTpu) || (isGpuNs && !isInferredTpu) || (!isTpuNs && !isGpuNs)) {
+                        hardware = inferredHw;
+                        console.log(`[Regressions API] hardware resolved to: ${hardware}`);
+                    }
+                }
+            } catch (e) {
+                console.error(`[Regressions API] Error in fallback parsing for ${runId}:`, e);
             }
         }
 
@@ -357,7 +441,9 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
             model,
             model_name: model,
             github_run_id: githubRunId,
-            precision,
+            github_repository: githubRepository,
+            hardware: hardware,
+            precision: precision,
             serving_engine,
             stage,
             duration: durationSeconds,
@@ -467,14 +553,22 @@ app.get('/api/regressions', async (req, res) => {
                 const jsonFilename = filename.replace('benchmark_report_v0.2,_', '').replace('.yaml', '');
                 const jsonPath = parentPath + '/' + jsonFilename;
 
+                const parts = item.name.split('/');
+                let configPath = '';
+                if (parts.length >= 6) {
+                    configPath = parts.slice(0, 6).join('/') + '/plan/' + parts[1] + '/config.yaml';
+                }
+
                 const reportUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(item.name)}?alt=media`;
                 const metadataUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(metadataPath)}?alt=media`;
                 const jsonUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(jsonPath)}?alt=media`;
+                const configUrl = configPath ? `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(configPath)}?alt=media` : '';
 
-                const [reportRes, metadataRes, jsonRes] = await Promise.all([
+                const [reportRes, metadataRes, jsonRes, configRes] = await Promise.all([
                     fetch(reportUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }),
                     fetch(metadataUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null),
-                    fetch(jsonUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null)
+                    fetch(jsonUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null),
+                    configUrl ? fetch(configUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } }).catch(() => null) : null
                 ]);
 
                 if (!reportRes.ok) return;
@@ -494,7 +588,16 @@ app.get('/api/regressions', async (req, res) => {
                     }
                 }
 
-                const parsed = parseServerRegressionReport(content, item.name, metadataContent, jsonContent);
+                let planConfigContent = null;
+                if (configRes) {
+                    if (configRes.ok) {
+                        planConfigContent = await configRes.text();
+                    } else {
+                        console.warn(`[Regressions API] Failed to fetch configUrl: ${configUrl} status: ${configRes.status}`);
+                    }
+                }
+
+                const parsed = parseServerRegressionReport(content, item.name, metadataContent, jsonContent, planConfigContent);
                 if (parsed) reports.push(parsed);
             } catch (e) {
                 console.warn(`Failed to parse file ${item.name}:`, e);
