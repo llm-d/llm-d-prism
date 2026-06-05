@@ -38,6 +38,12 @@ import DataInspector from './DataInspector';
 import { useDashboardState } from '../hooks/useDashboardState';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { INTEGRATIONS, getBucket, getRatioType, getEffectiveTp, sortBuckets, findParetoPoint, getNodesAndType, getBenchmarkKey } from '../utils/dashboardHelpers';
+
+const getCleanModelName = (name) => {
+    if (!name) return '';
+    return name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
+};
+
 const USE_CASE_META = {
     "Advanced Customer Support": "(~9k/256)",
     "Chatbot (ShareGPT)": "(~128/128)",
@@ -361,7 +367,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
             const source = d.source || 'local';
             if (!selectedSources.has(source)) return false;
 
-            if (activeFilters.models.size > 0 && !activeFilters.models.has(d.model_name)) return false;
+            if (activeFilters.models.size > 0 && !activeFilters.models.has(getCleanModelName(d.model_name))) return false;
             if (activeFilters.hardware.size > 0 && !activeFilters.hardware.has(d.hardware)) return false;
             if (activeFilters.precisions.size > 0 && !activeFilters.precisions.has(d.precision)) return false;
             if (activeFilters.isl.size > 0 && !activeFilters.isl.has(getBucket(d.isl))) return false;
@@ -855,9 +861,24 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
             pdRatio: {}
         };
 
+        const canonicalModelMap = {};
+        baseData.forEach(d => {
+            if (d.model_name) {
+                const clean = getCleanModelName(d.model_name);
+                const cleanLower = clean.toLowerCase();
+                if (!canonicalModelMap[cleanLower]) {
+                    canonicalModelMap[cleanLower] = clean;
+                }
+            }
+        });
+
         // Helper to check if item satisfies all active filters EXCEPT the ignored category
         const check = (d, ignoreKey) => {
-            if (ignoreKey !== 'models' && activeFilters.models.size > 0 && !activeFilters.models.has(d.model_name)) return false;
+            if (ignoreKey !== 'models' && activeFilters.models.size > 0) {
+                const modelNameLower = getCleanModelName(d.model_name).toLowerCase();
+                const hasMatch = [...activeFilters.models].some(m => m.toLowerCase() === modelNameLower);
+                if (!hasMatch) return false;
+            }
             if (ignoreKey !== 'hardware' && activeFilters.hardware.size > 0 && !activeFilters.hardware.has(d.hardware)) return false;
             if (ignoreKey !== 'machines' && activeFilters.machines.size > 0 && !activeFilters.machines.has(d.machine_type)) return false;
             if (ignoreKey !== 'precisions' && activeFilters.precisions.size > 0 && !activeFilters.precisions.has(d.precision)) return false;
@@ -927,7 +948,11 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         baseData.forEach(d => {
             const modelId = getBenchmarkKey(d); // Unique identifier for the benchmark config
 
-            if (check(d, 'models')) add('models', d.model_name, modelId);
+            if (check(d, 'models')) {
+                const cleanLower = getCleanModelName(d.model_name).toLowerCase();
+                const canonicalName = canonicalModelMap[cleanLower] || getCleanModelName(d.model_name);
+                add('models', canonicalName, modelId);
+            }
 
             if (check(d, 'hardware')) add('hardware', d.hardware, modelId);
 
@@ -1006,7 +1031,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         console.log("[Dashboard] recalculating filteredBySource. baseData length:", baseData.length, "activeFilters:", activeFilters);
         const filtered = baseData.filter(d => {
             // Check modal filters
-            if (activeFilters.models.size > 0 && !activeFilters.models.has(d.model_name)) return false;
+            if (activeFilters.models.size > 0 && !activeFilters.models.has(getCleanModelName(d.model_name))) return false;
             if (activeFilters.hardware.size > 0 && !activeFilters.hardware.has(d.hardware)) return false;
             if (activeFilters.machines.size > 0 && !activeFilters.machines.has(d.machine_type)) return false;
             if (activeFilters.precisions.size > 0 && !activeFilters.precisions.has(d.precision)) return false;
@@ -1112,8 +1137,16 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
             origins: new Set()
         };
 
+        const seenModelsLower = new Set();
         baseData.forEach(d => {
-            if (d.model_name) options.models.add(d.model_name);
+            if (d.model_name) {
+                const clean = getCleanModelName(d.model_name);
+                const cleanLower = clean.toLowerCase();
+                if (!seenModelsLower.has(cleanLower)) {
+                    seenModelsLower.add(cleanLower);
+                    options.models.add(clean);
+                }
+            }
             if (d.hardware && d.hardware !== 'Unknown') {
                 options.hardware.add(d.hardware);
                 options.acc_count.add(getAcceleratorCount(d));

@@ -19,6 +19,11 @@ import { UnifiedDataTable } from './ManageBenchmarks/UnifiedDataTable';
 import DataConnectionsPanel from './DataConnectionsPanel';
 import { INTEGRATIONS, getSourceTag, getBenchmarkKey, getBucket, getRatioType, getAcceleratorCount, getEffectiveTp, sortBuckets } from '../utils/dashboardHelpers';
 
+const getCleanModelName = (name) => {
+    if (!name) return '';
+    return name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
+};
+
 export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboardState, dashboardData }) {
     const {
         showFilterPanel,
@@ -67,8 +72,9 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
 
             // Apply Model filter
             if (activeFilters.models && activeFilters.models.size > 0) {
-                const modelName = d.model_name || d.model;
-                if (!activeFilters.models.has(modelName)) return false;
+                const modelNameLower = getCleanModelName(d.model_name || d.model).toLowerCase();
+                const hasMatch = [...activeFilters.models].some(m => m.toLowerCase() === modelNameLower);
+                if (!hasMatch) return false;
             }
 
             // Apply Hardware filter
@@ -233,8 +239,17 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
 
         const baseData = data.filter(d => selectedSources.has(d.source || 'local'));
 
+        const seenModelsLower = new Set();
         baseData.forEach(d => {
-            if (d.model_name) options.models.add(d.model_name);
+            const modelVal = d.model_name || d.model;
+            if (modelVal) {
+                const clean = getCleanModelName(modelVal);
+                const cleanLower = clean.toLowerCase();
+                if (!seenModelsLower.has(cleanLower)) {
+                    seenModelsLower.add(cleanLower);
+                    options.models.add(clean);
+                }
+            }
             if (d.hardware && d.hardware !== 'Unknown') {
                 options.hardware.add(d.hardware);
                 options.acc_count.add(getAcceleratorCount(d));
@@ -327,6 +342,13 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
 
         const baseData = data.filter(d => selectedSources.has(d.source || 'local'));
 
+        const canonicalModelMap = {};
+        if (filterOptions && filterOptions.models) {
+            filterOptions.models.forEach(m => {
+                canonicalModelMap[m.toLowerCase()] = m;
+            });
+        }
+
         // Helper to check if item satisfies all active filters EXCEPT the ignored category
         const check = (d, ignoreKey) => {
             if (ignoreKey !== 'connectionNames' && activeFilters.connectionNames && activeFilters.connectionNames.size > 0) {
@@ -340,8 +362,9 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
             }
 
             if (ignoreKey !== 'models' && activeFilters.models && activeFilters.models.size > 0) {
-                const modelName = d.model_name || d.model;
-                if (!activeFilters.models.has(modelName)) return false;
+                const modelNameLower = getCleanModelName(d.model_name || d.model).toLowerCase();
+                const hasMatch = [...activeFilters.models].some(m => m.toLowerCase() === modelNameLower);
+                if (!hasMatch) return false;
             }
 
             if (ignoreKey !== 'hardware' && activeFilters.hardware && activeFilters.hardware.size > 0) {
@@ -431,7 +454,12 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
         baseData.forEach(d => {
             const modelId = getBenchmarkKey(d);
 
-            if (d.model_name && check(d, 'models')) add('models', d.model_name, modelId);
+            const mVal = d.model_name || d.model;
+            if (mVal && check(d, 'models')) {
+                const cleanLower = getCleanModelName(mVal).toLowerCase();
+                const canonicalName = canonicalModelMap[cleanLower] || getCleanModelName(mVal);
+                add('models', canonicalName, modelId);
+            }
             if (d.hardware && check(d, 'hardware')) add('hardware', d.hardware, modelId);
             if (d.machine_type && check(d, 'machines')) add('machines', d.machine_type, modelId);
             if (d.precision && check(d, 'precisions')) add('precisions', d.precision, modelId);
@@ -483,7 +511,7 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
         });
 
         return finalCounts;
-    }, [data, selectedSources, activeFilters]);
+    }, [data, selectedSources, activeFilters, filterOptions]);
 
     const toggleFilter = (category, value) => {
         setActiveFilters(prev => {

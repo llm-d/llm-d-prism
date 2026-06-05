@@ -16,6 +16,11 @@ import React, { useState } from 'react';
 import { RotateCcw, ChevronDown, ChevronUp, Star, CheckSquare, Square, Check, Pencil, Trash2 } from 'lucide-react';
 import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel } from '../../utils/dashboardHelpers';
 
+const getCleanModelName = (name) => {
+    if (!name) return '';
+    return name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
+};
+
 export const UnifiedDataTable = (props) => {
     const [editingRunId, setEditingRunId] = useState(null);
     const [editingValue, setEditingValue] = useState('');
@@ -306,9 +311,26 @@ export const UnifiedDataTable = (props) => {
     const groupedStats = React.useMemo(() => {
         const grouped = {};
         if (groupBy !== 'None') {
+            // Build a mapping of lowercase clean model names to their first seen nicely-cased clean name
+            const canonicalCasing = {};
+            sortedStats.forEach(stat => {
+                if (groupBy === 'Model') {
+                    const rawName = stat.model_name || stat.model || 'Unknown Model';
+                    const clean = getCleanModelName(rawName);
+                    const cleanLower = clean.toLowerCase();
+                    if (!canonicalCasing[cleanLower]) {
+                        canonicalCasing[cleanLower] = clean;
+                    }
+                }
+            });
+
             sortedStats.forEach(stat => {
                 let key = 'Other';
-                if (groupBy === 'Model') key = stat.model_name || stat.model || 'Unknown Model';
+                if (groupBy === 'Model') {
+                    const rawName = stat.model_name || stat.model || 'Unknown Model';
+                    const clean = getCleanModelName(rawName);
+                    key = canonicalCasing[clean.toLowerCase()] || clean;
+                }
                 if (groupBy === 'Hardware') key = stat.hardware || 'Unknown Hardware';
                 if (groupBy === 'Origin') {
                     const origin = stat.data?.[0]?.source_info?.origin || stat.data?.[0]?.source;
