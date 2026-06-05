@@ -308,7 +308,7 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                 const parse = s => String(s).split(':').map(Number);
                 const [pa, da] = parse(a);
                 const [pb, db] = parse(b);
-                if (isNaN(pa) || isNaN(pb)) return String(a).localeCompare(String(b));
+                if (isNaN(pa) || isNaN(pb)) return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
                 if (pa !== pb) return pa - pb;
                 return da - db;
             }),

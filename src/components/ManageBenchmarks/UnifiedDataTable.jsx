@@ -273,7 +273,9 @@ export const UnifiedDataTable = (props) => {
             
             let primaryResult = 0;
             if (typeof valA === 'string' && typeof valB === 'string') {
-                primaryResult = sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                primaryResult = sortDirection === 'asc' 
+                    ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) 
+                    : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
             } else {
                 primaryResult = sortDirection === 'asc' ? valA - valB : valB - valA;
             }
@@ -289,7 +291,7 @@ export const UnifiedDataTable = (props) => {
             const originA = firstA?.source_info?.origin || firstA?.source || '';
             const originB = firstB?.source_info?.origin || firstB?.source || '';
             
-            const originCmp = originA.localeCompare(originB);
+            const originCmp = originA.localeCompare(originB, undefined, { numeric: true, sensitivity: 'base' });
             if (originCmp !== 0) {
                 return originCmp;
             }
@@ -297,12 +299,12 @@ export const UnifiedDataTable = (props) => {
             const fileA = firstA?.source_info?.file_identifier || firstA?.filename || '';
             const fileB = firstB?.source_info?.file_identifier || firstB?.filename || '';
             
-            const fileCmp = fileA.localeCompare(fileB);
+            const fileCmp = fileA.localeCompare(fileB, undefined, { numeric: true, sensitivity: 'base' });
             if (fileCmp !== 0) {
                 return fileCmp;
             }
 
-            return (a.benchmarkKey || '').localeCompare(b.benchmarkKey || '');
+            return (a.benchmarkKey || '').localeCompare(b.benchmarkKey || '', undefined, { numeric: true, sensitivity: 'base' });
         });
     }, [filteredStats, sortByField, sortDirection]);
 
