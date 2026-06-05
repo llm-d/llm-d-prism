@@ -25,6 +25,7 @@ import WorkloadCatalog from './components/WorkloadCatalog';
 import LeftNavigation from './components/LeftNavigation';
 import { useDashboardState } from './hooks/useDashboardState';
 import { useDashboardData } from './hooks/useDashboardData';
+import RegressionsAnalysisDashboard from './components/RegressionsAnalysisDashboard';
 
 function App() {
   const mainRef = useRef(null);
@@ -37,7 +38,7 @@ function App() {
     // where the comparison renders inline once brv02 runs are uploaded.
     const view = params.get('view') || 'home';
     return view === 'benchmark-comparison' ? 'benchmark-browser' : view;
-  }); // 'home' | 'benchmark-browser' | 'intelligent-routing' | 'schema-explorer' | 'workload-catalog' | 'guided-analysis'
+  }); // 'home' | 'benchmark-browser' | 'intelligent-routing' | 'schema-explorer' | 'workload-catalog' | 'guided-analysis' | 'regressions-analysis'
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [bypassLoading, setBypassLoading] = useState(false);
@@ -116,6 +117,7 @@ function App() {
               {currentView === 'manage-benchmarks' && <ManageBenchmarks onNavigateBack={() => handleNavigate('benchmark-browser')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
               {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
               {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
+              {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
               {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
             </>
           )}

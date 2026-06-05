@@ -29,6 +29,7 @@ export const CustomXAxis = ({ label, theme, ...props }) => (
         }}
         tickFormatter={(val) => {
             const v = Number(val);
+            if (isNaN(v)) return val;
             return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
         }}
         {...props}
@@ -49,6 +50,7 @@ export const CustomYAxis = ({ label, theme, ...props }) => (
         }}
         tickFormatter={(val) => {
             const v = Number(val);
+            if (isNaN(v)) return val;
             return Math.abs(v) >= 1000 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
         }}
         {...props}

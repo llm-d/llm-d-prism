@@ -12,6 +12,7 @@ import {
     DollarSign,
     FileCode,
     Activity,
+    Zap,
 } from 'lucide-react';
 
 const MENU_GROUPS = [
@@ -33,8 +34,9 @@ const MENU_GROUPS = [
         title: "Utility Suite",
         items: [
             { id: 'benchmark-browser', label: 'Benchmark Browser', icon: BarChart2, view: 'benchmark-browser' },
+            { id: 'regressions-analysis', label: 'Regressions Analysis', icon: Activity, view: 'regressions-analysis' },
             { id: 'schema-browser', label: 'Schema Explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
-            { id: 'workload-catalog', label: 'Workload Catalog', icon: Activity, view: 'workload-catalog', disabled: false },
+            { id: 'workload-catalog', label: 'Workload Catalog', icon: Zap, view: 'workload-catalog', disabled: false },
             { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }
         ]
     },
