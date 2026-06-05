@@ -39,6 +39,12 @@ const MENU_GROUPS = [
             { id: 'workload-catalog', label: 'Workload Catalog', icon: Zap, view: 'workload-catalog', disabled: false },
             { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }
         ]
+    },
+    {
+        title: "Management",
+        items: [
+            { id: 'manage-benchmarks', label: 'Manage Benchmarks', icon: Database, view: 'manage-benchmarks' }
+        ]
     }
 ];
 
@@ -62,7 +68,7 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
     };
 
     return (
-        <aside className={`fixed top-20 left-4 h-[calc(100vh-6rem)] ${isMobileOpen ? 'flex' : 'hidden md:flex'} flex-col border border-slate-800/80 bg-slate-900/80 backdrop-blur-xl rounded-2xl transition-all duration-300 z-50 shadow-2xl ${isExpanded ? 'w-80' : 'w-20'}`}>
+        <aside className={`fixed top-20 left-4 h-[calc(100vh-6rem)] flex flex-col border border-slate-800/80 bg-slate-900/80 backdrop-blur-xl rounded-2xl transition-all duration-300 z-50 shadow-2xl ${isExpanded ? 'w-80' : 'w-20'}`}>
 
             {/* Navigation Items */}
             <div className="flex-1 overflow-y-auto overflow-x-visible py-6 flex flex-col gap-8 px-3 no-scrollbar">

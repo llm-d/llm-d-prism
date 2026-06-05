@@ -134,9 +134,10 @@ const MOCK_FALLBACK_DATA_LEGACY = [
     }
 ];
 
-const Dashboard = ({ onNavigateBack }) => {
+const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dashboardData: propData }) => {
 
-    const dashboardState = useDashboardState();
+    const localState = useDashboardState();
+    const dashboardState = propState || localState;
     const {
         initialState,
         chartColorMode, setChartColorMode,
@@ -156,7 +157,7 @@ const Dashboard = ({ onNavigateBack }) => {
         isLogScaleX, setIsLogScaleX,
         zoomDomain, setZoomDomain,
         showDataPanel, setShowDataPanel,
-        showFilterPanel, setShowFilterPanel,
+        showFilterPanel,
         isInspectorOpen, setIsInspectorOpen,
         qualityInspectOpen, setQualityInspectOpen,
         selectedBenchmarks, setSelectedBenchmarks,
@@ -165,7 +166,8 @@ const Dashboard = ({ onNavigateBack }) => {
         generateShareUrl
     } = dashboardState;
 
-    const dashboardData = useDashboardData(initialState, dashboardState);
+    const localData = useDashboardData(initialState, dashboardState);
+    const dashboardData = propData || localData;
     const {
         data: liveData, setData,
         loading, setLoading,
@@ -220,7 +222,6 @@ const Dashboard = ({ onNavigateBack }) => {
 
     // ... existing state ...
     const [apiError, setApiError] = useState(null);
-    const [bypassLoading, setBypassLoading] = useState(false);
     const [shareToast, setShareToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [hoveredDataPoint, setHoveredDataPoint] = useState(null);
@@ -237,33 +238,7 @@ const Dashboard = ({ onNavigateBack }) => {
 
     // Persistent State
 
-    const [theme, setTheme] = useState('dark');
-
-    // Milestone 1: LLM-D Results Store State
-
-
-    useEffect(() => {
-        localStorage.setItem('enableLLMDResults', JSON.stringify(enableLLMDResults));
-    }, [enableLLMDResults]);
-
-    useEffect(() => {
-        if (baselineBenchmarkKey) {
-            localStorage.setItem('baselineBenchmarkKey', baselineBenchmarkKey);
-        } else {
-            localStorage.removeItem('baselineBenchmarkKey');
-        }
-    }, [baselineBenchmarkKey]);
-
-
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (theme === 'dark') {
-            root.classList.add('dark');
-        } else {
-            root.classList.remove('dark');
-        }
-        localStorage.setItem('app-theme', theme);
-    }, [theme]);
+    const theme = 'dark';
 
     // API KEY Access (Vite vs CRA Compat)
     // Note: User has REACT_APP_ in .env.local but Vite expects VITE_.
@@ -345,28 +320,6 @@ const Dashboard = ({ onNavigateBack }) => {
 
 
     // Google Drive Fetching Logic (Milestone 1)
-
-
-
-
-
-    // Track if we've already fetched the server config so we don't overwrite saved filters on re-renders
-    const hasFetchedConfig = useRef(false);
-
-    // Initial Load & Reload on Toggle
-    useEffect(() => {
-        const initialize = async () => {
-            if (!hasFetchedConfig.current) {
-                hasFetchedConfig.current = true;
-                const config = await fetchConfig();
-                loadAllData(config);
-            } else {
-        // If toggled after initial load, use already-populated React state
-                loadAllData();
-            }
-        };
-        initialize();
-    }, [enableLLMDResults]);
 
     // Auto-select new models when selectedSources changes
     // Auto-select new models when selectedSources changes - DISABLED to respect user selection
@@ -898,11 +851,7 @@ const Dashboard = ({ onNavigateBack }) => {
             servingStack: {},
             optimizations: {},
             origins: {},
-            components: {
-                "Inference Gateway": 1,
-                "Inference Scheduler": 0,
-                "LeaderWorkerSet": 0
-            },
+            components: {},
             pdRatio: {}
         };
 
@@ -955,6 +904,13 @@ const Dashboard = ({ onNavigateBack }) => {
             if (ignoreKey !== 'origins' && activeFilters.origins && activeFilters.origins.size > 0) {
                 const origin = d.source_info?.origin || d.source;
                 if (!activeFilters.origins.has(origin)) return false;
+            }
+
+            if (ignoreKey !== 'components' && activeFilters.components && activeFilters.components.size > 0) {
+                const comps = d.components || d.metadata?.components;
+                if (!comps || !Array.isArray(comps) || comps.length === 0) return false;
+                const hasMatchingComp = comps.some(c => activeFilters.components.has(c));
+                if (!hasMatchingComp) return false;
             }
 
             return true;
@@ -1022,15 +978,20 @@ const Dashboard = ({ onNavigateBack }) => {
             if (origin && check(d, 'origins')) {
                 add('origins', origin, modelId);
             }
+
+            const comps = d.components || d.metadata?.components || [];
+            if (comps.length > 0 && check(d, 'components')) {
+                comps.forEach(c => add('components', c, modelId));
+            }
         });
 
         // Convert Sets to counts
         const finalCounts = {
             models: {}, hardware: {}, machines: {}, precisions: {}, tp: {}, isl: {}, osl: {}, ratio: {}, acc_count: {}, modelServer: {}, useCase: {}, servingStack: {}, optimizations: {}, origins: {},
-            components: tempCounts.components,
+            components: {},
             pdRatio: tempCounts.pdRatio
         };
-        ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins'].forEach(cat => {
+        ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins', 'components'].forEach(cat => {
             Object.keys(tempCounts[cat]).forEach(key => {
                 finalCounts[cat][key] = tempCounts[cat][key].size;
             });
@@ -1092,6 +1053,13 @@ const Dashboard = ({ onNavigateBack }) => {
             if (activeFilters.pdRatio.size > 0) {
                 const ratio = d.pd_ratio || d.metadata?.pd_ratio || 'Aggregated';
                 if (!activeFilters.pdRatio.has(ratio)) return false;
+            }
+
+            if (activeFilters.components && activeFilters.components.size > 0) {
+                const comps = d.components || d.metadata?.components;
+                if (!comps || !Array.isArray(comps) || comps.length === 0) return false;
+                const hasMatchingComp = comps.some(c => activeFilters.components.has(c));
+                if (!hasMatchingComp) return false;
             }
 
             if (activeFilters.origins.size > 0) {
@@ -1699,56 +1667,7 @@ const Dashboard = ({ onNavigateBack }) => {
         setZoomDomain(null);
     }, [chartMode, tputType]);
 
-    // Aggregated Loading State
-    const activeLoading = loading || isRestoringConnections || gcsProfiles.some(p => p.loading);
-
-    if (activeLoading && !bypassLoading) {
-        // Determine what is loading
-        const loadingItems = [];
-
-        const loadingProfiles = gcsProfiles.filter(p => p.loading);
-
-        // Check for GIQ
-        if (loadingProfiles.some(p => p.type === 'giq')) {
-            loadingItems.push("GIQ");
-        }
-
-        // Check for Custom Connections
-        const customProfiles = loadingProfiles.filter(p => p.type === 'gcs');
-
-        if (customProfiles.length > 0) {
-            loadingItems.push("Custom Connection");
-        }
-
-        // Fallback or App Init
-        if (loadingItems.length === 0 && loading) {
-            loadingItems.push("Application Core");
-        }
-
-        const uniqueItems = [...new Set(loadingItems)];
-
-        return (
-            <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 transition-colors space-y-6">
-                <Loader className="animate-spin text-blue-500" size={40} />
-
-                <div className="text-center space-y-2">
-                    <div className="text-lg text-slate-700 dark:text-slate-200 font-semibold">
-                        Loading Benchmark Data...
-                    </div>
-
-                </div>
-
-                <button
-                    onClick={() => setBypassLoading(true)}
-                    className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline transition-colors"
-                >
-                    Skip Waiting (Data may successfully arrive later)
-                </button>
-            </div>
-        );
-    }
-
-
+    const hasLocalBenchmarks = Array.from(selectedSources || []).some(source => source === 'local' || source.startsWith('brv02:'));
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased relative overflow-x-hidden pt-16">
@@ -1791,17 +1710,10 @@ const Dashboard = ({ onNavigateBack }) => {
 
                 <div className="flex items-center space-x-4">
                     <button
-                        onClick={() => setShowFilterPanel(!showFilterPanel)}
-                        className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors flex items-center ${showFilterPanel ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
+                        onClick={() => onNavigate && onNavigate('manage-benchmarks')}
+                        className="px-4 py-2 text-sm font-medium rounded-md border text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700 transition-colors flex items-center"
                     >
-                        <Filter className="w-4 h-4 mr-2" /> {showFilterPanel ? 'Hide filters' : 'Show filters'}
-                    </button>
-                    
-                    <button
-                        onClick={() => setShowDataPanel(!showDataPanel)}
-                        className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors flex items-center ${showDataPanel ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
-                    >
-                        <Database className="w-4 h-4 mr-2" /> Connections
+                        <Database className="w-4 h-4 mr-2" /> Manage
                     </button>
 
                     <a 
@@ -1813,28 +1725,36 @@ const Dashboard = ({ onNavigateBack }) => {
                         <MessageCircle className="w-4 h-4 mr-2" /> Contact us
                     </a>
 
-                    <button 
-                        onClick={() => { 
-                            const shareUrl = generateShareUrl(bucketConfigs, apiConfigs, selectedSources);
-                            navigator.clipboard.writeText(shareUrl).then(() => {
-                                setShareToast(true); 
-                                setToastMessage('Link copied to clipboard!'); 
-                                setTimeout(() => setShareToast(false), 2000); 
-                            }).catch(err => {
-                                setShareToast(true); 
-                                setToastMessage('Failed to copy link'); 
-                                setTimeout(() => setShareToast(false), 2000); 
-                            });
-                        }} 
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
-                    >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
-                        {shareToast && (
-                            <div className="absolute -bottom-10 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
-                                {toastMessage}
+                    <div className="relative group flex">
+                        <button 
+                            onClick={() => { 
+                                if (hasLocalBenchmarks) return;
+                                const shareUrl = generateShareUrl(bucketConfigs, apiConfigs, selectedSources);
+                                navigator.clipboard.writeText(shareUrl).then(() => {
+                                    setShareToast(true); 
+                                    setToastMessage('Link copied to clipboard!'); 
+                                    setTimeout(() => setShareToast(false), 2000); 
+                                }).catch(err => {
+                                    setShareToast(true); 
+                                    setToastMessage('Failed to copy link'); 
+                                    setTimeout(() => setShareToast(false), 2000); 
+                                });
+                            }} 
+                            className={`px-4 py-2 text-sm font-medium rounded-md flex items-center border relative transition-colors ${hasLocalBenchmarks ? 'text-slate-500 bg-slate-800 border-slate-700 cursor-not-allowed' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
+                        >
+                            <Share2 className="w-4 h-4 mr-2" /> Share view 
+                            {shareToast && !hasLocalBenchmarks && (
+                                <div className="absolute -bottom-10 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
+                                    {toastMessage}
+                                </div>
+                            )}
+                        </button>
+                        {hasLocalBenchmarks && (
+                            <div className="absolute -bottom-10 right-0 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                Local benchmark results cannot be shared yet.
                             </div>
                         )}
-                    </button>
+                    </div>
                 </div>
             </header>
 
