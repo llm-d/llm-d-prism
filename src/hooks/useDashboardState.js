@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { defaultState } from '../config/defaultState';
 
 export const getSharedState = () => {
@@ -51,6 +51,7 @@ export const getSharedState = () => {
             sources: parseSet('src'),
             buckets: params.getAll('buckets'),
             giqProjects: params.getAll('apis'),
+            baselineKey: params.get('baseline') || null,
             xAxisMax: parseNum('x_max', Infinity),
             showPerChip: parseBool('per_chip', false),
             showSelectedOnly: parseBool('sel_only', true),
@@ -83,7 +84,22 @@ export const useDashboardState = () => {
     // Chart configs
     const [xAxisMax, setXAxisMax] = useState(initialState.xAxisMax);
     const [showPerChip, setShowPerChip] = useState(initialState.showPerChip);
-    const [showSelectedOnly, setShowSelectedOnly] = useState(initialState.showSelectedOnly);
+    const [showSelectedOnly, setShowSelectedOnly] = useState(() => {
+        if (initialState.showSelectedOnly !== undefined && initialState.showSelectedOnly !== defaultState.showSelectedOnly) {
+            return initialState.showSelectedOnly;
+        }
+        try {
+            const saved = localStorage.getItem('prism_show_selected_only');
+            return saved !== null ? saved === 'true' : initialState.showSelectedOnly;
+        } catch { return initialState.showSelectedOnly; }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('prism_show_selected_only', showSelectedOnly.toString());
+        } catch (e) { console.warn(e); }
+    }, [showSelectedOnly]);
+
     const [showPareto, setShowPareto] = useState(initialState.showPareto);
     const [showLabels, setShowLabels] = useState(initialState.showLabels);
     const [showDataLabels, setShowDataLabels] = useState(initialState.showDataLabels);
@@ -99,7 +115,46 @@ export const useDashboardState = () => {
     const [qualityInspectOpen, setQualityInspectOpen] = useState(false);
 
     // Benchmark selection
-    const [selectedBenchmarks, setSelectedBenchmarks] = useState(initialState.selectedModels);
+    const [selectedBenchmarks, setSelectedBenchmarks] = useState(() => {
+        if (initialState.selectedModels && initialState.selectedModels.size > 0) return initialState.selectedModels;
+        try {
+            const saved = localStorage.getItem('prism_selected_benchmarks');
+            if (saved) {
+                return new Set(JSON.parse(saved));
+            }
+        } catch (e) {
+            console.warn("Failed to load selected benchmarks from local storage", e);
+        }
+        return initialState.selectedModels || new Set();
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('prism_selected_benchmarks', JSON.stringify(Array.from(selectedBenchmarks)));
+        } catch (e) {
+            console.warn("Failed to save selected benchmarks to local storage", e);
+        }
+    }, [selectedBenchmarks]);
+
+    // Baseline key — when set, the matching benchmark is highlighted on the
+    // scatter chart and other points show a %diff badge in the tooltip.
+    const [baselineBenchmarkKey, setBaselineBenchmarkKey] = useState(() => {
+        if (initialState.baselineKey) return initialState.baselineKey;
+        try {
+            const saved = localStorage.getItem('baselineBenchmarkKey');
+            return saved || null;
+        } catch { return null; }
+    });
+
+    useEffect(() => {
+        try {
+            if (baselineBenchmarkKey) {
+                localStorage.setItem('baselineBenchmarkKey', baselineBenchmarkKey);
+            } else {
+                localStorage.removeItem('baselineBenchmarkKey');
+            }
+        } catch { /* ignore */ }
+    }, [baselineBenchmarkKey]);
 
     // Derive initial modelsFilter from selectedModels if modelsFilter is empty
     const deriveInitialModelsFilter = () => {
@@ -126,24 +181,60 @@ export const useDashboardState = () => {
     };
 
     // Active Filters
-    const [activeFilters, setActiveFilters] = useState({
-        models: deriveInitialModelsFilter(),
-        hardware: initialState.hwFilter || new Set(),
-        machines: initialState.machFilter || new Set(),
-        tp: initialState.tpFilter || new Set(),
-        precisions: initialState.precFilter || new Set(),
-        isl: initialState.islFilter || new Set(),
-        osl: initialState.oslFilter || new Set(),
-        ratio: initialState.ratioFilter || new Set(),
-        modelServer: initialState.msFilter || new Set(),
-        servingStack: initialState.ssFilter || new Set(),
-        components: initialState.compFilter || new Set(),
-        origins: initialState.originFilter || new Set(),
-        pdRatio: initialState.pdRatioFilter || new Set(),
-        acc_count: initialState.accFilter || new Set(),
-        useCase: initialState.ucFilter || new Set(),
-        optimizations: initialState.optFilter || new Set()
+    const [activeFilters, setActiveFilters] = useState(() => {
+        const defaultFilters = {
+            models: deriveInitialModelsFilter(),
+            hardware: initialState.hwFilter || new Set(),
+            machines: initialState.machFilter || new Set(),
+            tp: initialState.tpFilter || new Set(),
+            precisions: initialState.precFilter || new Set(),
+            isl: initialState.islFilter || new Set(),
+            osl: initialState.oslFilter || new Set(),
+            ratio: initialState.ratioFilter || new Set(),
+            modelServer: initialState.msFilter || new Set(),
+            servingStack: initialState.ssFilter || new Set(),
+            components: initialState.compFilter || new Set(),
+            origins: initialState.originFilter || new Set(),
+            connectionNames: new Set(),
+            pdRatio: initialState.pdRatioFilter || new Set(),
+            acc_count: initialState.accFilter || new Set(),
+            useCase: initialState.ucFilter || new Set(),
+            optimizations: initialState.optFilter || new Set()
+        };
+        
+        // If there are no initial state filters (e.g. from URL), try loading from local storage
+        if (!initialState.hwFilter && !initialState.machFilter && !initialState.tpFilter) {
+            try {
+                const savedStr = localStorage.getItem('prism_active_filters');
+                if (savedStr) {
+                    const saved = JSON.parse(savedStr);
+                    const loadedFilters = { ...defaultFilters };
+                    for (const key of Object.keys(saved)) {
+                        if (Array.isArray(saved[key])) {
+                            loadedFilters[key] = new Set(saved[key]);
+                        }
+                    }
+                    return loadedFilters;
+                }
+            } catch (e) {
+                console.warn("Failed to load active filters from local storage", e);
+            }
+        }
+        
+        return defaultFilters;
     });
+
+    useEffect(() => {
+        try {
+            const filtersToSave = {};
+            for (const key of Object.keys(activeFilters)) {
+                filtersToSave[key] = Array.from(activeFilters[key]);
+            }
+            localStorage.setItem('prism_active_filters', JSON.stringify(filtersToSave));
+        } catch (e) {
+            console.warn("Failed to save active filters to local storage", e);
+        }
+    }, [activeFilters]);
 
     const generateShareUrl = useCallback((
         bucketConfigs,
@@ -165,6 +256,7 @@ export const useDashboardState = () => {
         params.set('points', showDataLabels);
         
         if (selectedBenchmarks.size > 0) [...selectedBenchmarks].forEach(v => params.append('models', v));
+        if (baselineBenchmarkKey) params.set('baseline', baselineBenchmarkKey);
         if (activeFilters.models.size > 0) [...activeFilters.models].forEach(v => params.append('f_models', v));
         if (activeFilters.hardware.size > 0) [...activeFilters.hardware].forEach(v => params.append('f_hw', v));
         if (activeFilters.tp.size > 0) [...activeFilters.tp].forEach(v => params.append('f_tp', v));
@@ -188,9 +280,9 @@ export const useDashboardState = () => {
 
         return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     }, [
-        chartMode, tputType, costMode, latType, xAxisMax, showPerChip, 
+        chartMode, tputType, costMode, latType, xAxisMax, showPerChip,
         showSelectedOnly, showPareto, showLabels, showDataLabels,
-        selectedBenchmarks, activeFilters
+        selectedBenchmarks, activeFilters, baselineBenchmarkKey
     ]);
 
     return {
@@ -223,6 +315,7 @@ export const useDashboardState = () => {
 
         // Selection
         selectedBenchmarks, setSelectedBenchmarks,
+        baselineBenchmarkKey, setBaselineBenchmarkKey,
         activeFilters, setActiveFilters,
 
         generateShareUrl

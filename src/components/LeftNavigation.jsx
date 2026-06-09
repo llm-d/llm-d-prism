@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Home, 
-    BarChart2, 
-    Route, 
-    Compass, 
-    Database, 
-    Lightbulb, 
+import {
+    Home,
+    BarChart2,
+    Route,
+    Compass,
+    Database,
+    Lightbulb,
     Layers,
     Split,
     Brain,
@@ -25,7 +25,7 @@ const MENU_GROUPS = [
     {
         title: "Well-lit paths",
         items: [
-            { id: 'inference-scheduling', label: 'Intelligent routing', icon: Route, view: 'inference-scheduling' },
+            { id: 'intelligent-routing', label: 'Intelligent routing', icon: Route, view: 'intelligent-routing' },
             { id: 'prefix-cache-offloading', label: 'Prefix cache offloading', icon: Database, view: 'prefix-cache-offloading' },
             { id: 'pd-disaggregation', label: 'Prefill / decode (P/D) disagg', icon: Split, view: 'pd-disaggregation', disabled: true },
             { id: 'wide-ep', label: 'Wide expert parallelism', icon: Brain, view: 'wide-ep', disabled: true }
@@ -45,6 +45,12 @@ const MENU_GROUPS = [
             { id: 'workload-catalog', label: 'Workload catalog', icon: Zap, view: 'workload-catalog', disabled: false },
             { id: 'regressions-analysis', label: 'Regressions & analysis', icon: Activity, view: 'regressions-analysis' },
             { id: 'value-analysis', label: 'Value analysis', icon: TrendingUp, view: 'value-analysis', disabled: true }
+        ]
+    },
+    {
+        title: "Management",
+        items: [
+            { id: 'manage-benchmarks', label: 'Manage Benchmarks', icon: Database, view: 'manage-benchmarks' }
         ]
     }
 ];
@@ -69,7 +75,7 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
     };
 
     return (
-        <aside className={`fixed top-20 left-4 h-[calc(100vh-6rem)] ${isMobileOpen ? 'flex' : 'hidden md:flex'} flex-col border border-slate-800/80 bg-slate-900/80 backdrop-blur-xl rounded-2xl transition-all duration-300 z-50 shadow-2xl ${isExpanded ? 'w-80' : 'w-20'}`}>
+        <aside className={`fixed top-20 left-4 h-[calc(100vh-6rem)] flex flex-col border border-slate-800/80 bg-slate-900/80 backdrop-blur-xl rounded-2xl transition-all duration-300 z-50 shadow-2xl ${isExpanded ? 'w-80' : 'w-20'}`}>
 
             {/* Navigation Items */}
             <div className="flex-1 overflow-y-auto overflow-x-visible py-6 flex flex-col gap-8 px-3 no-scrollbar">

@@ -14,6 +14,7 @@
 
 import React from "react";
 import { ChevronDown, ChevronUp, Cloud, Eye, EyeOff, Trash2, RefreshCw, Loader, Plus, Database } from "lucide-react";
+import { getSourceTypeStyle } from "../../utils/dashboardHelpers";
 
 export const CustomGCSPanel = ({
     connectionType, setConnectionType, availableSources, gcsProfiles, 
@@ -68,16 +69,24 @@ export const CustomGCSPanel = ({
                                  <div className="p-4">
                                      <div className="flex justify-between items-start mb-2">
                                          <div className="flex items-center gap-2">
-                                             <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-900/20">
-                                                 <Cloud size={16} className="text-blue-600 dark:text-blue-400" />
-                                             </div>
-                                             <div>
-                                                 <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
-                                                 <div className="flex items-center gap-2">
-                                                      <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom GCS</span>
-                                                      <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
-                                                 </div>
-                                             </div>
+                                              <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-900/20">
+                                                  <Cloud size={16} className="text-blue-600 dark:text-blue-400" />
+                                              </div>
+                                              <div>
+                                                  <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
+                                                  <div className="flex items-center gap-1">
+                                                       <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom GCS</span>
+                                                       {(() => {
+                                                           const style = getSourceTypeStyle('Cloud');
+                                                           return (
+                                                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                                   Cloud
+                                                               </span>
+                                                           );
+                                                       })()}
+                                                       <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
+                                                  </div>
+                                              </div>
                                          </div>
                                     <div className="flex items-center gap-2">
                                         <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1"></div>
@@ -149,16 +158,24 @@ export const CustomGCSPanel = ({
                                  <div className="p-4">
                                      <div className="flex justify-between items-start mb-2">
                                          <div className="flex items-center gap-2">
-                                             <div className="p-1.5 rounded-md bg-orange-100 dark:bg-orange-900/20">
-                                                 <Cloud size={16} className="text-orange-600 dark:text-orange-400" />
-                                             </div>
-                                             <div>
-                                                 <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
-                                                 <div className="flex items-center gap-2">
-                                                      <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom AWS</span>
-                                                      <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
-                                                 </div>
-                                             </div>
+                                              <div className="p-1.5 rounded-md bg-orange-100 dark:bg-orange-900/20">
+                                                  <Cloud size={16} className="text-orange-600 dark:text-orange-400" />
+                                              </div>
+                                              <div>
+                                                  <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
+                                                  <div className="flex items-center gap-1">
+                                                       <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom AWS</span>
+                                                       {(() => {
+                                                           const style = getSourceTypeStyle('Cloud');
+                                                           return (
+                                                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                                   Cloud
+                                                               </span>
+                                                           );
+                                                       })()}
+                                                       <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
+                                                  </div>
+                                              </div>
                                          </div>
                                     <div className="flex items-center gap-2">
                                         <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1"></div>

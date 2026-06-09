@@ -35,13 +35,14 @@ const PrismHome = ({ onNavigate }) => {
                     </h2>
                     <p className="text-xs text-slate-500 text-center mb-8">Underlying building blocks and features powering the workload suites.</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-[96%] mx-auto">
-                        {/* Path 1: Inference scheduling (Primary M1 Path - Popping) */}
+                        {/* Path 1: Intelligent Routing (Primary M1 Path - Popping) */}
                         <div 
-                            onClick={() => onNavigate('inference-scheduling')}
-                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-3.5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
+                            onClick={() => onNavigate('intelligent-routing')}
+                            className="group relative bg-slate-900/80 backdrop-blur-xl shadow-2xl border-2 border-cyan-500 rounded-2xl p-5 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] transition-all duration-500 cursor-pointer flex flex-col h-full overflow-hidden"
                         >
-                            <h3 className="text-sm font-bold mb-1.5 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Intelligent routing
+                            <div className="absolute top-0 right-0 text-xs px-2.5 py-1 bg-cyan-500 text-white rounded-bl-lg font-mono font-bold tracking-wide shadow-lg">PRIMARY PATH</div>
+                            <h3 className="text-lg font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors">
+                                Intelligent Routing
                             </h3>
                             <div className="flex flex-wrap gap-1 mb-2">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Prefix-cache</span>
@@ -61,6 +62,10 @@ const PrismHome = ({ onNavigate }) => {
                                     <div className="flex justify-between text-[10px]">
                                          <span className="text-slate-400">Context scale</span>
                                          <span className="text-cyan-400 font-mono font-bold">163k Tok</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px]">
+                                         <span className="text-slate-400">Target efficiency</span>
+                                         <span className="text-cyan-400 font-mono font-bold">1.4x gain</span>
                                     </div>
                                 </div>
                                 {/* Monochromatic Preview Chart */}
@@ -269,7 +274,7 @@ const PrismHome = ({ onNavigate }) => {
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
                         {/* Card 1: Benchmark Browser */}
                         <div 
-                            onClick={() => onNavigate('advanced')}
+                            onClick={() => onNavigate('benchmark-browser')}
                             className="bg-slate-900 shadow-xl border border-slate-800 rounded-xl p-3.5 hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between h-full group"
                         >
                             <div>
@@ -280,6 +285,23 @@ const PrismHome = ({ onNavigate }) => {
                                 <p className="text-[10px] text-slate-400 mb-4">Browse and compare benchmark results across runs.</p>
                             </div>
                             <button className="w-full py-1.5 bg-slate-800 hover:bg-emerald-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center transition-colors">
+                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+                            </button>
+                        </div>
+
+                        {/* Card 2: Regressions Analysis */}
+                        <div 
+                            onClick={() => onNavigate('regressions-analysis')}
+                            className="bg-slate-900 shadow-xl border border-slate-800 rounded-xl p-4 hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between h-full group"
+                        >
+                            <div>
+                                <div className="flex items-center mb-2">
+                                    <Activity className="h-5 w-5 text-cyan-400 mr-2" />
+                                    <h3 className="text-base font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">Regressions Analysis</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-4">Scan Nightly GCS reports and catch performance regressions.</p>
+                            </div>
+                            <button className="w-full py-2 bg-slate-800 hover:bg-cyan-600 text-white rounded-lg font-medium text-xs flex items-center justify-center transition-colors">
                                 Launch <ArrowRight className="ml-1 h-3 w-3" />
                             </button>
                         </div>
@@ -427,14 +449,22 @@ const PrismHome = ({ onNavigate }) => {
                              </div>
 
                              {/* Llm-d Results Store */}
-                             <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-3 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-blue-500/50 transition-all">
-                                 <h4 className="text-sm font-bold text-blue-400 mb-0.5">llm-d results store</h4>
-                                 <p className="text-sm text-slate-400">Scalable OSS store for unified schema results.</p>
-                             </div>
+                              <a 
+                                  href="https://github.com/llm-d/llm-d-benchmark/tree/main/llmdbenchmark/result_store"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-3 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-blue-500/50 transition-all cursor-pointer no-underline"
+                              >
+                                  <h4 className="text-sm font-bold text-blue-400 mb-0.5 flex items-center justify-center gap-1">
+                                      llm-d Results Store
+                                      <Link className="h-3 w-3 text-blue-400 group-hover:scale-110 transition-transform" />
+                                  </h4>
+                                  <p className="text-sm text-slate-400">Scalable OSS store for unified schema results.</p>
+                              </a>
 
                              {/* Standard Benchmark Format / Report */}
                              <a 
-                                 href="https://github.com/llm-d/llm-d-benchmark/blob/main/benchmark_report"
+                                 href="https://github.com/llm-d/llm-d-benchmark/blob/main/llmdbenchmark/analysis/benchmark_report/README.md"
                                  target="_blank"
                                  rel="noopener noreferrer"
                                  className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-2 w-full max-w-[320px] h-[90px] flex flex-col items-center justify-center text-center group hover:border-cyan-500/50 transition-all cursor-pointer"

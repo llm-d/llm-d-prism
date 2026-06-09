@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from 'react';
-import { Zap, Cloud, FileJson, Target, ExternalLink } from 'lucide-react';
+import { Zap, Cloud, FileJson, Target, ExternalLink, GitCompare } from 'lucide-react';
 
 export const USE_CASE_META = {
     "Advanced Customer Support": "(~9k/256)",
@@ -96,6 +96,16 @@ export const INTEGRATIONS = [
         description: 'Aggregate quality metrics from open quality leaderboards (Arena.ai, Simple Benchmark Viewer).',
         icon: Target,
         color: 'text-indigo-500'
+    },
+    {
+        id: 'benchmark_report_v02',
+        name: 'Local Benchmark Comparison',
+        type: 'v0.2',
+        tags: ['Local', 'Compare'],
+        description: 'Upload local benchmark_report_v0.2 YAML files from llm-d-benchmark runs. Select a baseline and compare performance and observability metrics across runs.',
+        icon: GitCompare,
+        color: 'text-violet-500',
+        alwaysExpanded: true,
     }
 ];
 
@@ -272,6 +282,65 @@ export const getSourceTag = (d) => {
     return s.split(':')[0].toUpperCase();
 };
 
+export const getSourceType = (d) => {
+    if (!d) return 'Built-in';
+    const s = typeof d === 'string' ? d : d.source;
+    if (!s) return 'Built-in';
+    
+    if (s === 'local') return 'Built-in';
+    if (s.startsWith('giq:')) return 'Cloud';
+    if (s.startsWith('gcs:') || s.startsWith('aws:')) return 'Cloud';
+    if (s.startsWith('lpg:') || s === 'infperf' || s === 'inference-perf') return 'Local';
+    if (s.startsWith('brv02:')) return 'Local';
+    if (s === 'llm-d-results:google_drive' || s === 'llmd_drive') return 'Built-in';
+    if (s === 'quality_scores') return 'Built-in';
+    
+    return 'Built-in';
+};
+
+export const getIntegrationSourceType = (id) => {
+    switch (id) {
+        case 'google_giq':
+            return 'Cloud';
+        case 'llmd_results':
+            return 'Built-in';
+        case 'lpg_lifecycle':
+            return 'Local';
+        case 'local_sample':
+            return 'Built-in';
+        case 'quality_scores':
+            return 'Built-in';
+        case 'benchmark_report_v02':
+            return 'Local';
+        default:
+            return 'Built-in';
+    }
+};
+
+export const getSourceTypeStyle = (type) => {
+    switch (type) {
+        case 'Local':
+            return {
+                bg: 'bg-amber-100 dark:bg-amber-950/40',
+                text: 'text-amber-800 dark:text-amber-400',
+                border: 'border-amber-200 dark:border-amber-900/30'
+            };
+        case 'Cloud':
+            return {
+                bg: 'bg-cyan-100 dark:bg-cyan-950/40',
+                text: 'text-cyan-800 dark:text-cyan-400',
+                border: 'border-cyan-200 dark:border-cyan-900/30'
+            };
+        case 'Built-in':
+        default:
+            return {
+                bg: 'bg-emerald-100 dark:bg-emerald-950/40',
+                text: 'text-emerald-800 dark:text-emerald-400',
+                border: 'border-emerald-200 dark:border-emerald-900/30'
+            };
+    }
+};
+
 export const formatOriginLabel = (origin) => {
     if (!origin) return 'Unknown Origin';
     if (origin === 'local_disk') return 'LOCAL: local_disk';
@@ -280,6 +349,7 @@ export const formatOriginLabel = (origin) => {
     if (origin.startsWith('infperf:')) return origin; 
     if (origin === 'llm-d-results:google_drive' || origin === 'llmd_drive') return 'llm-d Results Store';
     if (origin.startsWith('gcs:')) return `GCS: ${origin.substring(4)}`;
+    if (origin.startsWith('brv02:')) return `BRV0.2: ${origin.substring(6)}`;
 
     if (origin.startsWith('giq:')) return `GIQ: ${origin.substring(4)}`;
     if (origin === 'quality_scores') return 'Quality: Leaderboards';

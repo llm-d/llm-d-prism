@@ -3,7 +3,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
-import InferenceSchedulingChart from './InferenceSchedulingChart';
+import IntelligentRoutingChart from './IntelligentRoutingChart';
 import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu, BarChart2, Table, Code, BookOpen } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 import { CustomXAxis, CustomYAxis, CustomLabel, CustomChartTooltip, ChartCard } from './common';
@@ -290,6 +290,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
     const [reportsMeta, setReportsMeta] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
+    const [workloadConfig, setWorkloadConfig] = useState(null);
 
     const handleCopy = (text, key) => {
         navigator.clipboard.writeText(text);
@@ -332,6 +333,17 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
             if (reports && reports.length > 0) {
                 setReportsMeta(reports[0]);
             }
+
+            try {
+                const configRes = await fetch('https://raw.githubusercontent.com/kubernetes-sigs/inference-perf/main/workload-catalog/interactive-chat/config.json');
+                if (configRes.ok) {
+                    const config = await configRes.json();
+                    setWorkloadConfig(config);
+                }
+            } catch (e) {
+                console.warn('Failed to fetch interactive-chat config:', e);
+            }
+
             setLoading(false);
         };
         fetchData();
@@ -754,7 +766,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         onClick={() => {
                             const params = new URLSearchParams();
                             params.set('share', '1');
-                            params.set('view', 'inference-scheduling');
+                            params.set('view', 'intelligent-routing');
                             params.set('hw', hardware);
                             params.set('scale', latencyScale);
                             const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
@@ -875,7 +887,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <p className="text-[10px] text-slate-500">More accurate cache tracking</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <a href="https://llm-d.ai/docs/guide/Installation/precise-prefix-cache-aware" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                    <a href="https://github.com/llm-d/llm-d/tree/main/guides/precise-prefix-cache-routing" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
@@ -890,7 +902,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <p className="text-[10px] text-slate-500">Machine learning guided routing</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <a href="https://llm-d.ai/docs/guide/Installation/predicted-latency-based-scheduling" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                    <a href="https://github.com/llm-d/llm-d/tree/main/guides/predicted-latency-routing" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
@@ -986,7 +998,11 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     </div>
                                     <div>
                                         <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Input / output sequence length</span>
-                                        <span className="font-mono font-bold text-white truncate block text-xs">7200 / 1000</span>
+                                        <span className="font-mono font-bold text-white truncate block text-xs">
+                                            {workloadConfig 
+                                                ? `${workloadConfig.input_sequence_length.mean} / ${workloadConfig.output_sequence_length.max}`
+                                                : "7200 / 1000"}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -1077,8 +1093,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                 </div>
 
                 <div className="flex flex-col gap-6 w-full">
-                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="ntpot" activeTiers={activeTiers} />
-                    <InferenceSchedulingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} activeTiers={activeTiers} />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ntpot" activeTiers={activeTiers} />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} activeTiers={activeTiers} />
                 </div>
 
                 {/* Summary Metrics Table */}

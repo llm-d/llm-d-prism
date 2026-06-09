@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
-import { Filter } from 'lucide-react';
+import React, { useState } from 'react';
+import { Filter, ChevronUp, ChevronDown } from 'lucide-react';
 import { MultiSelectDropdown } from '../common';
 import { USE_CASE_META, formatOriginLabel } from '../../utils/dashboardHelpers';
 
@@ -34,32 +34,47 @@ export const FilterPanel = ({
     expandedModels,
     toggleBenchmark,
     toggleModelExpansion,
+    baselineBenchmarkKey,
+    setBaselineBenchmarkKey,
     UnifiedDataTable
 }) => {
+    const [isFiltersExpanded, setIsFiltersExpanded] = useState(true);
+
     if (!showFilterPanel) return null;
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm mb-4 transition-colors">
             {/* Header & Controls */}
-            <div className="flex flex-col gap-3 mb-3">
-                <div className="flex justify-between items-center">
+            <div className={`flex flex-col ${isFiltersExpanded ? 'gap-3 mb-3' : ''}`}>
+                <div className={`flex justify-between items-center ${!isFiltersExpanded ? 'py-1.5' : ''}`}>
                     <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
                         <Filter size={14} />
                         Benchmark Filter
+                        <button
+                            onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                            className="ml-1 p-0.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                            title={isFiltersExpanded ? "Collapse filters" : "Expand filters"}
+                        >
+                            {isFiltersExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
                     </h2>
-                    <div className="w-56 opacity-60 hover:opacity-100 transition-opacity">
-                        <MultiSelectDropdown 
-                            label="Origin / Folder"
-                            options={filterOptions.origins || []}
-                            selected={activeFilters.origins}
-                            onChange={(val) => toggleFilter('origins', val)}
-                            counts={facetCounts.origins || {}}
-                            formatLabel={formatOriginLabel}
-                        />
-                    </div>
+                    {isFiltersExpanded && (
+                        <div className="w-56 opacity-60 hover:opacity-100 transition-opacity">
+                            <MultiSelectDropdown 
+                                label="Origin / Folder"
+                                options={filterOptions.origins || []}
+                                selected={activeFilters.origins}
+                                onChange={(val) => toggleFilter('origins', val)}
+                                counts={facetCounts.origins || {}}
+                                formatLabel={formatOriginLabel}
+                            />
+                        </div>
+                    )}
                 </div>
                 {/* Filter Groups - Compact Layout */}
-                <div className="flex flex-col md:flex-row gap-4 border-t border-slate-200 dark:border-slate-700/50 pt-2">
+                {isFiltersExpanded && (
+                    <>
+                        <div className="flex flex-col md:flex-row gap-4 border-t border-slate-200 dark:border-slate-700/50 pt-2">
                     
                     {/* Section 1: Application / Model Server */}
                     <div className="flex-1 min-w-[200px]">
@@ -223,7 +238,11 @@ export const FilterPanel = ({
                 selectedBenchmarks={selectedBenchmarks} setSelectedBenchmarks={setSelectedBenchmarks}
                 setActiveFilters={setActiveFilters} expandedModels={expandedModels}
                 toggleBenchmark={toggleBenchmark} toggleModelExpansion={toggleModelExpansion}
+                baselineBenchmarkKey={baselineBenchmarkKey}
+                setBaselineBenchmarkKey={setBaselineBenchmarkKey}
             />
+            </>
+            )}
         </div>
       </div>
     );

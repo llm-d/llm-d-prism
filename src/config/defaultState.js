@@ -17,11 +17,8 @@ export const defaultState = {
     tputType: "output",
     costMode: "spot",
     latType: "e2e",
-    selectedModels: new Set([
-        "*::*::qwen3-32b::H100::*::*::Aggregated::*",
-        "*::*::qwen3-32b::TPU-V6E::*::*::Aggregated::*"
-    ]),
-    modelsFilter: new Set(["qwen3-32b"]),
+    selectedModels: new Set([]),
+    modelsFilter: new Set([]),
     hwFilter: new Set([]),
     precFilter: new Set([]),
     tpFilter: new Set([]),

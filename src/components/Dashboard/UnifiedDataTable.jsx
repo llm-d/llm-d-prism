@@ -13,15 +13,21 @@
 // limitations under the License.
 
 import React from 'react';
-import { RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { RotateCcw, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { getEffectiveTp, getBucket, getSourceTag } from '../../utils/dashboardHelpers';
 
 export const UnifiedDataTable = (props) => {
     const {
         modelStats, selectedModels, filteredBySource, showSelectedOnly, setShowSelectedOnly,
         selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
-        toggleBenchmark, toggleModelExpansion
+        toggleBenchmark, toggleModelExpansion,
+        baselineBenchmarkKey, setBaselineBenchmarkKey,
     } = props;
+
+    const toggleBaseline = (key) => {
+        if (!setBaselineBenchmarkKey) return;
+        setBaselineBenchmarkKey(prev => (prev === key ? null : key));
+    };
 
     return (
         <div className="flex flex-col gap-2">
@@ -72,6 +78,9 @@ export const UnifiedDataTable = (props) => {
                                                 setSelectedBenchmarks(all);
                                             }} />
                                        )}
+                                   </th>
+                                   <th className="px-1 py-3 w-8 text-center" title="Baseline — click ★ on a row to compare other selected runs against it">
+                                       <Star size={11} className="mx-auto text-slate-400" />
                                    </th>
                                    <th className="px-2 py-3">Model</th>
                                    <th className="px-2 py-3">Accelerator</th>
@@ -142,8 +151,8 @@ export const UnifiedDataTable = (props) => {
 
                                       return (
                                        <React.Fragment key={stat.benchmarkKey || stat.model}>
-                                       <tr 
-                                           className={`transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-100 dark:border-slate-800/50 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}`}
+                                       <tr
+                                           className={`transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-100 dark:border-slate-800/50 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''} ${stat.benchmarkKey === baselineBenchmarkKey ? 'ring-1 ring-inset ring-cyan-400/40' : ''}`}
                                            onClick={(e) => {
                                                // Prevent toggling if clicking specific action buttons if any
                                                toggleBenchmark(stat.benchmarkKey);
@@ -155,6 +164,27 @@ export const UnifiedDataTable = (props) => {
                                                }`}>
                                                    {isSelected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
                                                </div>
+                                           </td>
+                                           <td className="px-1 py-2 text-center">
+                                                {(() => {
+                                                    const isBaseline = stat.benchmarkKey === baselineBenchmarkKey;
+                                                    return (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleBaseline(stat.benchmarkKey);
+                                                            }}
+                                                            title={isBaseline ? 'Clear baseline' : 'Set as baseline'}
+                                                            className={`p-0.5 rounded transition-colors ${
+                                                                isBaseline
+                                                                    ? 'text-cyan-500 dark:text-cyan-400'
+                                                                    : 'text-slate-300 dark:text-slate-600 hover:text-cyan-500 dark:hover:text-cyan-400'
+                                                            }`}
+                                                        >
+                                                            <Star size={12} fill={isBaseline ? 'currentColor' : 'none'} />
+                                                        </button>
+                                                    );
+                                                })()}
                                            </td>
                                            <td className="px-2 py-2 font-medium text-slate-800 dark:text-slate-200">
                                                 <div className="flex items-center gap-2">
@@ -244,7 +274,7 @@ export const UnifiedDataTable = (props) => {
                                        </tr>
                                        {isExpanded && (
                                               <tr>
-                                                  <td colSpan="9" className="p-0">
+                                                  <td colSpan="10" className="p-0">
                                                       <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 p-2">
                                                           {/* Run Metadata Header */}
                                                           <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">

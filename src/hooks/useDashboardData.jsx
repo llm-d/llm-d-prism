@@ -17,6 +17,7 @@ import { CacheManager } from '../utils/cacheManager';
 import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
+import { parseReportV02, groupStagesIntoRuns, stageToEntry } from '../utils/benchmarkReportV02Parser';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
@@ -36,6 +37,109 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [lpgLoading, setLpgLoading] = useState(false);
     const [lpgError, setLpgError] = useState(null);
     const [lpgPasteText, setLpgPasteText] = useState("");
+    const [brv02Runs, setBrv02Runs] = useState(() => {
+        try {
+            const saved = localStorage.getItem('prism_brv02_runs');
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
+    const [brv02Error, setBrv02Error] = useState(null);
+    const [brv02Loading, setBrv02Loading] = useState(false);
+    const [brv02CustomLabels, setBrv02CustomLabels] = useState(() => {
+        try {
+            const saved = localStorage.getItem('prism_brv02_custom_labels');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    });
+    const [brv02BaselineRunId, setBrv02BaselineRunId] = useState(() => {
+        try {
+            return localStorage.getItem('prism_brv02_baseline_run_id') || null;
+        } catch { return null; }
+    });
+    const [brv02SelectedStages, setBrv02SelectedStages] = useState(() => {
+        try {
+            const saved = localStorage.getItem('prism_brv02_selected_stages');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('prism_brv02_runs', JSON.stringify(brv02Runs));
+        } catch (e) {
+            console.error("Failed to persist brv02 runs to LocalStorage:", e);
+        }
+    }, [brv02Runs]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('prism_brv02_custom_labels', JSON.stringify(brv02CustomLabels));
+        } catch (e) {
+            console.error("Failed to persist brv02 custom labels to LocalStorage:", e);
+        }
+    }, [brv02CustomLabels]);
+
+    useEffect(() => {
+        try {
+            if (brv02BaselineRunId) {
+                localStorage.setItem('prism_brv02_baseline_run_id', brv02BaselineRunId);
+            } else {
+                localStorage.removeItem('prism_brv02_baseline_run_id');
+            }
+        } catch (e) {
+            console.error("Failed to persist brv02 baseline run ID to LocalStorage:", e);
+        }
+    }, [brv02BaselineRunId]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('prism_brv02_selected_stages', JSON.stringify(brv02SelectedStages));
+        } catch (e) {
+            console.error("Failed to persist brv02 selected stages to LocalStorage:", e);
+        }
+    }, [brv02SelectedStages]);
+
+    useEffect(() => {
+        // Automatically sync all benchmark stage runs into the main scatter plot data array
+        const brv02Entries = brv02Runs.flatMap(run => run.stages.map(stageToEntry));
+        const runSourceKeys = brv02Runs.map(r => `brv02:${r.runId}`);
+
+        setData(prev => {
+            const nonBrv02Data = prev.filter(d => !d.source?.startsWith('brv02:'));
+            const startId = nonBrv02Data.length;
+            const entriesWithIds = brv02Entries.map((e, i) => ({ ...e, id: startId + i }));
+            return [...nonBrv02Data, ...entriesWithIds];
+        });
+
+        if (runSourceKeys.length > 0) {
+            setAvailableSources(prev => {
+                const next = new Set(prev);
+                runSourceKeys.forEach(k => next.add(k));
+                return next;
+            });
+
+            setSelectedSources(prev => {
+                const next = new Set(prev);
+                runSourceKeys.forEach(k => next.add(k));
+                return next;
+            });
+        } else {
+            setAvailableSources(prev => {
+                const next = new Set(prev);
+                Array.from(next).forEach(k => {
+                    if (k.startsWith('brv02:')) next.delete(k);
+                });
+                return next;
+            });
+            setSelectedSources(prev => {
+                const next = new Set(prev);
+                Array.from(next).forEach(k => {
+                    if (k.startsWith('brv02:')) next.delete(k);
+                });
+                return next;
+            });
+        }
+    }, [brv02Runs]);
     const [driveLoading, setDriveLoading] = useState(false);
     const [driveStatus, setDriveStatus] = useState("");
     const [driveProgress, setDriveProgress] = useState(0);
@@ -985,121 +1089,21 @@ export const useDashboardData = (initialState, dashboardState) => {
                 } else if (newD.metadata?.configuration && newD.metadata.configuration !== 'Unknown') {
                     // Use hardware config (e.g. from standalone/modelservice parser)
                     suffix = ` [${newD.metadata.configuration}]`;
-                } else if (newD.configuration && newD.configuration !== 'Unknown') {
-                    suffix = ` [${newD.configuration}]`;
                 }
-
                 if (suffix) {
-                    newD.model += suffix;
-                    console.log(`[fetchArchivedData] Appended config suffix to model: ${newD.model}`);
+                    newD.model = newD.model + suffix;
+                    newD.model_name = newD.model_name + suffix;
+                    newD.metadata.model_name = newD.metadata.model_name + suffix;
                 }
-
-                newD.model_name = normalizeModelName(newD.metadata.model_name || newD.model_name || 'Unknown'); // Critical for filter dropdowns
-                newD.hardware = normalizeHardware(newD.metadata.hardware || newD.hardware || 'Unknown');
-                newD.accelerator_count = newD.metadata.accelerator_count || newD.accelerator_count || 1;
-                newD.metadata.tensor_parallelism = newD.metadata.tensor_parallelism || 8;
-                newD.tensor_parallelism = newD.metadata.tensor_parallelism;
-                newD.tp = newD.tensor_parallelism; // Sync for helpers
-
-                newD.backend = newD.metadata.backend || 'Unknown';
-                // Map variant to configuration for specialized grouping in Dashboard.jsx
-                if (newD.metadata.variant) {
-                    newD.configuration = newD.metadata.variant;
-                }
-
-                // Associate all results store benchmarks with llm-d serving stack
-                newD.serving_stack = 'llm-d';
-                newD.metadata.serving_stack = 'llm-d';
 
                 return newD;
             });
         } catch (e) {
-            console.warn("Failed to load archived drive data", e);
+            console.error("Failed to load archived data", e);
             return [];
         }
-    };
+    }
 
-    // --- Extracted Block ---
-    const restoreSampleData = async () => {
-        setGcsLoading(true);
-        try {
-            const localEntries = await fetchLocalData();
-
-            if (!localEntries || localEntries.length === 0) {
-                setGcsLoading(false);
-                return false;
-            }
-
-            // Add to data
-            setData(prev => {
-                const next = [...prev, ...localEntries].map((d, i) => ({ ...d, id: i }));
-                return next;
-            });
-
-            // Update Sources
-            setAvailableSources(prev => new Set([...prev, 'local']));
-            setSelectedSources(prev => new Set([...prev, 'local'])); // Auto-select
-            setShowSampleData(true);
-
-            // Re-populate models for local data
-            const localModels = new Set(localEntries.map(d => d.model).filter(m => m !== 'Unknown'));
-            setSelectedBenchmarks(prev => {
-                const next = new Set(prev);
-                localModels.forEach(m => next.add(m));
-                return next;
-            });
-
-            setGcsLoading(false);
-            return true;
-        } catch (e) {
-            setGcsError(`Failed to restore sample data: ${e.message}`);
-            setGcsLoading(false);
-            return false;
-        }
-    };
-
-    const removeSampleData = () => {
-        // Remove 'local' source entries from data
-        setData(prev => prev.filter(d => d.source !== 'local'));
-
-        // Remove 'local' from selected and available sources
-        setSelectedSources(prev => {
-            const next = new Set(prev);
-            next.delete('local');
-            return next;
-        });
-        setAvailableSources(prev => {
-            const next = new Set(prev);
-            next.delete('local');
-            return next;
-        });
-
-        setShowSampleData(false);
-    };
-
-    const removeLLMDData = () => {
-        // Remove 'llmd_drive' (live syncs) and 'llm-d-results:google_drive' (archive) from data
-        setData(prev => prev.filter(d => d.source !== 'llmd_drive' && d.source !== 'llm-d-results:google_drive'));
-
-        // Remove from selected and available sources
-        setSelectedSources(prev => {
-            const next = new Set(prev);
-            next.delete('llmd_drive');
-            next.delete('llm-d-results:google_drive');
-            return next;
-        });
-        setAvailableSources(prev => {
-            const next = new Set(prev);
-            next.delete('llmd_drive');
-            next.delete('llm-d-results:google_drive');
-            return next;
-        });
-
-        // Also clean up any lingering local data if needed, but the main two cover the standard flows.
-        setEnableLLMDResults(false);
-    };
-
-    // --- Extracted Block ---
     const loadAllData = async (fetchedConfig = null) => {
         console.log("[useDashboardData] loadAllData START", { initialState });
         setLoading(true);
@@ -1312,211 +1316,59 @@ export const useDashboardData = (initialState, dashboardState) => {
                     validSources.add('quality_scores');
                 }
 
-                setAvailableSources(validSources);
-
-                if (initialState.sources && initialState.sources.size > 0 && !initialState.sources.has('local')) {
-                    const allowed = new Set();
-                    validSources.forEach(vs => {
-                        if (initialState.sources.has(vs)) {
-                            allowed.add(vs);
-                        } else if (vs.startsWith('giq') && initialState.sources.has('giq')) {
-                            allowed.add(vs);
-                        } else if (vs === 'llm-d-results:google_drive' || vs === 'quality_scores') {
-                            allowed.add(vs);
-                        }
-                    });
-                    setSelectedSources(prevSources => new Set([...prevSources, ...allowed]));
-                } else {
-                    setSelectedSources(prevSources => new Set([...prevSources, ...validSources]));
+                if (enableLLMDResults) {
+                    validSources.add('llmd_drive');
+                    validSources.add('llm-d-results:google_drive');
                 }
 
-                return prev; // We don't modify data here
+                setAvailableSources(prev => new Set([...prev, ...validSources]));
+                return prev;
             });
 
-            // Trigger auto-selection if current state is empty AND no initial defaults provided
-            const hasInitialModels = initialState.selectedModels && initialState.selectedModels.size > 0;
-            if (selectedBenchmarks.size === 0 && !hasInitialModels && dataWithIds.length > 0) {
-                const initialSelection = new Set();
-                const sourcesInNext = new Set(dataWithIds.map(d => d.source || 'local'));
-
-                sourcesInNext.forEach(src => {
-                    const sourceEntries = dataWithIds.filter(d => (d.source || 'local') === src);
-                    const sorted = sourceEntries.sort((a, b) => {
-                        if (!a.timestamp) return 1;
-                        if (!b.timestamp) return -1;
-                        return new Date(b.timestamp) - new Date(a.timestamp);
-                    });
-                    if (sorted.length > 0) initialSelection.add(getBenchmarkKey(sorted[0]));
-                });
-                setSelectedBenchmarks(initialSelection);
-            }
-
-            // Update max latency (using xAxisMax state)
-            const latencies = dataWithIds.map(d => d.latency?.mean).filter(l => l > 0);
-            if (latencies.length > 0) {
-                // Only update if it seems like a default (Infinity) or user hasn't set a specific low value
-                if (xAxisMax === Infinity) {
-                    setXAxisMax(Math.max(...latencies));
-                }
-            }
-
             if (failedSources.length > 0) {
-                setGcsError(`Failed to load data from: ${failedSources.join(', ')}`);
+                setGcsError(`Connection issue with: ${failedSources.join(', ')}`);
             }
-
-        } catch (err) {
-            console.error("Global Load Error:", err);
-            setGcsError(`Application Error: ${err.message}.`);
+        } catch (e) {
+            console.error("loadAllData Error:", e);
+            setGcsError(`Load failed: ${e.message}`);
         } finally {
             setLoading(false);
             setGcsLoading(false);
         }
     };
 
-    // --- Extracted Block ---
-    const handleLpgGcsScan = async (bucketUri) => {
-        const cleanUri = bucketUri.replace(/^gs:\/\//, '').replace(/\/$/, '');
-        const firstSlashIndex = cleanUri.indexOf('/');
-
-        let bucketName = cleanUri;
-        let prefix = '';
-        if (firstSlashIndex !== -1) {
-            bucketName = cleanUri.substring(0, firstSlashIndex);
-            prefix = cleanUri.substring(firstSlashIndex + 1);
-        }
-
-        let usingProxy = false;
-        let allItems = [];
-        let nextPageToken = null;
-
-        // Build base URL with optional prefix
-        let url = `https://storage.googleapis.com/storage/v1/b/${bucketName}/o`;
-        let proxyUrl = `/api/gcs/storage/v1/b/${bucketName}/o`;
-
-        const params = new URLSearchParams();
-        if (prefix) {
-            params.append('prefix', prefix.endsWith('/') ? prefix : prefix + '/');
-        }
-
+    const handleLpgGcsScan = async (bucketUrl) => {
         try {
-            do {
-                let fetchUrl = url;
-                let fetchProxyUrl = proxyUrl;
-
-                const currentParams = new URLSearchParams(params);
-                if (nextPageToken) {
-                    currentParams.append('pageToken', nextPageToken);
-                }
-
-                const queryStr = currentParams.toString();
-                if (queryStr) {
-                    fetchUrl += `?${queryStr}`;
-                    fetchProxyUrl += `?${queryStr}`;
-                }
-
-                let response = await fetch(fetchUrl);
-
-                if (response.status === 401 || response.status === 403) {
-                    response = await fetch(fetchProxyUrl);
-                    if (response.ok) {
-                        usingProxy = true;
-                    }
-                }
-
-                if (response.status === 404) {
-                    throw new Error(`Bucket '${bucketName}' not found or does not exist.`);
-                } else if (!response.ok) {
-                    throw new Error(`Failed to access bucket: HTTP ${response.status}`);
-                }
-
-                const json = await response.json();
-                if (json.items) {
-                    allItems = allItems.concat(json.items);
-                }
-
-                nextPageToken = json.nextPageToken;
-            } while (nextPageToken);
-        } catch (error) {
-            throw error;
+            console.log(`[useDashboardData] GCS Scanning ${bucketUrl}...`);
+            const cleanUrl = bucketUrl.replace(/^gs:\/\//, '').replace(/\/$/, '');
+            const response = await fetch(`/api/gcs/scan?bucket=${cleanUrl}`);
+            if (response.ok) {
+                const results = await response.json();
+                return results;
+            } else {
+                const errorText = await response.text();
+                throw new Error(errorText || `HTTP ${response.status}`);
+            }
+        } catch (e) {
+            console.error("GCS Scan Failed:", e);
+            throw e;
         }
-
-        if (allItems.length === 0) throw new Error('No files found in bucket or folder.');
-
-        const prefixDir = prefix ? (prefix.endsWith('/') ? prefix : prefix + '/') : '';
-
-        // Determine if the prefix itself is a leaf node benchmark
-        // A leaf node contains the actual metric files we want to parse.
-        const isLeafNode = prefixDir !== '' && allItems.some(item => {
-            const relName = item.name.substring(prefixDir.length);
-            return relName.endsWith('lifecycle_metrics.json') ||
-                relName.endsWith('manifest.yaml') ||
-                relName === 'metadata.json' ||
-                relName === 'params.json' ||
-                relName.startsWith('output/') ||
-                relName.startsWith('logs/') ||
-                relName.startsWith('results/') ||
-                (relName.indexOf('/') === -1 && relName.endsWith('.json'));
-        });
-
-        // Group files by relative top-level folder
-        const folders = {};
-
-        if (isLeafNode) {
-            const singleFolderName = prefix.split('/').filter(Boolean).pop() || prefixDir;
-            folders[singleFolderName] = allItems;
-        } else {
-            allItems.forEach(item => {
-                let relativeName = item.name;
-                if (prefixDir && relativeName.startsWith(prefixDir)) {
-                    relativeName = relativeName.substring(prefixDir.length);
-                }
-
-                const parts = relativeName.split('/');
-
-                let folder;
-                if (parts.length > 1) {
-                    folder = parts[0];
-                } else {
-                    folder = prefix ? prefix.split('/').filter(Boolean).pop() : 'root';
-                }
-
-                if (!folders[folder]) folders[folder] = [];
-                folders[folder].push(item);
-            });
-        }
-
-        let folderNames = Object.keys(folders);
-        if (folderNames.length === 0) throw new Error('No files found.');
-
-        // Sort folders by most recent 'updated' timestamp of any file inside them
-        folderNames = folderNames.sort((a, b) => {
-            const latestA = Math.max(...folders[a].map(f => new Date(f.updated || 0).getTime()));
-            const latestB = Math.max(...folders[b].map(f => new Date(f.updated || 0).getTime()));
-            return latestB - latestA; // descending
-        });
-
-        return { folders, folderNames, cleanBucketName: bucketName, usingProxy };
     };
 
-    const handleLpgGcsLoad = async (bucketUri, foldersToLoad, foldersMap, usingProxy) => {
-        console.log("handleLpgGcsLoad CALLED with:", bucketUri);
-        if (!bucketUri) return;
+    const handleLpgGcsLoad = async (bucketUrl, folderNames, folders, usingProxy) => {
         setLpgLoading(true);
         setLpgError(null);
-
-        const cleanUri = bucketUri.replace(/^gs:\/\//, '').replace(/\/$/, '');
-        const firstSlashIndex = cleanUri.indexOf('/');
-        const cleanBucketName = firstSlashIndex !== -1 ? cleanUri.substring(0, firstSlashIndex) : cleanUri;
-        let allNewEntries = [];
         let folderCount = 0;
+        let allNewEntries = [];
 
         try {
-            console.log("handleLpgGcsLoad STARTING TRY BLOCK for:", cleanBucketName);
+            const cleanBucketName = bucketUrl.replace(/^gs:\/\//, '').replace(/\/$/, '');
+            const cleanUri = bucketUrl.replace(/\/$/, '');
 
-            await Promise.all(foldersToLoad.map(async (folder) => {
+            // Process folders in parallel
+            await Promise.all(folderNames.map(async (folder) => {
                 try {
-                    const files = foldersMap[folder];
-
+                    const files = folders[folder];
                     // Relaxed search: find manifest and metrics ANYWHERE within this logical leaf node folder
                     // i.e., "config/manifest.yaml" or "stage_4_lifecycle_metrics.json"
                     const manifestFile = files.find(f => f.name.endsWith('manifest.yaml'));
@@ -1638,7 +1490,6 @@ export const useDashboardData = (initialState, dashboardState) => {
         setLpgLoading(true);
         setLpgError(null);
         let allNewEntries = [];
-        let errors = 0;
         const newSourceKeys = [];
 
         try {
@@ -1663,8 +1514,6 @@ export const useDashboardData = (initialState, dashboardState) => {
                         };
                     });
                     allNewEntries.push(...entries);
-                } else {
-                    errors++;
                 }
             }
 
@@ -1685,7 +1534,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                     return newSet;
                 });
                 setAvailableSources(prev => {
-                    const newSet = new Set(prev);
+                    const newSet = newSet(prev);
                     newSourceKeys.forEach(k => newSet.add(k));
                     return newSet;
                 });
@@ -1702,6 +1551,171 @@ export const useDashboardData = (initialState, dashboardState) => {
             // Reset input
             event.target.value = '';
         }
+    };
+
+    // -------------------------------------------------------------------------
+    // Benchmark Report v0.2 handlers
+    // -------------------------------------------------------------------------
+
+    const handleBrv02Upload = async (eventOrFiles) => {
+        let files;
+        let isEvent = false;
+        if (eventOrFiles && eventOrFiles.target && eventOrFiles.target.files) {
+            files = Array.from(eventOrFiles.target.files);
+            isEvent = true;
+        } else if (Array.isArray(eventOrFiles)) {
+            files = eventOrFiles;
+        } else if (eventOrFiles) {
+            files = Array.from(eventOrFiles);
+        }
+
+        if (!files || files.length === 0) return;
+        
+        setBrv02Loading(true);
+        setBrv02Error(null);
+
+        try {
+            const v02Pattern = /^benchmark_report_v0\.2.*\.ya?ml$/i;
+            const matchingFiles = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (v02Pattern.test(file.name)) {
+                    matchingFiles.push(file);
+                }
+            }
+
+            if (matchingFiles.length === 0) {
+                setBrv02Error("No valid benchmark_report_v0.2 files found. Make sure the files start with version: '0.2' and match the 'benchmark_report_v0.2' filename prefix.");
+                if (isEvent && eventOrFiles.target) {
+                    eventOrFiles.target.value = '';
+                }
+                return;
+            }
+
+            const trulyNewStages = [];
+            for (let i = 0; i < matchingFiles.length; i++) {
+                const file = matchingFiles[i];
+                const text = await file.text();
+                const identifier = file.webkitRelativePath || file.relativePath || file.name;
+                const record = await parseReportV02(text, identifier);
+                if (record) {
+                    const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename);
+                    const isDupInExisting = brv02Runs.some(run => 
+                        run.stages.some(existingStage => existingStage.filename === record.filename)
+                    );
+                    if (!isDupInBatch && !isDupInExisting) {
+                        trulyNewStages.push(record);
+                    }
+                }
+            }
+
+            if (trulyNewStages.length === 0) {
+                setBrv02Error('All selected files have already been uploaded.');
+                if (isEvent && eventOrFiles.target) {
+                    eventOrFiles.target.value = '';
+                }
+                return;
+            }
+
+            // Update comparison panel state
+            setBrv02Runs(prev => {
+                const allStages = [...prev.flatMap(run => run.stages), ...trulyNewStages];
+                return groupStagesIntoRuns(allStages);
+            });
+
+            if (isEvent && eventOrFiles.target) {
+                eventOrFiles.target.value = '';
+            }
+        } catch (e) {
+            console.error("Failed to upload local report files:", e);
+            setBrv02Error("Failed to upload report files. Make sure they are valid YAML files.");
+        } finally {
+            setBrv02Loading(false);
+        }
+    };
+
+    const restoreSampleData = async () => {
+        setGcsLoading(true);
+        try {
+            const localEntries = await fetchLocalData();
+
+            if (!localEntries || localEntries.length === 0) {
+                setGcsLoading(false);
+                return false;
+            }
+
+            // Add to data
+            setData(prev => {
+                const next = [...prev, ...localEntries].map((d, i) => ({ ...d, id: i }));
+                return next;
+            });
+
+            // Update Sources
+            setAvailableSources(prev => new Set([...prev, 'local']));
+            setSelectedSources(prev => new Set([...prev, 'local'])); // Auto-select
+            setShowSampleData(true);
+
+            // Re-populate models for local data
+            const localModels = new Set(localEntries.map(d => d.model).filter(m => m !== 'Unknown'));
+            setSelectedBenchmarks(prev => {
+                const next = new Set(prev);
+                localModels.forEach(m => next.add(m));
+                return next;
+            });
+
+            setGcsLoading(false);
+            return true;
+        } catch (e) {
+            setGcsError(`Failed to restore sample data: ${e.message}`);
+            setGcsLoading(false);
+            return false;
+        }
+    };
+
+    const removeSampleData = () => {
+        // Remove 'local' source entries from data
+        setData(prev => prev.filter(d => d.source !== 'local'));
+
+        // Remove 'local' from selected and available sources
+        setSelectedSources(prev => {
+            const next = new Set(prev);
+            next.delete('local');
+            return next;
+        });
+        setAvailableSources(prev => {
+            const next = new Set(prev);
+            next.delete('local');
+            return next;
+        });
+
+        setShowSampleData(false);
+    };
+
+    const removeLLMDData = () => {
+        // Remove 'llmd_drive' (live syncs) and 'llm-d-results:google_drive' (archive) from data
+        setData(prev => prev.filter(d => d.source !== 'llmd_drive' && d.source !== 'llm-d-results:google_drive'));
+
+        // Remove from selected and available sources
+        setSelectedSources(prev => {
+            const next = new Set(prev);
+            next.delete('llmd_drive');
+            next.delete('llm-d-results:google_drive');
+            return next;
+        });
+        setAvailableSources(prev => {
+            const next = new Set(prev);
+            next.delete('llmd_drive');
+            next.delete('llm-d-results:google_drive');
+            return next;
+        });
+
+        // Also clean up any lingering local data if needed, but the main two cover the standard flows.
+        setEnableLLMDResults(false);
+    };
+
+    const removeBrv02Run = (runId) => {
+        setBrv02Runs(prev => prev.filter(r => r.runId !== runId));
     };
 
     return {
@@ -1745,6 +1759,10 @@ export const useDashboardData = (initialState, dashboardState) => {
         qualityInspectOpen, setQualityInspectOpen,
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
-        fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket
+        fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
+        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, removeBrv02Run,
+        brv02CustomLabels, setBrv02CustomLabels,
+        brv02BaselineRunId, setBrv02BaselineRunId,
+        brv02SelectedStages, setBrv02SelectedStages
     };
 };
