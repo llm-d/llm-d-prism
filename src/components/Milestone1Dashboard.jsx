@@ -4,7 +4,7 @@ import {
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
 import IntelligentRoutingChart from './IntelligentRoutingChart';
-import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu, BarChart2, Table } from 'lucide-react';
+import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu, BarChart2, Table, Code, BookOpen } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 import { CustomXAxis, CustomYAxis, CustomLabel, CustomChartTooltip, ChartCard } from './common';
 
@@ -234,13 +234,71 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
 
 
 
+const RECIPE_VLLM = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-scheduler-deployment
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+      - name: vllm-server
+        image: vllm/vllm-openai:latest
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        args:
+        - --model=meta-llama/Meta-Llama-3-70B-Instruct
+        - --tensor-parallel-size=8
+        - --max-model-len=8192
+        - --enable-prefix-caching
+        - --scheduler-policy=load-aware
+        - --max-num-seqs=256`;
+
+const RECIPE_K8S = `apiVersion: v1
+kind: Pod
+metadata:
+  name: scheduler-affinity-pod
+spec:
+  nodeSelector:
+    cloud.google.com/gke-accelerator: nvidia-h100-80gb
+    cloud.google.com/machine-family: a3-highgpu-8g
+  resources:
+    requests:
+      nvidia.com/gpu: "8"
+    limits:
+      nvidia.com/gpu: "8"`;
+
+const RECIPE_TRAFFIC = `use_case: Multi-User Latency Sensitive Intelligent Routing
+test_harness: inference-perf
+concurrency: 64
+request_distribution: poisson
+payload_profile:
+  system_prompt_tokens: 4000
+  user_prompt_tokens: 1000
+  output_tokens: 512
+  scheduler_policy: load-aware`;
+
 const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeTiers, setActiveTiers] = useState({ baseline: true, router: true });
+    const [activeRecipeTab, setActiveRecipeTab] = useState(0);
+    const [copiedStates, setCopiedStates] = useState({});
     const [gcsData, setGcsData] = useState([]);
     const [reportsMeta, setReportsMeta] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
     const [workloadConfig, setWorkloadConfig] = useState(null);
+
+    const handleCopy = (text, key) => {
+        navigator.clipboard.writeText(text);
+        setCopiedStates(prev => ({ ...prev, [key]: true }));
+        setTimeout(() => {
+            setCopiedStates(prev => ({ ...prev, [key]: false }));
+        }, 2500);
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -307,6 +365,8 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
 
     const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
     const [alertSaved, setAlertSaved] = useState(false);
+
+    const [openFAQIndex, setOpenFAQIndex] = useState(null);
 
     const [latencyScale, setLatencyScale] = useState(() => {
         const params = new URLSearchParams(window.location.search);
@@ -684,11 +744,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Intelligent Routing</h1>
+                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-none">Intelligent routing</h1>
                         <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
-                            Guided mode
+                            Guided path
                         </span>
-
                     </div>
                 </div>
 
@@ -723,10 +782,10 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             });
                         }}
                         className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative"
-                        title="Share view"
+                        title="Share link"
                     >
                         <Share2 className="w-4 h-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Share view</span>
+                        <span className="hidden sm:inline">Share link</span>
                         {shareToast && (
                             <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                 {toastMessage}
@@ -747,41 +806,72 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         {/* Col 1: Overview */}
                         <div className="flex flex-col justify-between space-y-3">
                             <div>
+                                <div className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2">
+                                    Overview
+                                </div>
                                 <p className="text-sm text-slate-400 leading-relaxed">
                                     These variants of Intelligent Routing optimize request routing to maximize performance. By leveraging GKE Inference Gateway, real-time cache state introspection or machine-learned latency predictions, they reduce tail latency, increase throughput, and improve cache hit rates across distributed model servers.
                                 </p>
                             </div>
                         </div>
 
-                        {/* Col 2: Active Configurations */}
+                        {/* Col 2: Selectable Optimizations */}
                         <div className="space-y-2">
                             <div className="text-[10px] font-extrabold text-cyan-400/90 uppercase tracking-widest mb-1">
-                                Active Configurations
+                                Selectable optimizations
                             </div>
 
                             {/* Baseline */}
-                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                            <button 
+                                onClick={() => setActiveTiers(prev => ({ ...prev, baseline: !prev.baseline }))}
+                                className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer ${
+                                    activeTiers.baseline 
+                                        ? 'border-emerald-500/30 bg-slate-900/60' 
+                                        : 'border-slate-800/50 bg-slate-900/20 opacity-60'
+                                }`}
+                            >
                                 <div>
                                     <div className="text-xs font-semibold text-slate-200">Baseline</div>
                                     <p className="text-[10px] text-slate-500">Standard Kubernetes service endpoint</p>
                                 </div>
-                                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
-                            </div>
+                                {activeTiers.baseline ? (
+                                    <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                ) : (
+                                    <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                )}
+                            </button>
 
-                            {/* Opt 1: Active */}
-                            <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
+                            {/* Opt 1: Active Scenario */}
+                            <button 
+                                onClick={() => setActiveTiers(prev => ({ ...prev, router: !prev.router }))}
+                                className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer ${
+                                    activeTiers.router 
+                                        ? 'border-cyan-500/40 bg-slate-800/70 shadow-sm' 
+                                        : 'border-slate-800/50 bg-slate-900/20 opacity-60'
+                                }`}
+                            >
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Approximate Prefix Cache Routing</div>
-                                    <p className="text-[10px] text-slate-500">Current active scenario</p>
+                                    <div className="text-xs font-bold text-white">Approximate prefix cache routing</div>
+                                    <p className="text-[10px] text-slate-400">Current active scenario</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <a href="https://github.com/llm-d/llm-d/tree/main/guides/optimized-baseline" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1">
+                                    <a 
+                                        href="https://llm-d.ai/docs/guide/Installation/optimized-baseline" 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        onClick={e => e.stopPropagation()}
+                                        className="text-slate-500 hover:text-slate-300 transition-colors flex items-center space-x-1"
+                                    >
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                                    {activeTiers.router ? (
+                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                    ) : (
+                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                    )}
                                 </div>
-                            </div>
+                            </button>
                         </div>
 
                         {/* Col 3: Upcoming */}
@@ -793,7 +883,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             {/* Opt 2: Disabled */}
                             <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-400">Precise Cache Aware Routing</div>
+                                    <div className="text-xs font-semibold text-slate-400">Precise cache aware routing</div>
                                     <p className="text-[10px] text-slate-500">More accurate cache tracking</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -801,14 +891,14 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
                                 </div>
                             </div>
 
                             {/* Opt 3: Disabled */}
                             <div className="border border-slate-800/50 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-400">Predicted Latency Balancing</div>
+                                    <div className="text-xs font-semibold text-slate-400">Predicted latency balancing</div>
                                     <p className="text-[10px] text-slate-500">Machine learning guided routing</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -816,14 +906,12 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                {/* Evaluation Control Panel (Cards Grid) */}
+                </div>                {/* Evaluation Control Panel (Cards Grid) */}
                 {/* Uniform Evaluation Control Panel (Cards Grid) */}
                 {/* Distinct Evaluation Control Panel (Cards Grid) with fully identical title typography */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -831,21 +919,27 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     <div className="lg:col-span-6 border border-slate-800/80 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
                         <div className="absolute -top-12 -left-12 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none" />
 
-                        <div className="mb-3">
+                        <div className="mb-3 flex justify-between items-center">
                             <span className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest block">
-                                Benchmark Scenario
+                                Benchmark scenario
                             </span>
+                            <button 
+                                onClick={() => setIsModalOpen(true)}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold text-[10px] rounded-lg border border-slate-700/80 transition-all flex items-center gap-1.5 shadow cursor-pointer"
+                            >
+                                <Code className="w-3.5 h-3.5" /> View configuration
+                            </button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
                             {/* Column 1: Infra Layer */}
                             <div className="flex flex-col gap-3 border-r border-slate-800/60 pr-4">
                                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                                    Infra Layer
+                                    Infra layer
                                 </div>
                                 <div className="flex flex-col gap-2.5">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Provider / Machine Type</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Provider / machine type</span>
                                         <div className="flex items-center gap-1.5 font-mono font-bold text-white text-xs">
                                             <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -870,19 +964,19 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             {/* Column 2: Model Serving Layer */}
                             <div className="flex flex-col gap-3 border-r border-slate-800/60 pr-4">
                                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                                    Model Serving Layer
+                                    Model serving layer
                                 </div>
                                 <div className="flex flex-col gap-2.5">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Model Name</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Model name</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">qwen3-32B (BF16)</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Parallelism Strategy</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Parallelism strategy</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">TP: 2</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Serving Engine</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Serving engine</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">vLLM</span>
                                     </div>
                                 </div>
@@ -895,15 +989,15 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                 </div>
                                 <div className="flex flex-col gap-2.5">
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Test Harness</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Test harness</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">inference-perf</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Catalog Use Case</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Catalog use case</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">Interactive Chat</span>
                                     </div>
                                     <div>
-                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Input / Output Sequence Length</span>
+                                        <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">Input / output sequence length</span>
                                         <span className="font-mono font-bold text-white truncate block text-xs">
                                             {workloadConfig 
                                                 ? `${workloadConfig.input_sequence_length.mean} / ${workloadConfig.output_sequence_length.max}`
@@ -915,14 +1009,12 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                         </div>
                     </div>
 
-                    {/* CARD 2: Primary Outcomes Metric */}
-                    <div
-                        className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all"
-                    >
+                    {/* CARD 2: Primary Outcomes Metric (Prefix Cache Pattern) */}
+                    <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none transition-all group-hover:bg-emerald-500/10" />
                         <div>
                             <div className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-3 flex justify-between items-center">
-                                Primary Outcomes
+                                Primary outcomes
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -930,51 +1022,45 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     }}
                                     className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer normal-case font-semibold"
                                 >
-                                    View Table
+                                    View table
                                 </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-1.5 hover:border-emerald-500/20 transition-all grid grid-rows-[55px_1fr] h-[140px]">
-                                    <div className="flex flex-col justify-start">
-                                        <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-0.5">
-                                            Latency Reduction
+                            <div className="grid grid-cols-1 gap-2">
+                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-emerald-500/20 transition-all flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                                            Latency reduction
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 font-normal uppercase">
+                                        <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
                                             (TTFT P50)
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-center">
-                                        <h4 className="text-4xl font-black text-emerald-400 flex items-baseline tracking-tight">
-                                            {(() => {
-                                                const validRows = tableData.filter(r => r.baseline_ttft_p50 > 0 && r.router_ttft_p50 > 0);
-                                                if (validRows.length === 0) return "41%";
-                                                const r = validRows[validRows.length - 1];
-                                                const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
-                                                return `${Math.floor(gain)}%`;
-                                            })()}
-                                        </h4>
-                                    </div>
+                                    <h4 className="text-base font-black text-emerald-400 font-mono">
+                                        {(() => {
+                                            const r = tableData.find(row => Math.abs(row.qps - targetQps) < 0.1) || tableData[0];
+                                            if (!r || !r.baseline_ttft_p50) return "N/A";
+                                            const gain = ((r.baseline_ttft_p50 - r.router_ttft_p50) / r.baseline_ttft_p50) * 100;
+                                            return `${Math.round(gain)}%`;
+                                        })()}
+                                    </h4>
                                 </div>
-                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-1.5 hover:border-cyan-500/20 transition-all grid grid-rows-[55px_1fr] h-[140px]">
-                                    <div className="flex flex-col justify-start">
-                                        <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-0.5">
-                                            Throughput Increase
+                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 hover:border-cyan-500/20 transition-all flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                                            Throughput increase
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 font-normal uppercase">
-                                            (Output Tokens/sec)
+                                        <div className="text-[10px] text-slate-500 font-normal uppercase truncate">
+                                            (Output tokens/sec)
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-center">
-                                        <h4 className="text-4xl font-black text-cyan-400 flex items-baseline tracking-tight">
-                                            {(() => {
-                                                const validRows = tableData.filter(r => r.baseline_output_token_rate > 0 && r.router_output_token_rate > 0);
-                                                if (validRows.length === 0) return "0%";
-                                                const r = validRows[validRows.length - 1];
-                                                const gain = ((r.router_output_token_rate - r.baseline_output_token_rate) / r.baseline_output_token_rate) * 100;
-                                                return `${Math.floor(gain)}%`;
-                                            })()}
-                                        </h4>
-                                    </div>
+                                    <h4 className="text-base font-black text-cyan-400 font-mono">
+                                        {(() => {
+                                            const r = tableData.find(row => Math.abs(row.qps - targetQps) < 0.1) || tableData[0];
+                                            if (!r || !r.baseline_output_token_rate) return "N/A";
+                                            const gain = ((r.router_output_token_rate - r.baseline_output_token_rate) / r.baseline_output_token_rate) * 100;
+                                            return `+${Math.round(gain)}%`;
+                                        })()}
+                                    </h4>
                                 </div>
                             </div>
                         </div>
@@ -983,30 +1069,36 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                     {/* CARD 3: Reproducibility Guide */}
                     <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
                         <div>
-                            <p className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-2">
+                            <p className="text-[11px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2">
                                 Action
                             </p>
                             <h3 className="text-base font-bold text-white mb-1">
                                 Reproducibility guide
                             </h3>
-                            <p className="text-sm text-slate-500 leading-relaxed">
+                            <p className="text-xs text-slate-500 leading-relaxed font-normal">
                                 Replicate these Intelligent Routing benchmarks directly on your Kubernetes evaluation cluster.
                             </p>
                         </div>
 
-                        <button onClick={() => setIsModalOpen(true)} className="w-full mt-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex justify-center items-center">
-                            <Zap className="w-3.5 h-3.5 mr-1.5" /> View instructions
-                        </button>
+                        <a 
+                            href="https://github.com/llm-d/llm-d/tree/main/guides/optimized-baseline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full mt-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex items-center justify-center gap-1.5 truncate cursor-pointer no-underline"
+                        >
+                            <span>View instructions</span>
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-80" />
+                        </a>
                     </div>
                 </div>
 
                 <div className="flex flex-col gap-6 w-full">
-                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ntpot" />
-                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ntpot" activeTiers={activeTiers} />
+                    <IntelligentRoutingChart data={additionalChartData} initialXAxis="ttft" initialLogScale={true} activeTiers={activeTiers} />
                 </div>
 
                 {/* Summary Metrics Table */}
-                <div id="summary-table" className="border border-slate-800 rounded-xl bg-slate-900 shadow-xl p-6 flex flex-col h-[32rem]">
+                <div id="summary-table" className="border border-slate-800 rounded-xl bg-slate-900 shadow-xl p-6 flex flex-col">
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-md font-bold text-white">Summary metrics comparison</h3>
@@ -1123,62 +1215,277 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                         return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
                                     });
 
-                                    return sortedData.map((row, idx) => (
-                                        <tr key={idx} className="border-b border-slate-800/60 hover:bg-slate-900/80 transition-colors font-mono">
-                                            <td className="px-4 py-4 text-[11px] text-slate-300 font-semibold">{row.qps}</td>
-                                            <td className="px-4 py-4 text-[11px] bg-orange-950/10 border-l border-orange-900/20 text-orange-200">
-                                                {row.val_base ? `${Math.round(row.val_base)}ms` : 'N/A'}
-                                            </td>
-                                            <td className="px-4 py-4 text-[11px] bg-sky-950/10 border-l border-sky-900/20 text-sky-200 font-bold">
-                                                {row.val_opt ? `${Math.round(row.val_opt)}ms` : 'N/A'}
-                                            </td>
-                                            <td className="px-4 py-4 border-l border-slate-800/60 text-right">
-                                                <span className={`px-2.5 py-1 text-[11px] font-semibold rounded-full ${row.gain > 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : row.gain < 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
-                                                    {row.gain > 0 ? `+${Math.round(row.gain)}%` : row.gain < 0 ? `${Math.round(row.gain)}%` : '0%'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ));
+                                    return sortedData.map((row, idx) => {
+                                        const isCurrent = targetQps === row.qps;
+                                        return (
+                                            <tr 
+                                                key={idx} 
+                                                onClick={() => setTargetQps(row.qps)}
+                                                className={`border-b border-slate-800/60 hover:bg-slate-900/80 transition-colors font-mono cursor-pointer ${
+                                                    isCurrent ? 'bg-slate-800/70 font-bold' : ''
+                                                }`}
+                                            >
+                                                <td className="px-4 py-4 text-[11px] text-slate-300 font-semibold font-sans flex items-center gap-2">
+                                                    <span>{row.qps} requests/s</span>
+                                                    {isCurrent && <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>}
+                                                </td>
+                                                <td className="px-4 py-4 text-[11px] bg-orange-950/10 border-l border-orange-900/20 text-orange-200">
+                                                    {row.val_base ? `${Math.round(row.val_base)}ms` : 'N/A'}
+                                                </td>
+                                                <td className="px-4 py-4 text-[11px] bg-sky-950/10 border-l border-sky-900/20 text-sky-200 font-bold">
+                                                    {row.val_opt ? `${Math.round(row.val_opt)}ms` : 'N/A'}
+                                                </td>
+                                                <td className="px-4 py-4 border-l border-slate-800/60 text-right">
+                                                    <span className={`px-2.5 py-1 text-[11px] font-semibold rounded-full ${row.gain > 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : row.gain < 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                                                        {row.gain > 0 ? `+${Math.round(row.gain)}%` : row.gain < 0 ? `${Math.round(row.gain)}%` : '0%'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
                                 })()}
                             </tbody>
                         </table>
                     </div>
                 </div>
+ 
+                {/* FAQ Section */}
+                <div className="mt-10 border-t border-slate-800/60 pt-10">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-base font-bold text-white">Frequently asked questions</h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-6">Extrapolating baseline telemetry and optimization paths to your custom constraints.</p>
+                    
+                    <div className="space-y-6">
+                        {Object.entries(
+                            [
+                            {
+                                category: "Model architectures & sizes",
+                                q: "The benchmarks show Qwen 3 32B. How do the benefits of cache-aware routing scale to smaller models like Gemma 4 (9B/26B) or Qwen 3.5 (27B)?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>TTFT Overhead:</strong> Smaller models have significantly lower baseline prefill times. Because the absolute time saved by hitting a cache is smaller, the relative benefit of routing to a warm cache is reduced for low-concurrency workloads.</p>
+                                        <p><strong>Throughput Gains:</strong> Under high QPS, cache-aware routing remains highly beneficial even for smaller models. By preventing redundant prefill computations, it frees up GPU compute cycles, increasing overall system throughput and preventing queue buildup.</p>
+                                        <p><strong>Recommendation:</strong> If your average Input Sequence Length (ISL) is &lt; 2k tokens, standard round-robin routing may suffice for small models. If ISL &gt; 4k or you experience bursty traffic, cache-aware routing is still recommended.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Model architectures & sizes",
+                                q: "How does Intelligent Routing handle massive models or Mixture of Experts (MoE) like Qwen 3 Coder (480B-A35B-Instruct)?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Memory Footprint:</strong> Large models and MoEs require high Tensor Parallelism (TP) and Pipeline Parallelism (PP), often spanning multiple nodes.</p>
+                                        <p><strong>Routing Complexity:</strong> For a 480B MoE, the routing decision must align with the model replica boundaries (e.g., routing to the master node of a specific TP/PP group).</p>
+                                        <p><strong>Latency Sensitivity:</strong> Prefill cost (TTFT) for a 480B model is extremely high. A cache miss on a large prefix is highly penalized. Therefore, precise cache-aware routing (e.g., tracking exact prefix matches) is critical to avoid multi-second TTFT spikes.</p>
+                                        <p><strong>Recommendation:</strong> For models &gt; 100B parameters, default load balancing is highly inefficient. We recommend using Precise Cache Aware Routing or Predicted Latency Balancing to ensure requests with shared prompts are strictly routed to the same replica group.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Model architectures & sizes",
+                                q: "How do long-context models like Kimi K2.5 or GLM 5.1 impact routing decisions?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Cache Volatility:</strong> Long-context models can ingest 100k+ tokens. The KV cache for a single request can easily consume gigabytes of VRAM, leading to rapid cache eviction on the serving nodes.</p>
+                                        <p><strong>Routing Strategy:</strong> Heuristic routing that only checks prefix matches might fail if the cache has already been evicted due to memory pressure. Here, the router must combine prefix awareness with real-time KV cache capacity tracking from the pods to avoid routing to a node that has the prefix but must evict it to process the new request.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Hardware infrastructure",
+                                q: "We don't use H100s. How does cache-aware routing perform on lower-tier hardware like RTX-PRO-6000 or L4 GPUs?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Compute Constraints:</strong> Slower GPUs take longer to process prefills. This means the penalty for a cache miss (recomputation) is much higher in absolute latency. Cache-aware routing actually provides a larger relative latency improvement on lower-tier hardware.</p>
+                                        <p><strong>VRAM Constraints:</strong> RTX-PRO-6000 (48GB) and L4 (24GB) have much smaller VRAM capacity than H100 (80GB). The KV cache pool is smaller, leading to frequent evictions.</p>
+                                        <p><strong>Recommendation:</strong> On constrained hardware, you must pair cache-aware routing with aggressive KV Cache Offloading (to CPU or Local SSD) to keep prefixes warm longer. The router should be configured to prioritize nodes where the prefix is at least in CPU RAM, as fetching from CPU is still faster than full recomputation on a slower GPU.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Hardware infrastructure",
+                                q: "What is the expected behavior on next-gen hardware like NVIDIA Blackwell (B200) or TPU v7?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>High Bandwidth Interconnects:</strong> Next-gen architectures feature faster NVLink or TPU ICI, significantly accelerating memory transfers. Prefill computation times are vastly reduced, but cache-aware routing is still key under massive concurrency to preserve high-bandwidth memory (HBM) capacity.</p>
+                                        <p><strong>Dynamic Capacity Allocation:</strong> Newer platforms support hardware-level virtualization and dynamic partitioning. Cache-aware routing must align with dynamic slices to maintain high cache hits without fragmenting HBM pools across partitioned instances.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Workloads & Traffic Patterns",
+                                q: "How does traffic burstiness affect the performance of prefix caching and intelligent scheduling?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Queue Demands:</strong> High burstiness causes spikes in concurrent requests, leading to queuing delays at target replicas. Standard routers struggle because queue depths spike uniformly.</p>
+                                        <p><strong>Optimized Mitigation:</strong> Pair queue-depth routing with prefix caching. By ensuring that bursty requests sharing a system prompt are routed to prefix-warm replicas, you reduce the compute footprint of the burst by up to 90%, quickly draining queue backlogs.</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                category: "Workloads & traffic patterns",
+                                q: "When is prefix caching NOT recommended for inference workloads?",
+                                a: (
+                                    <div className="space-y-2 text-slate-300 text-[11px] leading-relaxed">
+                                        <p><strong>Zero Prefix Overlap:</strong> If requests are fully unique and do not share common system prompts, few-shot examples, or document contexts, the cache hit rate will approach 0%.</p>
+                                        <p><strong>System Overhead:</strong> Maintaining and checking prefix trees at the router introduces a microsecond routing latency overhead. While negligible for long prompts, it offers no benefit if prefix reuse is absent.</p>
+                                        <p><strong>Recommendation:</strong> Default to simple load-balanced scheduling if average prefix length is &lt; 100 tokens and prompt reuse is &lt; 5%.</p>
+                                    </div>
+                                )
+                            }
+                        ].reduce((acc, faq) => {
+                            if (!acc[faq.category]) {
+                                acc[faq.category] = [];
+                            }
+                            acc[faq.category].push(faq);
+                            return acc;
+                        }, {})
+                    ).map(([category, faqs], catIdx) => (
+                        <div key={catIdx} className="space-y-3">
+                            <h4 className="text-xs font-extrabold uppercase tracking-widest text-cyan-400/80 border-b border-slate-800/80 pb-2 mb-3 mt-6">
+                                {category}
+                            </h4>
+                            <div className="space-y-3">
+                                {faqs.map((faq, faqIdx) => {
+                                    const uniqueKey = `${catIdx}-${faqIdx}`;
+                                    const isOpen = openFAQIndex === uniqueKey;
+                                    return (
+                                        <div key={faqIdx} className="border border-slate-800/80 rounded-xl bg-slate-900/40 overflow-hidden hover:border-slate-700/50 transition-colors">
+                                            <button
+                                                onClick={() => setOpenFAQIndex(isOpen ? null : uniqueKey)}
+                                                className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800/20 transition-colors cursor-pointer"
+                                            >
+                                                <span className="text-xs font-bold text-slate-200">{faq.q}</span>
+                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-4 ${isOpen ? 'rotate-180 text-cyan-400' : ''}`} />
+                                            </button>
+                                            {isOpen && (
+                                                <div className="px-4 pb-4 pt-1 border-t border-slate-800/60 bg-slate-950/10">
+                                                    {faq.a}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                    </div>
+                </div>
             </main>
 
-            {/* Reproduction Modal Workflow */}
+
+            {/* Reproducibility Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full shadow-[0_0_50px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden max-h-[90vh]">
                         <header className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/80">
                             <div className="flex items-center">
-                                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg mr-3">
-                                    <Zap className="w-5 h-5" />
+                                <div className="p-2 bg-cyan-500/20 text-cyan-400 rounded-lg mr-3">
+                                    <Code className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">Reproducibility Instructions</h3>
-                                    <p className="text-xs text-slate-400 mt-0.5">Execute this exact benchmark profile on your cluster.</p>
+                                    <h3 className="text-base font-bold text-white">Benchmark test configuration</h3>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">View and copy the exact recipes used for Intelligent Routing.</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         </header>
 
-                        <div className="p-6">
-                            <div className="mb-2">
-                                <h4 className="text-sm font-semibold text-slate-300 mb-1">Reference Documentation</h4>
-                                <p className="text-xs text-slate-400">
-                                    For deep architectural specifications, view the full instructions directly on our repository:
-                                </p>
-                                <a href="https://github.com/llm-d/llm-d/tree/main/guides/optimized-baseline" target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center text-xs font-bold text-cyan-400 hover:underline">
-                                    View complete guide <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                                </a>
-                            </div>
+                        <div className="flex border-b border-slate-800 bg-slate-900/60 px-6 pt-2 gap-1 overflow-x-auto no-scrollbar">
+                            {['Model server flags', 'K8s manifest', 'Traffic YAML', 'Raw benchmark JSON'].map((tab, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setActiveRecipeTab(idx)}
+                                    className={`px-4 py-2 text-xs font-bold border-b-2 transition-all shrink-0 ${
+                                        activeRecipeTab === idx
+                                            ? 'border-cyan-500 text-cyan-400'
+                                            : 'border-transparent text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="p-6 flex-1 overflow-y-auto bg-slate-950 font-mono text-[10px] text-slate-300 relative">
+                            {activeRecipeTab === 0 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_VLLM, 'vllm')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['vllm'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['vllm'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_VLLM}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 1 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_K8S, 'k8s')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['k8s'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['k8s'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_K8S}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 2 && (
+                                <>
+                                    <button 
+                                        onClick={() => handleCopy(RECIPE_TRAFFIC, 'traffic')}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['traffic'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['traffic'] ? 'Copied!' : 'Copy code'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">{RECIPE_TRAFFIC}</pre>
+                                </>
+                            )}
+                            {activeRecipeTab === 3 && (
+                                <>
+                                    <button 
+                                        onClick={() => {
+                                            const jsonStr = JSON.stringify({
+                                                workload: "Intelligent Routing Replay",
+                                                concurrency: 64,
+                                                parameters: { scheduler_policy: "load-aware", replicas: 4 },
+                                                verified_gains: {
+                                                    ttft_p99_reduction: "-35%",
+                                                    tpot_p99_reduction: "-20%"
+                                                }
+                                            }, null, 2);
+                                            handleCopy(jsonStr, 'json');
+                                        }}
+                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+                                    >
+                                        {copiedStates['json'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                        <span className="text-[9px] font-bold">{copiedStates['json'] ? 'Copied!' : 'Copy JSON'}</span>
+                                    </button>
+                                    <pre className="whitespace-pre-wrap">
+                                        {JSON.stringify({
+                                            workload: "Intelligent Routing Replay",
+                                            concurrency: 64,
+                                            parameters: { scheduler_policy: "load-aware", replicas: 4 },
+                                            verified_gains: {
+                                                ttft_p99_reduction: "-35%",
+                                                tpot_p99_reduction: "-20%"
+                                            }
+                                        }, null, 2)}
+                                    </pre>
+                                </>
+                            )}
                         </div>
 
                         <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end">
-                            <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs transition-colors border border-slate-700">
+                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-xs transition-colors border border-slate-700">
                                 Close
                             </button>
                         </div>
@@ -1196,7 +1503,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                                     <Bell className="w-5 h-5 cursor-pointer" />
                                 </div>
                                 <div>
-                                    <h3 className="text-[15px] font-bold text-white">Create SLA Alert</h3>
+                                    <h3 className="text-[15px] font-bold text-white">Create SLA alert</h3>
                                     <p className="text-[11px] text-slate-400 mt-0.5">Notifies your team when performance drops.</p>
                                 </div>
                             </div>
@@ -1244,7 +1551,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             {alertSaved && <span className="text-xs font-medium text-emerald-500 mr-4 animate-in fade-in slide-in-from-right-4">Alert Saved!</span>}
                             <button onClick={() => setIsAlertModalOpen(false)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs transition-colors border border-slate-700 mr-2 font-semibold">Cancel</button>
                             <button onClick={handleSaveAlert} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs transition-colors shadow-sm flex items-center border border-indigo-500 line-clamp-1">
-                                Save Alert Condition
+                                Save alert condition
                             </button>
                         </div>
                     </div>

@@ -12,7 +12,8 @@ import {
     DollarSign,
     FileCode,
     Activity,
-    Zap,
+    TrendingUp,
+    Zap
 } from 'lucide-react';
 
 const MENU_GROUPS = [
@@ -22,22 +23,28 @@ const MENU_GROUPS = [
         ]
     },
     {
-        title: "Well-Lit Paths",
+        title: "Well-lit paths",
         items: [
-            { id: 'intelligent-routing', label: 'Intelligent Routing', icon: Route, view: 'intelligent-routing' },
-            { id: 'pd-disaggregation', label: 'P/D Disaggregation', icon: Split, view: 'pd-disaggregation', disabled: true },
-            { id: 'wide-ep', label: 'Wide-EP', icon: Brain, view: 'wide-ep', disabled: true },
-            { id: 'prefix-cache-offloading', label: 'Prefix Cache Offloading', icon: Database, view: 'prefix-cache-offloading', disabled: true }
+            { id: 'intelligent-routing', label: 'Intelligent routing', icon: Route, view: 'intelligent-routing' },
+            { id: 'prefix-cache-offloading', label: 'Prefix cache offloading', icon: Database, view: 'prefix-cache-offloading' },
+            { id: 'pd-disaggregation', label: 'Prefill / decode (P/D) disagg', icon: Split, view: 'pd-disaggregation', disabled: true },
+            { id: 'wide-ep', label: 'Wide expert parallelism', icon: Brain, view: 'wide-ep', disabled: true }
         ]
     },
     {
-        title: "Utility Suite",
+        title: "Workload hub",
         items: [
-            { id: 'benchmark-browser', label: 'Benchmark Browser', icon: BarChart2, view: 'benchmark-browser' },
-            { id: 'regressions-analysis', label: 'Regressions Analysis', icon: Activity, view: 'regressions-analysis' },
-            { id: 'schema-browser', label: 'Schema Explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
-            { id: 'workload-catalog', label: 'Workload Catalog', icon: Zap, view: 'workload-catalog', disabled: false },
-            { id: 'value-analysis', label: 'Value Analysis', icon: DollarSign, view: 'value-analysis', disabled: true }
+            { id: 'agentic-workloads', label: 'Agentic workloads', icon: Compass, view: 'agentic-workloads' }
+        ]
+    },
+    {
+        title: "Utility suite",
+        items: [
+            { id: 'benchmark-browser', label: 'Benchmark browser', icon: BarChart2, view: 'benchmark-browser' },
+            { id: 'schema-browser', label: 'Schema explorer', icon: FileCode, view: 'schema-explorer', disabled: false },
+            { id: 'workload-catalog', label: 'Workload catalog', icon: Zap, view: 'workload-catalog', disabled: false },
+            { id: 'regressions-analysis', label: 'Regressions & analysis', icon: Activity, view: 'regressions-analysis' },
+            { id: 'value-analysis', label: 'Value analysis', icon: TrendingUp, view: 'value-analysis', disabled: true }
         ]
     },
     {
@@ -116,7 +123,7 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
 
                                             {item.disabled && (
                                                 <span className="text-[9px] text-slate-400 font-mono px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 shrink-0 tracking-wider">
-                                                    COMING SOON
+                                                    Coming soon
                                                 </span>
                                             )}
                                         </div>
@@ -126,7 +133,7 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
                                     {!isExpanded && (
                                         <div className="absolute left-16 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-800 border border-slate-700/80 text-white text-xs font-medium rounded-lg invisible group-hover:visible shadow-xl z-[99999] whitespace-nowrap flex items-center gap-2">
                                             {item.label}
-                                            {item.disabled && <span className="text-[10px] text-slate-400 font-mono">(Coming Soon)</span>}
+                                            {item.disabled && <span className="text-[10px] text-slate-400 font-mono">(Coming soon)</span>}
                                         </div>
                                     )}
                                 </button>

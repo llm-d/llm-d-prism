@@ -23,7 +23,7 @@ const SchemaExplorer = ({ onNavigateBack }) => {
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-lg font-bold text-white tracking-wide">Schema Explorer</h1>
+                        <h1 className="text-lg font-bold text-white tracking-wide">Schema explorer</h1>
                     </div>
                 </div>
 
@@ -33,14 +33,14 @@ const SchemaExplorer = ({ onNavigateBack }) => {
                         target="_blank" 
                         rel="noreferrer"
                         className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
-                    >
+                     >
                         <MessageCircle className="w-4 h-4 mr-2" /> Contact us
                     </a>
                     <button 
                         className="px-4 py-2 text-sm font-medium rounded-md text-slate-500 bg-slate-800/50 cursor-not-allowed flex items-center border border-slate-700/50 relative"
                         disabled
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
+                        <Share2 className="w-4 h-4 mr-2" /> Share link 
                     </button>
                 </div>
             </header>
@@ -49,7 +49,7 @@ const SchemaExplorer = ({ onNavigateBack }) => {
                 <iframe 
                     src="https://benchmark-schema-explorer-369234493812.us-central1.run.app" 
                     className="w-full h-full border-0" 
-                    title="Schema Explorer"
+                    title="Schema explorer"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                 />

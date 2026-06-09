@@ -21,11 +21,14 @@ import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
 import SchemaExplorer from './components/SchemaExplorer';
 import WorkloadCatalog from './components/WorkloadCatalog';
+import PrefixCacheOffloadingDashboard from './components/PrefixCacheOffloadingDashboard';
+import StackInsightEngine from './components/StackInsightEngine';
+import RegressionsAnalysisDashboard from './components/RegressionsAnalysisDashboard';
+import AgenticWorkloadsDashboard from './components/AgenticWorkloadsDashboard';
 
 import LeftNavigation from './components/LeftNavigation';
 import { useDashboardState } from './hooks/useDashboardState';
 import { useDashboardData } from './hooks/useDashboardData';
-import RegressionsAnalysisDashboard from './components/RegressionsAnalysisDashboard';
 
 function App() {
   const mainRef = useRef(null);
@@ -112,11 +115,14 @@ function App() {
           ) : (
             <>
               {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-              {currentView === 'intelligent-routing' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {(currentView === 'intelligent-routing' || currentView === 'inference-scheduling') && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'agentic-workloads' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
               {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
               {currentView === 'manage-benchmarks' && <ManageBenchmarks onNavigateBack={() => handleNavigate('benchmark-browser')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
               {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
               {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
+              {currentView === 'prefix-cache-offloading' && <PrefixCacheOffloadingDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'stack-insight' && <StackInsightEngine onNavigateBack={() => handleNavigate('prefix-cache-offloading')} />}
               {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
               {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
             </>
