@@ -210,11 +210,11 @@ const PrismHome = ({ onNavigate }) => {
                     <div className="w-full max-w-[46%] mx-auto">
                         {/* Path 5: Agentic Workloads (M2 Path) */}
                         <div 
-                            onClick={() => onNavigate('agentic-workloads')}
+                            onClick={() => onNavigate('agentic-serving')}
                             className="group relative bg-slate-900/80 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-5 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-300 cursor-pointer flex flex-col h-full overflow-hidden border border-slate-800/50 hover:border-cyan-500/30"
                         >
                             <h3 className="text-base font-bold mb-2 text-white group-hover:text-cyan-400 transition-colors leading-tight">
-                                Agentic workloads
+                                Agentic serving
                             </h3>
                             <div className="flex flex-wrap gap-1.5 mb-3">
                                 <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded-full font-medium border border-cyan-500/20 whitespace-nowrap">Multi-turn</span>
@@ -456,7 +456,7 @@ const PrismHome = ({ onNavigate }) => {
                                      Test harness
                                      <Link className="h-3 w-3 text-cyan-400 group-hover:scale-110 transition-transform" />
                                  </h4>
-                                 <p className="text-sm text-slate-400">Stress distributed systems with agentic workloads.</p>
+                                 <p className="text-sm text-slate-400">Stress distributed systems with agentic serving workloads.</p>
                              </a>
 
                              {/* Real World Workload Catalog */}

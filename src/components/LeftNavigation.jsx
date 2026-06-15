@@ -34,7 +34,7 @@ const MENU_GROUPS = [
     {
         title: "Workload hub",
         items: [
-            { id: 'agentic-workloads', label: 'Agentic workloads', icon: Compass, view: 'agentic-workloads' }
+            { id: 'agentic-serving', label: 'Agentic serving', icon: Compass, view: 'agentic-serving' }
         ]
     },
     {

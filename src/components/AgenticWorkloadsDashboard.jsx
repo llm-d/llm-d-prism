@@ -350,7 +350,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
         return (
             <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center pt-16 md:pl-24 w-full font-sans">
                 <Loader className="animate-spin text-cyan-500" size={40} />
-                <div className="text-lg font-semibold text-slate-200 mt-4">Loading Agentic Workloads Data...</div>
+                <div className="text-lg font-semibold text-slate-200 mt-4">Loading Agentic Serving Data...</div>
                 <p className="text-xs text-slate-500 mt-2">Scanning GCS benchmark results</p>
             </div>
         );
@@ -522,7 +522,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                         </span>
                     </div>
                     <div className="flex items-center">
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate">Agentic workloads</h1>
+                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate">Agentic serving</h1>
                         <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
                             Guided path
                         </span>
