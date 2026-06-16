@@ -12,7 +12,7 @@ import { scanAgenticWorkloads } from '../utils/gcsScanner';
 const SCENARIOS = [
     { id: 0, name: 'K8s Service (Reference)', label: 'Reference', description: 'Standard K8s round-robin pod routing' },
     { id: 1, name: 'llm-d Routing', label: 'Opt 1: Intelligent Routing', description: 'Prefix & KV-cache-aware cluster gateway routing' },
-    { id: 2, name: 'Combined Optimizations', label: 'Opt 2: Combined', description: 'uLLM + Pallas kernels + stream-load + FP8' }
+    { id: 2, name: 'Combined Optimizations', label: 'Opt 2: Combined', description: 'Pallas kernels + stream-load + FP8' }
 ];
 
 const SCENARIO_COLORS = {
