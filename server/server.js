@@ -21,7 +21,6 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -157,22 +156,42 @@ app.get('/api/local/list', async (req, res) => {
     if (!fs.existsSync(dir)) {
         return res.json({ items: [] });
     }
-    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.'));
-    const items = files.map(f => ({
-        name: f,
-        mediaLink: `/api/local/file/${f}`
-    }));
+    
+    const items = [];
+    
+    const scanDirectory = (currentDir, relativePrefix = '') => {
+        const files = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const f of files) {
+            if (f.name.startsWith('.')) continue;
+            
+            const relPath = relativePrefix ? `${relativePrefix}/${f.name}` : f.name;
+            if (f.isDirectory()) {
+                scanDirectory(path.join(currentDir, f.name), relPath);
+            } else {
+                items.push({
+                    name: relPath,
+                    mediaLink: `/api/local/file/${encodeURIComponent(relPath)}`
+                });
+            }
+        }
+    };
+    
+    scanDirectory(dir);
     res.json({ items });
 });
 
-app.get('/api/local/file/:filename', async (req, res) => {
+app.get('/api/local/file/*', async (req, res) => {
     const fs = await import('fs');
-    const filename = req.params.filename;
-    // Sanitization to prevent traversing up
-    const safeFilename = path.basename(filename); 
-    const filepath = path.join(__dirname, '../private/benchmarks', safeFilename);
+    const relPath = req.params[0];
     
-    if (fs.existsSync(filepath)) {
+    const baseDir = path.resolve(__dirname, '../private/benchmarks');
+    const filepath = path.resolve(baseDir, relPath);
+    
+    if (!filepath.startsWith(baseDir)) {
+        return res.status(403).send('Forbidden');
+    }
+    
+    if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
         res.sendFile(filepath);
     } else {
         res.status(404).send('Not found');

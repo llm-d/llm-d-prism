@@ -19,6 +19,9 @@ import { UnifiedDataTable } from './ManageBenchmarks/UnifiedDataTable';
 import DataConnectionsPanel from './DataConnectionsPanel';
 import { INTEGRATIONS, getSourceTag, getBenchmarkKey, getBucket, getRatioType, getAcceleratorCount, getEffectiveTp, sortBuckets } from '../utils/dashboardHelpers';
 
+import { UploadValidationDialog } from './DataConnections/UploadValidationDialog';
+import { Upload } from 'lucide-react';
+
 const getCleanModelName = (name) => {
     if (!name) return '';
     return name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
@@ -50,8 +53,147 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
         setBrv02CustomLabels,
         removeBrv02Run,
         expandedModels,
-        setExpandedModels
+        setExpandedModels,
+        handleValidatedUpload
     } = dashboardData;
+
+    const [isUploadDialogOpen, setIsUploadDialogOpen] = React.useState(false);
+    const [initialStagedFiles, setInitialStagedFiles] = React.useState([]);
+    const [activeTab, setActiveTab] = React.useState('all'); // 'all' or 'submissions'
+
+    const [submissions, setSubmissions] = React.useState([]);
+    const [isLoadingSubmissions, setIsLoadingSubmissions] = React.useState(false);
+
+    // Queries the server's filesystem for actually staged runs, falling back to and
+    // merging with browser local storage runs for a seamless and responsive experience.
+    React.useEffect(() => {
+        let isMounted = true;
+
+        const loadSubmissions = async () => {
+            setIsLoadingSubmissions(true);
+            try {
+                const res = await fetch('/api/local/list');
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const listData = await res.json();
+                
+                const uploadFiles = (listData.items || []).filter(item => 
+                    item.name.endsWith('prism_run_upload.json')
+                );
+
+                const serverSubmissions = [];
+                if (uploadFiles.length > 0) {
+                    const fetchPromises = uploadFiles.map(async (file) => {
+                        try {
+                            const fileRes = await fetch(file.mediaLink);
+                            if (fileRes.ok) {
+                                const runPayload = await fileRes.json();
+                                return {
+                                    id: runPayload.runId || file.name.split('/')[0],
+                                    runId: runPayload.runId || file.name.split('/')[0],
+                                    model: runPayload.model_name || "Custom Model",
+                                    hardware: runPayload.hardware?.hardware_name || runPayload.run_metadata?.accelerator || "Detected Hardware",
+                                    wellLitPath: runPayload.well_lit_path || "none / custom",
+                                    submittedAt: runPayload.timestamp || runPayload.run_metadata?.timestamp || (runPayload.entries?.[0]?.raw_report?.run?.time?.start) || new Date().toISOString().split('T')[0],
+                                    status: runPayload.status || "staged",
+                                    feedback: runPayload.feedback || ""
+                                };
+                            }
+                        } catch (err) {
+                            console.error(`Error loading submission from ${file.name}:`, err);
+                        }
+                        return null;
+                    });
+                    
+                    const resolved = await Promise.all(fetchPromises);
+                    serverSubmissions.push(...resolved.filter(Boolean));
+                }
+
+                const mergedList = [...serverSubmissions];
+                if (brv02Runs && brv02Runs.length > 0) {
+                    brv02Runs.forEach(run => {
+                        if (!mergedList.some(s => s.runId === run.runId)) {
+                            const firstStage = run.stages?.[0];
+                            const resolvedModel = firstStage?.scenario?.model || run.run_metadata?.model || "Custom Model";
+                            const resolvedHw = firstStage?.scenario?.hardware || run.run_metadata?.accelerator || "Detected Hardware";
+                            const submittedAt = firstStage?.timestamp || run.run_metadata?.timestamp || new Date().toISOString().split('T')[0];
+
+                            mergedList.push({
+                                id: `dyn-${run.runId}`,
+                                runId: run.runId,
+                                model: resolvedModel,
+                                hardware: resolvedHw,
+                                wellLitPath: run.wellLitPath || "none / custom",
+                                submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
+                                status: "staged",
+                                feedback: ""
+                            });
+                        }
+                    });
+                }
+
+                // Sort chronologically (latest submissions first)
+                mergedList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+
+                if (isMounted) {
+                    setSubmissions(mergedList);
+                }
+            } catch (error) {
+                console.error("Failed to load submissions:", error);
+                if (isMounted) {
+                    addToast({
+                        message: "Failed to load submitted runs from backend server.",
+                        type: "error"
+                    });
+                    
+                    const fallbackList = [];
+                    if (brv02Runs && brv02Runs.length > 0) {
+                        brv02Runs.forEach(run => {
+                            const firstStage = run.stages?.[0];
+                            const resolvedModel = firstStage?.scenario?.model || run.run_metadata?.model || "Custom Model";
+                            const resolvedHw = firstStage?.scenario?.hardware || run.run_metadata?.accelerator || "Detected Hardware";
+                            const submittedAt = firstStage?.timestamp || run.run_metadata?.timestamp || new Date().toISOString().split('T')[0];
+
+                            fallbackList.push({
+                                id: `dyn-${run.runId}`,
+                                runId: run.runId,
+                                model: resolvedModel,
+                                hardware: resolvedHw,
+                                wellLitPath: run.wellLitPath || "none / custom",
+                                submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
+                                status: "staged",
+                                feedback: ""
+                            });
+                        });
+                        fallbackList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+                    }
+                    setSubmissions(fallbackList);
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoadingSubmissions(false);
+                }
+            }
+        };
+
+        loadSubmissions();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [brv02Runs, addToast]);
+
+    const openUploadDialogWithFiles = (files) => {
+        let fileList = [];
+        if (files && files.target && files.target.files) {
+            fileList = Array.from(files.target.files);
+        } else if (Array.isArray(files)) {
+            fileList = files;
+        } else if (files) {
+            fileList = Array.from(files);
+        }
+        setInitialStagedFiles(fileList);
+        setIsUploadDialogOpen(true);
+    };
 
 // Filtered by source
     const filteredBySource = useMemo(() => {
@@ -595,6 +737,13 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                     </button>
 
                     <button
+                        onClick={() => setIsUploadDialogOpen(true)}
+                        className="px-4 py-2 text-sm font-medium rounded-md border transition-colors flex items-center shadow-lg text-white bg-emerald-600 hover:bg-emerald-500 border-emerald-500/20"
+                    >
+                        <Upload className="w-4 h-4 mr-2" /> Upload
+                    </button>
+
+                    <button
                         onClick={() => setShowDataPanel(!showDataPanel)}
                         className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors flex items-center ${showDataPanel ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
                     >
@@ -613,21 +762,154 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
             </header>
 
             <main className="w-full px-8 py-6 pl-28 flex flex-col transition-colors duration-200">
-                <div className="space-y-4 mb-4 relative">
-                    <FilterPanel
-                        {...{
-                            showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
-                            selectedModels: selectedBenchmarks, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
-                            selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
-                            toggleBenchmark, toggleModelExpansion,
-                            baselineBenchmarkKey, setBaselineBenchmarkKey,
-                            UnifiedDataTable,
-                            hideShowSelectedOnly: true,
-                            renameClearToUnselectAll: true,
-                            brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run
-                        }}
-                    />
+                {/* Tabs switcher */}
+                <div className="flex border-b border-slate-800 mb-6 max-w-md">
+                    <button 
+                        onClick={() => setActiveTab('all')}
+                        className={`flex-1 pb-3 text-sm font-semibold text-center border-b-2 transition-all ${
+                            activeTab === 'all' 
+                            ? 'border-cyan-500 text-cyan-400' 
+                            : 'border-transparent text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        Benchmark Explorer
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('submissions')}
+                        className={`flex-1 pb-3 text-sm font-semibold text-center border-b-2 transition-all flex items-center justify-center gap-2 ${
+                            activeTab === 'submissions' 
+                            ? 'border-cyan-500 text-cyan-400' 
+                            : 'border-transparent text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        My Submissions 
+                        <span className="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-bold min-w-[20px] h-[18px] flex items-center justify-center">
+                            {isLoadingSubmissions ? (
+                                <Loader size={10} className="animate-spin text-cyan-400" />
+                            ) : (
+                                submissions.length
+                            )}
+                        </span>
+                    </button>
                 </div>
+
+                {activeTab === 'all' ? (
+                    <div className="space-y-4 mb-4 relative">
+                        <FilterPanel
+                            {...{
+                                showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
+                                selectedModels: selectedBenchmarks, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
+                                selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
+                                toggleBenchmark, toggleModelExpansion,
+                                baselineBenchmarkKey, setBaselineBenchmarkKey,
+                                UnifiedDataTable,
+                                hideShowSelectedOnly: true,
+                                renameClearToUnselectAll: true,
+                                brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run
+                            }}
+                        />
+                    </div>
+                ) : (
+                    <div className="space-y-6 animate-in fade-in duration-200">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+                            <div className="p-5 border-b border-slate-800 bg-slate-900/50">
+                                <h3 className="text-base font-bold text-white">Submitted Benchmark Runs</h3>
+                                <p className="text-xs text-slate-400 mt-1">Track the lifecycle, verification status, and reviewer feedback of your staged and submitted workloads.</p>
+                            </div>
+                            
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px] font-bold">
+                                        <tr>
+                                            <th className="px-5 py-3">Run ID / Descriptor</th>
+                                            <th className="px-5 py-3">Model Name</th>
+                                            <th className="px-5 py-3">Hardware Platform</th>
+                                            <th className="px-5 py-3">Well-Lit Path</th>
+                                            <th className="px-5 py-3">Submitted</th>
+                                            <th className="px-5 py-3">Review Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/60">
+                                        {isLoadingSubmissions ? (
+                                            <tr>
+                                                <td colSpan={6} className="px-5 py-12 text-center text-slate-400 font-medium">
+                                                    <div className="flex flex-col items-center justify-center gap-3">
+                                                        <Loader size={20} className="animate-spin text-cyan-500" />
+                                                        <span className="text-slate-300">Retrieving staged submissions...</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : submissions.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={6} className="px-5 py-12 text-center text-slate-400 font-medium">
+                                                    No active staged benchmarks found. Upload a benchmark folder to get started.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            submissions.map((sub) => (
+                                                <React.Fragment key={sub.id}>
+                                                    <tr className="hover:bg-slate-800/30 transition-colors">
+                                                        <td className="px-5 py-4 font-mono font-semibold text-slate-300 select-all">{sub.runId}</td>
+                                                        <td className="px-5 py-4 font-medium text-slate-200">{sub.model}</td>
+                                                        <td className="px-5 py-4 text-slate-300">{sub.hardware}</td>
+                                                        <td className="px-5 py-4">
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                                                sub.wellLitPath && sub.wellLitPath !== 'none / custom'
+                                                                ? 'bg-blue-500/5 text-blue-400 border-blue-500/20'
+                                                                : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                                                            }`}>
+                                                                {sub.wellLitPath || 'custom / unassigned'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-4 text-slate-400">{sub.submittedAt}</td>
+                                                        <td className="px-5 py-4">
+                                                            {sub.status === 'staged' && (
+                                                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full border border-amber-500/20">
+                                                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" /> Staged
+                                                                </span>
+                                                            )}
+                                                            {sub.status === 'in_review' && (
+                                                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full border border-blue-500/20">
+                                                                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" /> In Review
+                                                                </span>
+                                                            )}
+                                                            {sub.status === 'approved' && (
+                                                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-green-500/10 text-green-400 px-2.5 py-1 rounded-full border border-green-500/20">
+                                                                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full" /> Approved
+                                                                </span>
+                                                            )}
+                                                            {sub.status === 'changes_requested' && (
+                                                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full border border-red-500/20">
+                                                                    <span className="w-1.5 h-1.5 bg-red-400 rounded-full" /> Changes Requested
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                    {sub.feedback && (
+                                                        <tr className="bg-slate-900/30">
+                                                            <td colSpan={6} className="px-5 py-2.5 border-t border-slate-800/40">
+                                                                <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
+                                                                    sub.status === 'changes_requested'
+                                                                    ? 'bg-red-500/5 text-red-300 border-red-500/10'
+                                                                    : 'bg-green-500/5 text-green-300 border-green-500/10'
+                                                                }`}>
+                                                                    <span className="font-bold uppercase tracking-wider text-[10px] mt-0.5">
+                                                                        {sub.status === 'changes_requested' ? 'Reviewer Feedback:' : 'Note:'}
+                                                                    </span>
+                                                                    <span className="italic">"{sub.feedback}"</span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
 
             {/* Data Connections Panel */}
@@ -639,6 +921,7 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
             )}
             <DataConnectionsPanel
                 {...dashboardData}
+                handleBrv02Upload={openUploadDialogWithFiles}
                 addToast={addToast}
                 showDataPanel={showDataPanel}
                 setShowDataPanel={setShowDataPanel}
@@ -647,6 +930,17 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                 activeFilters={activeFilters}
                 showSelectedOnly={showSelectedOnly}
                 state={dashboardState}
+            />
+            
+            <UploadValidationDialog 
+                isOpen={isUploadDialogOpen}
+                onClose={() => setIsUploadDialogOpen(false)}
+                onCommit={(validFiles) => {
+                    handleValidatedUpload(validFiles);
+                }}
+                existingRunIds={brv02Runs.map(r => r.runId)}
+                initialFiles={initialStagedFiles}
+                addToast={addToast}
             />
         </div>
     );

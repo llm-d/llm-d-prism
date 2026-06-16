@@ -65,8 +65,8 @@ export const FilterPanel = ({
     const [isFiltersExpanded, setIsFiltersExpanded] = useState(() => {
         try {
             const saved = localStorage.getItem('prism_manage_filters_expanded');
-            return saved !== null ? saved === 'true' : true;
-        } catch { return true; }
+            return saved !== null ? saved === 'true' : false;
+        } catch { return false; }
     });
 
     const [visibleSpecs, setVisibleSpecs] = useState(() => {

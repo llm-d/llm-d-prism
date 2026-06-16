@@ -105,14 +105,34 @@ function App() {
       <div className="min-h-screen bg-slate-950 w-full overflow-hidden font-sans relative flex flex-col">
         <LeftNavigation currentView={currentView} onNavigate={handleNavigate} isMobileOpen={isMobileNavOpen} />
         <main ref={mainRef} className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
-          {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-          {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-          {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-          {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} />}
-          {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
-          {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
-          {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-          {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
+          {shouldShowLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-100 transition-colors space-y-6 pl-28">
+              <Loader className="animate-spin text-blue-500" size={40} />
+              <div className="text-center space-y-2">
+                <div className="text-lg font-semibold text-slate-200">
+                  Loading Benchmark Data...
+                </div>
+              </div>
+              <button
+                onClick={() => setBypassLoading(true)}
+                className="text-xs text-slate-500 hover:text-slate-300 underline transition-colors"
+              >
+                Skip Waiting (Data may successfully arrive later)
+              </button>
+            </div>
+          ) : (
+            <>
+              {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
+              {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
+              {currentView === 'manage-benchmarks' && <ManageBenchmarks onNavigateBack={() => handleNavigate('benchmark-browser')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
+              {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
+              {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
+              {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
+            </>
+          )}
         </main>
       </div>
     </ErrorBoundary>

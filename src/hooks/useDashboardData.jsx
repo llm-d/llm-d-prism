@@ -1718,6 +1718,58 @@ export const useDashboardData = (initialState, dashboardState) => {
         setBrv02Runs(prev => prev.filter(r => r.runId !== runId));
     };
 
+    const handleValidatedUpload = async (validBundles) => {
+        if (!validBundles || validBundles.length === 0) return;
+        
+        setBrv02Loading(true);
+        setBrv02Error(null);
+
+        try {
+            const trulyNewStages = [];
+            
+            for (const bundle of validBundles) {
+                const metadata = bundle.metadataFiles.run_metadata ? bundle.metadataFiles.run_metadata.parsed : null;
+                const config = bundle.metadataFiles.config ? bundle.metadataFiles.config.parsed : null;
+                const summary = bundle.metadataFiles.summary ? bundle.metadataFiles.summary.parsed : null;
+
+                for (const sf of bundle.stageFiles) {
+                    const identifier = sf.file.webkitRelativePath || sf.file.name;
+                    const record = await parseReportV02(sf.content, identifier);
+                    if (record) {
+                        // Enrich stage record with bundle metadata
+                        record.run_metadata = metadata;
+                        record.config = config;
+                        record.summary = summary;
+                        
+                        const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename);
+                        const isDupInExisting = brv02Runs.some(run => 
+                            run.stages.some(existingStage => existingStage.filename === record.filename)
+                        );
+                        if (!isDupInBatch && !isDupInExisting) {
+                            trulyNewStages.push(record);
+                        }
+                    }
+                }
+            }
+
+            if (trulyNewStages.length === 0) {
+                setBrv02Error('All selected valid files have already been uploaded.');
+                return;
+            }
+
+            setBrv02Runs(prev => {
+                const allStages = [...prev.flatMap(run => run.stages), ...trulyNewStages];
+                return groupStagesIntoRuns(allStages);
+            });
+
+        } catch (e) {
+            console.error("Failed to upload validated files:", e);
+            setBrv02Error("Failed to upload validated report files.");
+        } finally {
+            setBrv02Loading(false);
+        }
+    };
+
     return {
         data, setData,
         loading, setLoading,
@@ -1760,7 +1812,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
-        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, removeBrv02Run,
+        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run,
         brv02CustomLabels, setBrv02CustomLabels,
         brv02BaselineRunId, setBrv02BaselineRunId,
         brv02SelectedStages, setBrv02SelectedStages

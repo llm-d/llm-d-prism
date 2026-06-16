@@ -444,15 +444,6 @@ const DataConnectionsPanel = (props) => {
                                                 gcsSuccess={gcsSuccess} // Now passed as prop
                                             />
                                         )}
-
-                                         {((isExpanded || isConnected) && integ.id === 'benchmark_report_v02') && (
-                                            <BenchmarkReportPanel
-                                                error={brv02Error}
-                                                setError={setBrv02Error}
-                                                onUpload={handleBrv02Upload}
-                                                loading={brv02Loading}
-                                             />
-                                        )}
                                     </div>
                                 </div>
                             );

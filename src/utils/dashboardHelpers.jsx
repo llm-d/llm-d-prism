@@ -359,6 +359,11 @@ export const formatOriginLabel = (origin) => {
 export const getBenchmarkKey = (d) => {
     if (!d) return 'unknown';
     
+    // For local BRV02 benchmark runs, group them as a single run instead of by stage.
+    if (d.source && d.source.startsWith('brv02:')) {
+        return d.source;
+    }
+    
     // For raw ad-hoc file imports (like drag and drop), keep them separated by filename
     if (d.source === 'local' && (d.source_info?.origin === 'drag-and-drop' || d.source_info?.origin === 'local_disk')) {
         const filename = d.source_info?.file_identifier || d.filename || 'unknown';

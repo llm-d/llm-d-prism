@@ -55,14 +55,13 @@ const pct = (val) => {
 // context, which will be available once the directory-picker upload path is
 // implemented.
 const deriveRunId = (doc, filename) => {
-    const uid = doc.run?.uid || crypto.randomUUID();
-    if (!filename || !filename.includes('/')) return uid;
+    if (!filename || !filename.includes('/')) {
+        return doc.run?.uid || crypto.randomUUID();
+    }
     
     const parts = filename.split('/');
     parts.pop(); // Remove the file name itself
-    const dirPrefix = parts.join('_');
-    
-    return `${dirPrefix}_${uid}`;
+    return parts.join('/');
 };
 
 // Derive a human-readable label from scenario context so the user can tell
@@ -181,10 +180,14 @@ const extractComponents = (stack) => {
 
 export function parseReportV02(yamlText, filename) {
     let doc;
-    try {
-        doc = yaml.load(yamlText);
-    } catch {
-        return null;
+    if (typeof yamlText === 'object' && yamlText !== null) {
+        doc = yamlText;
+    } else {
+        try {
+            doc = yaml.load(yamlText);
+        } catch {
+            return null;
+        }
     }
     if (!doc || doc.version !== '0.2') return null;
 
@@ -289,6 +292,8 @@ export function parseReportV02(yamlText, filename) {
         filename,
         runUid: doc.run?.uid || null,
         runEid: doc.run?.eid || null,
+        runCid: doc.run?.cid || null,
+        runPid: doc.run?.pid || null,
         timestamp: doc.run?.time?.start || null,
         stageIndex: safeNum(load.stage),
         scenario,
@@ -319,9 +324,17 @@ export function groupStagesIntoRuns(stageRecords) {
                 runId: record.runId,
                 runLabel: record.runLabel || record.runId || "Unknown Run",
                 stages: [],
+                run_metadata: record.run_metadata || null,
+                config: record.config || null,
+                summary: record.summary || null
             });
         }
-        map.get(record.runId).stages.push(record);
+        const runObj = map.get(record.runId);
+        runObj.stages.push(record);
+        
+        if (!runObj.run_metadata && record.run_metadata) runObj.run_metadata = record.run_metadata;
+        if (!runObj.config && record.config) runObj.config = record.config;
+        if (!runObj.summary && record.summary) runObj.summary = record.summary;
     }
     
     // Sort stages within each run
@@ -359,10 +372,65 @@ export function groupStagesIntoRuns(stageRecords) {
  * user removes a run from the comparison panel.
  */
 export function stageToEntry(stage) {
-    const { scenario, performance, runId, timestamp, components } = stage;
+    const { scenario, performance, runId, timestamp, components, run_metadata, config } = stage;
 
-    const modelName  = normalizeModelName(scenario.model);
-    const hardware   = normalizeHardware(scenario.hardware);
+    let modelName = scenario.model;
+    if ((modelName === 'Unknown' || !modelName) && run_metadata) {
+        modelName = run_metadata.model || modelName;
+    }
+    modelName = normalizeModelName(modelName);
+
+    let hardware = scenario.hardware;
+    if ((hardware === 'Unknown' || hardware === 'TPU' || hardware === 'GPU' || !hardware) && run_metadata) {
+        if (run_metadata.accelerator) {
+            hardware = run_metadata.accelerator;
+        } else if (run_metadata.namespace) {
+            const ns = String(run_metadata.namespace).toLowerCase();
+            if (ns.includes('tpu')) {
+                hardware = 'TPU';
+            } else if (ns.includes('gpu')) {
+                hardware = 'GPU';
+            }
+        }
+    }
+    
+    // Fallback to config if needed
+    if ((hardware === 'Unknown' || hardware === 'TPU' || hardware === 'GPU' || !hardware) && config) {
+        const accBackend = config.kustomize?.acceleratorBackend;
+        let inferredHw = null;
+        if (accBackend) {
+            const match = accBackend.match(/^(tpu-v\d+|h100|a100|l4)/i);
+            if (match) {
+                const accel = match[1].toLowerCase();
+                if (accel.includes('v6')) inferredHw = 'TPU v6e';
+                else if (accel.includes('v7')) inferredHw = 'TPU v7';
+                else if (accel.includes('v5')) inferredHw = 'TPU v5e';
+                else if (accel.includes('h100')) inferredHw = 'H100';
+                else if (accel.includes('a100')) inferredHw = 'A100';
+                else if (accel.includes('l4')) inferredHw = 'L4';
+            }
+        }
+        if (!inferredHw) {
+            const stdType = config.standalone?.acceleratorType?.labelValue || config.prefill?.acceleratorType?.labelValue;
+            if (stdType) {
+                const match = stdType.match(/(h100|a100|l4|tpu-v\d+)/i);
+                if (match) {
+                    const accel = match[1].toLowerCase();
+                    if (accel.includes('v6')) inferredHw = 'TPU v6e';
+                    else if (accel.includes('v7')) inferredHw = 'TPU v7';
+                    else if (accel.includes('v5')) inferredHw = 'TPU v5e';
+                    else if (accel.includes('h100')) inferredHw = 'H100';
+                    else if (accel.includes('a100')) inferredHw = 'A100';
+                    else if (accel.includes('l4')) inferredHw = 'L4';
+                }
+            }
+        }
+        if (inferredHw) {
+            hardware = inferredHw;
+        }
+    }
+
+    hardware = normalizeHardware(hardware);
     const ts         = timestamp || new Date().toISOString();
     const throughput = performance.outputTokenRate ?? null;
     const latency    = {

@@ -593,14 +593,25 @@ export const UnifiedDataTable = (props) => {
                                                              }
 
                                                              if (visibleSpecs.stage) {
-                                                                 const stageVal = benchmarkData[0]?.workload?.stage;
-                                                                 if (stageVal !== undefined && stageVal !== null && stageVal !== '') {
+                                                                 const isBrv02Run = benchmarkData[0]?.source?.startsWith('brv02:');
+                                                                 if (isBrv02Run) {
+                                                                     const stageCount = benchmarkData.length;
                                                                      specs.push(
                                                                          <span key="stage" className="inline-flex items-center gap-1">
-                                                                             <span className="text-slate-400 dark:text-slate-500 font-normal">Stage:</span>
-                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageVal}</span>
+                                                                             <span className="text-slate-400 dark:text-slate-500 font-normal">Stages:</span>
+                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stages</span>
                                                                          </span>
                                                                      );
+                                                                 } else {
+                                                                     const stageVal = benchmarkData[0]?.workload?.stage;
+                                                                     if (stageVal !== undefined && stageVal !== null && stageVal !== '') {
+                                                                         specs.push(
+                                                                             <span key="stage" className="inline-flex items-center gap-1">
+                                                                                 <span className="text-slate-400 dark:text-slate-500 font-normal">Stage:</span>
+                                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">{stageVal}</span>
+                                                                             </span>
+                                                                         );
+                                                                     }
                                                                  }
                                                              }
 
@@ -799,26 +810,26 @@ export const UnifiedDataTable = (props) => {
                                                                                      />
                                                                                  </div>
                                                                              ) : (
-                                                                                 <div className="flex items-center gap-1 min-w-0">
-                                                                                     <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
-                                                                                         {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
-                                                                                             ? brv02CustomLabels[runId] 
-                                                                                             : (stat.model_name || stat.model || meta.model_name)}
-                                                                                     </span>
-                                                                                     {isBrv02 && (
-                                                                                         <button
-                                                                                             onClick={(e) => {
-                                                                                                 e.stopPropagation();
-                                                                                                 setEditingRunId(runId);
-                                                                                                 setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
-                                                                                             }}
-                                                                                            title="Rename run"
-                                                                                            className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0"
-                                                                                        >
-                                                                                            <Pencil size={12} />
-                                                                                        </button>
-                                                                                    )}
-                                                                                </div>
+                                                                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                                                                        <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
+                                                                                            {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
+                                                                                                ? brv02CustomLabels[runId] 
+                                                                                                : (stat.model_name || stat.model || meta.model_name)}
+                                                                                        </span>
+                                                                                        {isBrv02 && (
+                                                                                            <button
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    setEditingRunId(runId);
+                                                                                                    setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
+                                                                                                }}
+                                                                                               title="Rename run"
+                                                                                               className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0"
+                                                                                            >
+                                                                                               <Pencil size={12} />
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
                                                                             )}
                                                                             <button
                                                                                 onClick={(e) => {
@@ -891,74 +902,84 @@ export const UnifiedDataTable = (props) => {
                                                 </div>
                                             </div>
 
-                                            {/* Expanded Table Details */}
-                                            {isExpanded && (
-                                                <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
-                                                     <div className="mb-3 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-white dark:bg-slate-800 py-2 px-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
-                                                         {(() => {
-                                                             const displayRunId = (benchmarkData[0]?.run_id !== undefined && benchmarkData[0]?.run_id !== null && benchmarkData[0]?.run_id !== '')
-                                                                 ? benchmarkData[0].run_id 
-                                                                 : benchmarkData[0]?.id;
-                                                             if (displayRunId === undefined || displayRunId === null || displayRunId === '') return null;
-                                                             return (
-                                                                 <span className="flex items-center gap-1">
-                                                                     <b className="text-slate-700 dark:text-slate-300">Run ID:</b> 
-                                                                     <span className="select-all opacity-75">{displayRunId}</span>
-                                                                 </span>
-                                                             );
-                                                         })()}
-                                                         {benchmarkData[0]?.source_info?.file_identifier && (
-                                                            <span className="flex items-center gap-1 ml-auto">
-                                                                <b className="text-slate-700 dark:text-slate-300">File:</b> 
-                                                                <span>{benchmarkData[0].source_info.file_identifier.split('/').pop()}</span>
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                             {/* Expanded Table Details */}
+                                             {isExpanded && (
+                                                 <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
+                                                      <div className="mb-3 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-white dark:bg-slate-800 py-2 px-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                          {(() => {
+                                                              const displayRunId = (benchmarkData[0]?.run_id !== undefined && benchmarkData[0]?.run_id !== null && benchmarkData[0]?.run_id !== '')
+                                                                  ? benchmarkData[0].run_id 
+                                                                  : benchmarkData[0]?.id;
+                                                              if (displayRunId === undefined || displayRunId === null || displayRunId === '') return null;
+                                                              return (
+                                                                  <span className="flex items-center gap-1">
+                                                                      <b className="text-slate-700 dark:text-slate-300">Run ID:</b> 
+                                                                      <span className="select-all opacity-75">{displayRunId}</span>
+                                                                  </span>
+                                                              );
+                                                          })()}
+                                                          {benchmarkData[0]?.source_info?.file_identifier && (
+                                                             <span className="flex items-center gap-1 ml-auto">
+                                                                 <b className="text-slate-700 dark:text-slate-300">File:</b> 
+                                                                 <span>{benchmarkData[0].source_info.file_identifier.split('/').pop()}</span>
+                                                             </span>
+                                                          )}
+                                                      </div>
 
-                                                    <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
-                                                        <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs bg-white dark:bg-slate-800">
-                                                            <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium border-b border-slate-200 dark:border-slate-700">
-                                                                <tr>
-                                                                    <th className="px-4 py-2">QPS</th>
-                                                                    <th className="px-2 py-2">Input Tok/s</th>
-                                                                    <th className="px-2 py-2">Output Tok/s</th>
-                                                                    <th className="px-2 py-2">Total Tok/s</th>
-                                                                    <th className="px-2 py-2">NTPOT (ms)</th>
-                                                                    <th className="px-2 py-2">TPOT (ms)</th>
-                                                                    <th className="px-2 py-2">ITL (ms)</th>
-                                                                    <th className="px-2 py-2">TTFT (ms)</th>
-                                                                    <th className="px-2 py-2">E2E (s)</th>
-                                                                    <th className="px-2 py-2">Cost/1M In ($)</th>
-                                                                    <th className="px-2 py-2">Cost/1M Out ($)</th>
-                                                                    <th className="px-2 py-2">Input Len</th>
-                                                                    <th className="px-2 py-2">Output Len</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                                                {benchmarkData.map((d, index) => (
-                                                                    <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                                        <td className="px-4 py-2 font-mono">{d.metrics?.request_rate?.toFixed(2) || d.qps?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono">{d.metrics?.input_tput?.toFixed(0) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono">{d.metrics?.output_tput?.toFixed(0) || d.throughput?.toFixed(0) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono font-medium">{d.metrics?.total_tput?.toFixed(0) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.ntpot?.toFixed(2) || d.ntpot?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.tpot?.toFixed(2) || d.time_per_output_token?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.itl?.toFixed(2) || d.itl?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.ttft?.mean?.toFixed(2) || d.ttft?.mean?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{((d.metrics?.e2e_latency || d.latency?.mean) / 1000)?.toFixed(2) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px] text-slate-500">
-                                                                            {d.metrics?.cost?.explicit_input > 0 ? `$${d.metrics.cost.explicit_input.toFixed(4)}` : '-'}
-                                                                        </td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px] text-slate-500">
-                                                                            {d.metrics?.cost?.explicit_output > 0 ? `$${d.metrics.cost.explicit_output.toFixed(4)}` : '-'}
-                                                                        </td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.isl?.toFixed(0) || d.workload?.input_tokens?.toFixed(0) || '-'}</td>
-                                                                        <td className="px-2 py-2 font-mono text-[10px]">{d.osl?.toFixed(0) || d.workload?.output_tokens?.toFixed(0) || '-'}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                                                      <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
+                                                          <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs bg-white dark:bg-slate-800">
+                                                              <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium border-b border-slate-200 dark:border-slate-700">
+                                                                  <tr>
+                                                                      {isBrv02 && <th className="px-3 py-2 w-12 text-center">Stage</th>}
+                                                                      <th className="px-4 py-2">{isBrv02 ? 'QPS' : 'QPS'}</th>
+                                                                      <th className="px-2 py-2">Input Tok/s</th>
+                                                                      <th className="px-2 py-2">Output Tok/s</th>
+                                                                      <th className="px-2 py-2">Total Tok/s</th>
+                                                                      <th className="px-2 py-2">NTPOT (ms)</th>
+                                                                      <th className="px-2 py-2">TPOT (ms)</th>
+                                                                      <th className="px-2 py-2">ITL (ms)</th>
+                                                                      <th className="px-2 py-2">TTFT (ms)</th>
+                                                                      <th className="px-2 py-2">E2E (s)</th>
+                                                                      <th className="px-2 py-2">Cost/1M In ($)</th>
+                                                                      <th className="px-2 py-2">Cost/1M Out ($)</th>
+                                                                      <th className="px-2 py-2">Input Len</th>
+                                                                      <th className="px-2 py-2">Output Len</th>
+                                                                  </tr>
+                                                              </thead>
+                                                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                                                  {[...benchmarkData]
+                                                                      .sort((a, b) => (a.workload?.stage ?? 0) - (b.workload?.stage ?? 0))
+                                                                      .map((d, index) => (
+                                                                          <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                                              {isBrv02 && (
+                                                                                  <td className="px-3 py-2 text-center font-mono w-12 text-slate-500 border-r border-slate-100 dark:border-slate-700">
+                                                                                      {d.workload?.stage ?? '-'}
+                                                                                  </td>
+                                                                              )}
+                                                                              <td className="px-4 py-2 font-mono">
+                                                                                  {(d.metrics?.request_rate?.toFixed(2) || d.qps?.toFixed(2) || '-')}
+                                                                              </td>
+                                                                              <td className="px-2 py-2 font-mono">{d.metrics?.input_tput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono">{d.metrics?.output_tput?.toFixed(0) || d.throughput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono font-medium">{d.metrics?.total_tput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.ntpot?.toFixed(2) || d.ntpot?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.tpot?.toFixed(2) || d.time_per_output_token?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.itl?.toFixed(2) || d.itl?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.metrics?.ttft?.mean?.toFixed(2) || d.ttft?.mean?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{((d.metrics?.e2e_latency || d.latency?.mean) / 1000)?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px] text-slate-500">
+                                                                                  {d.metrics?.cost?.explicit_input > 0 ? `$${d.metrics.cost.explicit_input.toFixed(4)}` : '-'}
+                                                                              </td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px] text-slate-500">
+                                                                                  {d.metrics?.cost?.explicit_output > 0 ? `$${d.metrics.cost.explicit_output.toFixed(4)}` : '-'}
+                                                                              </td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.isl?.toFixed(0) || d.workload?.input_tokens?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-mono text-[10px]">{d.osl?.toFixed(0) || d.workload?.output_tokens?.toFixed(0) || '-'}</td>
+                                                                          </tr>
+                                                                      ))}
+                                                              </tbody>
+                                                          </table>
+                                                      </div>
                                                 </div>
                                             )}
                                         </div>
