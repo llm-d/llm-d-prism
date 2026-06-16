@@ -762,7 +762,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav }) 
                             {/* Baseline */}
                             <div className="border border-emerald-500/20 rounded-lg bg-slate-900/30 p-2 flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-200">Baseline</div>
+                                    <div className="text-xs font-semibold text-slate-200">K8s Service (Reference)</div>
                                     <p className="text-[10px] text-slate-500">Standard Kubernetes service endpoint</p>
                                 </div>
                                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
