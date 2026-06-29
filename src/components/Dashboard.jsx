@@ -54,6 +54,15 @@ const USE_CASE_META = {
     "Text Summarization": "(~1k/128)"
 };
 
+const formatContactUrl = (url) => {
+    if (!url) return 'https://llm-d.ai/community';
+    if (url.includes('@') && !url.startsWith('mailto:') && !url.startsWith('http')) {
+        return `mailto:${url}`;
+    }
+    return url;
+};
+
+
 
 
 
@@ -1729,7 +1738,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                     <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
                         <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
                         <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600">
-                            Prism
+                            Prism{siteName ? ` - ${siteName}` : ''}
                         </span>
                     </div>
 
@@ -1750,7 +1759,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                     </button>
 
                     <a 
-                        href="https://llm-d.ai/community" 
+                        href={formatContactUrl(contactUrl)} 
                         target="_blank" 
                         rel="noreferrer"
                         className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"

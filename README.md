@@ -208,8 +208,8 @@ The project uses a standard `.npmrc` to enforce the public npm registry (`https:
 
 - **Running Locally:** Run `npm run dev`.
 - **Parsing Logic:** Data ingestion logic resides in `src/utils/dataParser.js` and files specific to the data source.
-  - **Hardware Metadata:** The parser extracts `accelerator` (e.g., `tpu7x`) and `machine_type` from `manifest.yaml` when available in GCS/S3 sources.
-  - **Source Identification:** Benchmarks are tagged with standardized IDs: `infperf` (inference-perf), `Quality` (MQ), `llm-d` (DRIVE), and `brv02:<run-uid>` (local Benchmark Report v0.2 uploads).
+  - **Hardware Metadata:** The parser extracts `accelerator` (e.g., `tpu7x`) and configuration details (tensor parallel size, backend) from `manifest.yaml` when available in GCS/S3 sources.
+  - **Source Identification:** Benchmarks are tagged with standardized IDs: `infperf` (inference-perf), `quality_scores` (Model Quality), `llm-d-results:google_drive` / `llmd_drive` (DRIVE), and `brv02:<run-uid>` (local Benchmark Report v0.2 uploads).
 - **Local Benchmark Comparison:** Users can upload `benchmark_report_v0.2,_*.yaml` files produced by [llm-d-benchmark](https://github.com/llm-d/llm-d-benchmark) directly in the browser via the **Connections → Local Benchmark Comparison** panel. Uploaded runs appear in both the main scatter chart and a dedicated full-width comparison view (bar charts + metric table with % diffs). Parser: `src/utils/benchmarkReportV02Parser.js`. UI: `src/components/DataConnections/BenchmarkReportPanel.jsx` and `src/components/BenchmarkComparisonDashboard.jsx`. State lives in `useDashboardData` under the `brv02*` prefix.
 - **Visuals:** Prioritize intuitive and interactive aesthetics. Use dark mode, glassmorphism, and smooth transitions.
 - **Data handling:**
