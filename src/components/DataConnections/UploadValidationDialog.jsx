@@ -1052,10 +1052,15 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                         <AlertCircle size={18} className="text-red-500 shrink-0" />
                                                     )}
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.payload.model_name || 'Unknown Model'}</span>
-                                                        <span className="text-xs text-slate-500 dark:text-slate-400 select-all font-mono opacity-80 mt-0.5">{bundle.dirKey}</span>
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.name || bundle.payload.runLabel || 'Unnamed Run'}</span>
+                                                        
                                                         
                                                         <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                            {/* Model Name Tag */}
+                                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900/50">
+                                                                Model: {bundle.payload.model_name || 'Unknown'}
+                                                            </span>
+
                                                             {/* Format Check Tag */}
                                                             {bundle.validation.format && bundle.validation.errors.filter(e => !e.toLowerCase().includes('model') && !e.toLowerCase().includes('hardware') && !e.toLowerCase().includes('attribution')).length === 0 ? (
                                                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in zoom-in-95 duration-150">
@@ -1133,6 +1138,30 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                     <div className="mb-4 overflow-hidden border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
                                                         <table className="w-full text-left text-xs border-collapse">
                                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                                                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20">
+                                                                    <td className="px-3 py-2 w-1/4 font-semibold text-slate-500 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">Run Label</td>
+                                                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                                                                        <input 
+                                                                            type="text"
+                                                                            value={bundle.payload.runLabel || ''}
+                                                                            onChange={(e) => {
+                                                                                const newLabel = e.target.value;
+                                                                                setStagedFiles(prev => prev.map(b => {
+                                                                                    if (b.id === bundle.id) {
+                                                                                        return { 
+                                                                                            ...b, 
+                                                                                            name: newLabel,
+                                                                                            payload: { ...b.payload, runLabel: newLabel } 
+                                                                                        };
+                                                                                    }
+                                                                                    return b;
+                                                                                }));
+                                                                            }}
+                                                                            className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-xs w-full max-w-md text-slate-800 dark:text-slate-100 font-semibold"
+                                                                            placeholder="Human-friendly Run Name / Description"
+                                                                        />
+                                                                    </td>
+                                                                </tr>
                                                                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20">
                                                                     <td className="px-3 py-2 w-1/4 font-semibold text-slate-500 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">Run Directory</td>
                                                                     <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300 select-all">{bundle.dirKey}</td>
