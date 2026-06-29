@@ -1731,19 +1731,23 @@ export const useDashboardData = (initialState, dashboardState) => {
                 const metadata = bundle.metadataFiles.run_metadata ? bundle.metadataFiles.run_metadata.parsed : null;
                 const config = bundle.metadataFiles.config ? bundle.metadataFiles.config.parsed : null;
                 const summary = bundle.metadataFiles.summary ? bundle.metadataFiles.summary.parsed : null;
+                const bundleRunId = bundle.payload.runId;
+                const bundleRunLabel = bundle.payload.runLabel;
 
                 for (const sf of bundle.stageFiles) {
                     const identifier = sf.file.webkitRelativePath || sf.file.name;
                     const record = await parseReportV02(sf.content, identifier);
                     if (record) {
-                        // Enrich stage record with bundle metadata
+                        // Enrich stage record with bundle metadata and unique runId/runLabel
+                        record.runId = bundleRunId;
+                        record.runLabel = bundleRunLabel;
                         record.run_metadata = metadata;
                         record.config = config;
                         record.summary = summary;
                         
-                        const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename);
+                        const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename && s.runId === record.runId);
                         const isDupInExisting = brv02Runs.some(run => 
-                            run.stages.some(existingStage => existingStage.filename === record.filename)
+                            run.stages.some(existingStage => existingStage.filename === record.filename && existingStage.runId === record.runId)
                         );
                         if (!isDupInBatch && !isDupInExisting) {
                             trulyNewStages.push(record);

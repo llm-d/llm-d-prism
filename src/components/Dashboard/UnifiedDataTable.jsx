@@ -203,7 +203,7 @@ export const UnifiedDataTable = (props) => {
                                                           )}
                                                       </button>
                                                     <div>
-                                                        {(stat.model_name || stat.model || meta.model_name)}
+                                                        {benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name)}
                                                     </div>
                                                 </div>
                                            </td>

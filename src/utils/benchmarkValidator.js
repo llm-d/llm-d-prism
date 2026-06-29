@@ -173,6 +173,16 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
                 errors.push(`Stage ${parsedStage.stageIndex ?? 'unknown'} (${entry.filename}) is missing a generated run_id`);
             }
 
+            // 3b. Verify entry run_description matches uploadData.runLabel if present
+            if (entry.run_description && entry.run_description !== uploadData.runLabel) {
+                const msg = `Stage ${parsedStage.stageIndex ?? 'unknown'} (${entry.filename}) has mismatching run description: expected '${uploadData.runLabel}', but found '${entry.run_description}'`;
+                if (isUpload) {
+                    errors.push(msg);
+                } else {
+                    warnings.push(msg);
+                }
+            }
+
             // 4. Verify no zero or negative metrics
             const latencyVal = normalizedEntry.latency && typeof normalizedEntry.latency === 'object' ? normalizedEntry.latency.mean : normalizedEntry.latency;
             if (normalizedEntry.throughput === null || normalizedEntry.throughput <= 0 || latencyVal === null || latencyVal <= 0) {

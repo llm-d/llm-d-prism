@@ -599,7 +599,7 @@ export const UnifiedDataTable = (props) => {
                                                                      specs.push(
                                                                          <span key="stage" className="inline-flex items-center gap-1">
                                                                              <span className="text-slate-400 dark:text-slate-500 font-normal">Stages:</span>
-                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stages</span>
+                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stage{stageCount === 1 ? '' : 's'}</span>
                                                                          </span>
                                                                      );
                                                                  } else {
@@ -812,8 +812,8 @@ export const UnifiedDataTable = (props) => {
                                                                              ) : (
                                                                                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                                                                         <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
-                                                                                            {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
-                                                                                                ? brv02CustomLabels[runId] 
+                                                                                            {isBrv02 
+                                                                                                ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
                                                                                                 : (stat.model_name || stat.model || meta.model_name)}
                                                                                         </span>
                                                                                         {isBrv02 && (
@@ -821,7 +821,7 @@ export const UnifiedDataTable = (props) => {
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
                                                                                                     setEditingRunId(runId);
-                                                                                                    setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
+                                                                                                    setEditingValue(brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name));
                                                                                                 }}
                                                                                                title="Rename run"
                                                                                                className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0"

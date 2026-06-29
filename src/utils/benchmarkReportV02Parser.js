@@ -268,6 +268,7 @@ export function parseReportV02(yamlText, filename) {
         runPid: doc.run?.pid || null,
         timestamp: doc.run?.time?.start || null,
         stageIndex: safeNum(load.stage),
+        loadMetadata: doc.scenario?.load?.metadata || null,
         scenario,
         performance,
         observability,
@@ -288,29 +289,57 @@ export function parseReportV02(yamlText, filename) {
  *   ...
  * ]
  */
+// Helper to deep sort object keys for canonical JSON comparison
+const canonicalStringify = (obj) => {
+    if (obj === null || obj === undefined) return '';
+    if (typeof obj !== 'object') return JSON.stringify(obj);
+    if (Array.isArray(obj)) return '[' + obj.map(canonicalStringify).join(',') + ']';
+    const keys = Object.keys(obj).sort();
+    return '{' + keys.map(k => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`).join(',') + '}';
+};
+
 export function groupStagesIntoRuns(stageRecords) {
-    const map = new Map();
+    const runsList = [];
+
     for (const record of stageRecords) {
-        if (!map.has(record.runId)) {
-            map.set(record.runId, {
-                runId: record.runId,
+        const recordMetaStr = canonicalStringify(record.loadMetadata);
+        
+        // Find an existing run that has the same runId
+        let targetRun = null;
+        if (record.runId) {
+            targetRun = runsList.find(run => run.runId === record.runId);
+        }
+
+        // Fallback: Find an existing run that has the same loadMetadata (only if runId is missing)
+        if (!targetRun && !record.runId) {
+            targetRun = runsList.find(run => {
+                const runMetaStr = canonicalStringify(run.stages[0]?.loadMetadata);
+                return runMetaStr === recordMetaStr && runMetaStr !== '';
+            });
+        }
+
+        if (!targetRun) {
+            targetRun = {
+                runId: record.runId || uuidv4(),
                 runLabel: record.runLabel || record.runId || "Unknown Run",
                 stages: [],
                 run_metadata: record.run_metadata || null,
                 config: record.config || null,
                 summary: record.summary || null
-            });
+            };
+            runsList.push(targetRun);
         }
-        const runObj = map.get(record.runId);
-        runObj.stages.push(record);
+
+        // Ensure the stage has the same runId as the group it joined
+        record.runId = targetRun.runId;
+        targetRun.stages.push(record);
         
-        if (!runObj.run_metadata && record.run_metadata) runObj.run_metadata = record.run_metadata;
-        if (!runObj.config && record.config) runObj.config = record.config;
-        if (!runObj.summary && record.summary) runObj.summary = record.summary;
+        if (!targetRun.run_metadata && record.run_metadata) targetRun.run_metadata = record.run_metadata;
+        if (!targetRun.config && record.config) targetRun.config = record.config;
+        if (!targetRun.summary && record.summary) targetRun.summary = record.summary;
     }
     
-    // Sort stages within each run
-    const runsList = Array.from(map.values());
+    // Sort stages within each run by stageIndex
     for (const run of runsList) {
         run.stages.sort((a, b) => {
             if (a.stageIndex === null) return 1;
@@ -319,14 +348,11 @@ export function groupStagesIntoRuns(stageRecords) {
         });
     }
 
-    // Since we're grouping stages by runId (which is the directory name)
-    // we no longer want to automatically append numeric suffixes. 
-    // They are unique inherently by their runId.
+    // Propagate the runLabel to all stages
     for (const run of runsList) {
         let uniqueLabel = run.runLabel || run.runId || "Unknown Run";
         run.runLabel = uniqueLabel;
         
-        // Propagate unique runLabel to all stage records of this run
         for (const stage of run.stages) {
             stage.runLabel = uniqueLabel;
         }
@@ -419,6 +445,7 @@ export function stageToEntry(stage) {
     return createEntry({
         // Top-level fields read directly by Dashboard / filter logic
         run_id: stage.runId,
+        runLabel: stage.runLabel,
         model: modelName,
         model_name: modelName,
         hardware: hardware,

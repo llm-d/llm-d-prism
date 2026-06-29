@@ -3,6 +3,16 @@ import { X, UploadCloud, CheckCircle, AlertCircle, FileText, ChevronRight, Chevr
 import { validateBenchmark, validatePrismUploadStructure } from '../../utils/benchmarkValidator';
 import { parseReportV02, stageToEntry } from '../../utils/benchmarkReportV02Parser';
 import yaml from 'js-yaml';
+import { v4 as uuidv4 } from 'uuid';
+
+// Helper to deep sort object keys for canonical JSON comparison
+const canonicalStringify = (obj) => {
+    if (obj === null || obj === undefined) return '';
+    if (typeof obj !== 'object') return JSON.stringify(obj);
+    if (Array.isArray(obj)) return '[' + obj.map(canonicalStringify).join(',') + ']';
+    const keys = Object.keys(obj).sort();
+    return '{' + keys.map(k => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`).join(',') + '}';
+};
 
 export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunIds = [], initialFiles = [], addToast }) => {
     const [stagedFiles, setStagedFiles] = useState([]);
@@ -446,7 +456,11 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                         validation
                     });
                 } else {
-                    bundleErrors.push(`[${stageFile.name}] ${validation.errors[0] || 'Invalid report format.'}`);
+                    if (validation.errors[0] && validation.errors[0].includes('Unrecognized benchmark format')) {
+                        omittedCount++;
+                    } else {
+                        bundleErrors.push(`[${stageFile.name}] ${validation.errors[0] || 'Invalid report format.'}`);
+                    }
                 }
             }
 
@@ -497,6 +511,7 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
 
                 payloadEntries.push({
                     run_id: uuidv4(),
+                    run_description: group.name,
                     filename: sf.file.name,
                     raw_report: rawReportObj
                 });
@@ -542,8 +557,9 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             }
 
             // 3. Construct the comprehensive Prism Run Upload Structure
+            const generatedRunId = uuidv4();
             const payload = {
-                runId: group.dirKey,
+                runId: generatedRunId,
                 runLabel: group.name,
                 model_name: resolvedModel,
                 hardware: {
@@ -617,9 +633,64 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             uploadedCount += stageFiles.length;
         }
 
-        if (newStagedBundles.length > 0) {
+        // Coalesce the newly staged bundles by loadMetadata before adding them to state
+        const coalescedBundles = [];
+        for (const bundle of newStagedBundles) {
+            // Get canonical metadata of the first stage in the bundle
+            const firstStageContent = bundle.stageFiles[0]?.content;
+            let firstStageParsed = null;
+            if (firstStageContent) {
+                try {
+                    firstStageParsed = parseReportV02(firstStageContent, bundle.stageFiles[0].file.name);
+                } catch (e) {
+                    console.error("Failed to parse stage for coalescing:", e);
+                }
+            }
+            
+            const bundleMetaStr = firstStageParsed ? canonicalStringify(firstStageParsed.loadMetadata) : '';
+            
+            let targetBundle = null;
+            if (bundleMetaStr !== '') {
+                targetBundle = coalescedBundles.find(b => {
+                    const bFirstContent = b.stageFiles[0]?.content;
+                    if (!bFirstContent) return false;
+                    try {
+                        const bFirstParsed = parseReportV02(bFirstContent, b.stageFiles[0].file.name);
+                        return canonicalStringify(bFirstParsed?.loadMetadata) === bundleMetaStr;
+                    } catch {
+                        return false;
+                    }
+                });
+            }
+
+            if (targetBundle) {
+                // Merge into existing bundle
+                targetBundle.stageFiles.push(...bundle.stageFiles);
+                targetBundle.payload.entries.push(...bundle.payload.entries);
+                
+                // Re-sort entries by stage index if possible
+                targetBundle.payload.entries.sort((a, b) => {
+                    const aStage = a.raw_report?.scenario?.load?.standardized?.stage ?? 0;
+                    const bStage = b.raw_report?.scenario?.load?.standardized?.stage ?? 0;
+                    return aStage - bStage;
+                });
+
+                // Update validation entries
+                targetBundle.validation.entries.push(...bundle.validation.entries);
+                targetBundle.validation.errors.push(...bundle.validation.errors);
+                targetBundle.validation.warnings.push(...bundle.validation.warnings);
+                
+                // Deduplicate errors/warnings
+                targetBundle.validation.errors = [...new Set(targetBundle.validation.errors)];
+                targetBundle.validation.warnings = [...new Set(targetBundle.validation.warnings)];
+            } else {
+                coalescedBundles.push(bundle);
+            }
+        }
+
+        if (coalescedBundles.length > 0) {
             setStagedFiles(prev => {
-                const combined = [...prev, ...newStagedBundles];
+                const combined = [...prev, ...coalescedBundles];
                 combined.sort((a, b) => {
                     return a.dirKey.localeCompare(b.dirKey, undefined, { numeric: true, sensitivity: 'base' });
                 });
@@ -628,7 +699,11 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
         }
 
         if (addToast) {
-            addToast(`${uploadedCount} stage report file${uploadedCount === 1 ? ' is' : 's are'} loaded across ${newStagedBundles.length} run directory bundle${newStagedBundles.length === 1 ? '' : 's'}.`, 'info');
+            let msg = `${uploadedCount} stage report file${uploadedCount === 1 ? ' is' : 's are'} loaded across ${newStagedBundles.length} run directory bundle${newStagedBundles.length === 1 ? '' : 's'}.`;
+            if (omittedCount > 0) {
+                msg += ` (${omittedCount} unrecognized file${omittedCount === 1 ? ' was' : 's were'} skipped)`;
+            }
+            addToast(msg, 'info');
         }
     };
 
@@ -1148,10 +1223,18 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                                                 const newLabel = e.target.value;
                                                                                 setStagedFiles(prev => prev.map(b => {
                                                                                     if (b.id === bundle.id) {
+                                                                                        const updatedEntries = (b.payload.entries || []).map(entry => ({
+                                                                                            ...entry,
+                                                                                            run_description: newLabel
+                                                                                        }));
                                                                                         return { 
                                                                                             ...b, 
                                                                                             name: newLabel,
-                                                                                            payload: { ...b.payload, runLabel: newLabel } 
+                                                                                            payload: { 
+                                                                                                ...b.payload, 
+                                                                                                runLabel: newLabel,
+                                                                                                entries: updatedEntries
+                                                                                            } 
                                                                                         };
                                                                                     }
                                                                                     return b;
