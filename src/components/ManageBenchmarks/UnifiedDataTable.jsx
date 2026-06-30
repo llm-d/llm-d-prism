@@ -13,8 +13,9 @@
 // limitations under the License.
 
 import React, { useState } from 'react';
-import { RotateCcw, ChevronDown, ChevronUp, Star, CheckSquare, Square, Check, Pencil, Trash2 } from 'lucide-react';
+import { RotateCcw, ChevronDown, ChevronUp, Star, CheckSquare, Square, Check, Pencil, Trash2, X, FileText } from 'lucide-react';
 import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel } from '../../utils/dashboardHelpers';
+import yaml from 'js-yaml';
 
 const getCleanModelName = (name) => {
     if (!name) return '';
@@ -24,6 +25,8 @@ const getCleanModelName = (name) => {
 export const UnifiedDataTable = (props) => {
     const [editingRunId, setEditingRunId] = useState(null);
     const [editingValue, setEditingValue] = useState('');
+    const [rawYamlContent, setRawYamlContent] = useState(null);
+    const [rawYamlTitle, setRawYamlTitle] = useState('');
 
     const commitEdit = () => {
         if (editingRunId && setBrv02CustomLabels) {
@@ -599,7 +602,7 @@ export const UnifiedDataTable = (props) => {
                                                                      specs.push(
                                                                          <span key="stage" className="inline-flex items-center gap-1">
                                                                              <span className="text-slate-400 dark:text-slate-500 font-normal">Stages:</span>
-                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stages</span>
+                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stage{stageCount === 1 ? '' : 's'}</span>
                                                                          </span>
                                                                      );
                                                                  } else {
@@ -812,8 +815,8 @@ export const UnifiedDataTable = (props) => {
                                                                              ) : (
                                                                                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                                                                         <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
-                                                                                            {isBrv02 && brv02CustomLabels && brv02CustomLabels[runId] 
-                                                                                                ? brv02CustomLabels[runId] 
+                                                                                            {isBrv02 
+                                                                                                ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
                                                                                                 : (stat.model_name || stat.model || meta.model_name)}
                                                                                         </span>
                                                                                         {isBrv02 && (
@@ -821,7 +824,7 @@ export const UnifiedDataTable = (props) => {
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
                                                                                                     setEditingRunId(runId);
-                                                                                                    setEditingValue(brv02CustomLabels[runId] || (stat.model_name || stat.model || meta.model_name));
+                                                                                                    setEditingValue(brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name));
                                                                                                 }}
                                                                                                title="Rename run"
                                                                                                className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0"
@@ -905,26 +908,6 @@ export const UnifiedDataTable = (props) => {
                                              {/* Expanded Table Details */}
                                              {isExpanded && (
                                                  <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
-                                                      <div className="mb-3 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-white dark:bg-slate-800 py-2 px-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
-                                                          {(() => {
-                                                              const displayRunId = (benchmarkData[0]?.run_id !== undefined && benchmarkData[0]?.run_id !== null && benchmarkData[0]?.run_id !== '')
-                                                                  ? benchmarkData[0].run_id 
-                                                                  : benchmarkData[0]?.id;
-                                                              if (displayRunId === undefined || displayRunId === null || displayRunId === '') return null;
-                                                              return (
-                                                                  <span className="flex items-center gap-1">
-                                                                      <b className="text-slate-700 dark:text-slate-300">Run ID:</b> 
-                                                                      <span className="select-all opacity-75">{displayRunId}</span>
-                                                                  </span>
-                                                              );
-                                                          })()}
-                                                          {benchmarkData[0]?.source_info?.file_identifier && (
-                                                             <span className="flex items-center gap-1 ml-auto">
-                                                                 <b className="text-slate-700 dark:text-slate-300">File:</b> 
-                                                                 <span>{benchmarkData[0].source_info.file_identifier.split('/').pop()}</span>
-                                                             </span>
-                                                          )}
-                                                      </div>
 
                                                       <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
                                                           <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs bg-white dark:bg-slate-800">
@@ -944,6 +927,7 @@ export const UnifiedDataTable = (props) => {
                                                                       <th className="px-2 py-2">Cost/1M Out ($)</th>
                                                                       <th className="px-2 py-2">Input Len</th>
                                                                       <th className="px-2 py-2">Output Len</th>
+                                                                      <th className="px-2 py-2 w-16 text-center">Raw</th>
                                                                   </tr>
                                                               </thead>
                                                               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -975,6 +959,29 @@ export const UnifiedDataTable = (props) => {
                                                                               </td>
                                                                               <td className="px-2 py-2 font-mono text-[10px]">{d.isl?.toFixed(0) || d.workload?.input_tokens?.toFixed(0) || '-'}</td>
                                                                               <td className="px-2 py-2 font-mono text-[10px]">{d.osl?.toFixed(0) || d.workload?.output_tokens?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-center">
+                                                                                  <button
+                                                                                      disabled={!d.rawReport}
+                                                                                      onClick={(e) => {
+                                                                                          e.stopPropagation();
+                                                                                          try {
+                                                                                              setRawYamlContent(d.rawReport ? yaml.dump(d.rawReport, { noRefs: true }) : '');
+                                                                                          } catch (err) {
+                                                                                              console.error("Failed to dump raw report to YAML:", err);
+                                                                                              setRawYamlContent("Error rendering raw report.");
+                                                                                          }
+                                                                                          setRawYamlTitle(d.source_info?.file_identifier || d.filename || `Stage ${d.workload?.stage}`);
+                                                                                      }}
+                                                                                      title="Raw"
+                                                                                      className={`p-1 rounded transition-colors ${
+                                                                                          d.rawReport 
+                                                                                              ? 'text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 cursor-pointer' 
+                                                                                              : 'text-slate-200 dark:text-slate-800 cursor-not-allowed opacity-50'
+                                                                                      }`}
+                                                                                  >
+                                                                                      <FileText size={14} />
+                                                                                  </button>
+                                                                              </td>
                                                                           </tr>
                                                                       ))}
                                                               </tbody>
@@ -1007,6 +1014,32 @@ export const UnifiedDataTable = (props) => {
                         borderRadius: '2px',
                     }}
                 />
+            )}
+            {rawYamlContent !== null && (
+                <div className="fixed inset-0 bg-black/60 z-[10000] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setRawYamlContent(null)}>
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                            <h3 className="text-sm font-bold text-white truncate">Raw Report: {rawYamlTitle}</h3>
+                            <button 
+                                onClick={() => setRawYamlContent(null)}
+                                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto flex-1 font-mono text-xs text-slate-300 bg-slate-950 select-all whitespace-pre-wrap">
+                            {rawYamlContent}
+                        </div>
+                        <div className="p-3 border-t border-slate-800 bg-slate-900/50 flex justify-end">
+                            <button
+                                onClick={() => setRawYamlContent(null)}
+                                className="px-4 py-2 text-xs font-semibold rounded-md text-white bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

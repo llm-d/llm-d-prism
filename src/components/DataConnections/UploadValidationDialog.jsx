@@ -3,6 +3,16 @@ import { X, UploadCloud, CheckCircle, AlertCircle, FileText, ChevronRight, Chevr
 import { validateBenchmark, validatePrismUploadStructure } from '../../utils/benchmarkValidator';
 import { parseReportV02, stageToEntry } from '../../utils/benchmarkReportV02Parser';
 import yaml from 'js-yaml';
+import { v4 as uuidv4 } from 'uuid';
+
+// Helper to deep sort object keys for canonical JSON comparison
+const canonicalStringify = (obj) => {
+    if (obj === null || obj === undefined) return '';
+    if (typeof obj !== 'object') return JSON.stringify(obj);
+    if (Array.isArray(obj)) return '[' + obj.map(canonicalStringify).join(',') + ']';
+    const keys = Object.keys(obj).sort();
+    return '{' + keys.map(k => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`).join(',') + '}';
+};
 
 export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunIds = [], initialFiles = [], addToast }) => {
     const [stagedFiles, setStagedFiles] = useState([]);
@@ -253,7 +263,7 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             },
             entries: [
                 {
-                    run_uid: `cloud-${runName}-stage-1`,
+                    run_id: uuidv4(),
                     filename: "benchmark_report_v0.2_stage_1.yaml",
                     raw_report: {
                         version: "0.2",
@@ -273,9 +283,6 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                 }
                             }
                         }
-                    },
-                    prism_cloud: {
-                        run: { uid: `${runName}/benchmark_report_v0.2_stage_1.yaml` }
                     }
                 }
             ],
@@ -378,7 +385,7 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                     configFile = file;
                 } else if (/summary_lifecycle_metrics\.json$/i.test(filename)) {
                     summaryFile = file;
-                } else if (/benchmark_report_v0\.2/i.test(filename) && /\.(ya?ml|json)$/i.test(filename)) {
+                } else if (/\.(ya?ml|json)$/i.test(filename)) {
                     stageFiles.push(file);
                 } else {
                     omittedCount++;
@@ -449,7 +456,11 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                         validation
                     });
                 } else {
-                    bundleErrors.push(`[${stageFile.name}] ${validation.errors[0] || 'Invalid report format.'}`);
+                    if (validation.errors[0] && validation.errors[0].includes('Unrecognized benchmark format')) {
+                        omittedCount++;
+                    } else {
+                        bundleErrors.push(`[${stageFile.name}] ${validation.errors[0] || 'Invalid report format.'}`);
+                    }
                 }
             }
 
@@ -490,25 +501,11 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             // 2. Build the entries list for the upload payload (omitting pre-calculated metrics, keeping run_uid and content)
             const payloadEntries = [];
             for (const sf of parsedStages) {
-                const stageParsed = parseReportV02(sf.content, sf.file.name);
-                const runUid = stageParsed ? stageParsed.runUid : 'unknown-uid';
-                
-                let rawReportObj = null;
-                try {
-                    rawReportObj = sf.file.name.endsWith('.json') ? JSON.parse(sf.content) : yaml.load(sf.content);
-                } catch (e) {
-                    console.error("Failed to parse raw report content into JSON object:", e);
-                }
-
                 payloadEntries.push({
-                    run_uid: runUid,
+                    run_id: uuidv4(),
+                    run_description: group.name,
                     filename: sf.file.name,
-                    raw_report: rawReportObj,
-                    prism_cloud: {
-                        run: {
-                            uid: `${group.dirKey}/${sf.file.name}`
-                        }
-                    }
+                    raw_report: sf.validation?.parsedData || null
                 });
             }
 
@@ -552,8 +549,9 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             }
 
             // 3. Construct the comprehensive Prism Run Upload Structure
+            const generatedRunId = uuidv4();
             const payload = {
-                runId: group.dirKey,
+                runId: generatedRunId,
                 runLabel: group.name,
                 model_name: resolvedModel,
                 hardware: {
@@ -627,9 +625,64 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
             uploadedCount += stageFiles.length;
         }
 
-        if (newStagedBundles.length > 0) {
+        // Coalesce the newly staged bundles by loadMetadata before adding them to state
+        const coalescedBundles = [];
+        for (const bundle of newStagedBundles) {
+            // Get canonical metadata of the first stage in the bundle
+            const firstStageContent = bundle.stageFiles[0]?.content;
+            let firstStageParsed = null;
+            if (firstStageContent) {
+                try {
+                    firstStageParsed = parseReportV02(firstStageContent, bundle.stageFiles[0].file.name);
+                } catch (e) {
+                    console.error("Failed to parse stage for coalescing:", e);
+                }
+            }
+            
+            const bundleMetaStr = firstStageParsed ? canonicalStringify(firstStageParsed.loadMetadata) : '';
+            
+            let targetBundle = null;
+            if (bundleMetaStr !== '') {
+                targetBundle = coalescedBundles.find(b => {
+                    const bFirstContent = b.stageFiles[0]?.content;
+                    if (!bFirstContent) return false;
+                    try {
+                        const bFirstParsed = parseReportV02(bFirstContent, b.stageFiles[0].file.name);
+                        return canonicalStringify(bFirstParsed?.loadMetadata) === bundleMetaStr;
+                    } catch {
+                        return false;
+                    }
+                });
+            }
+
+            if (targetBundle) {
+                // Merge into existing bundle
+                targetBundle.stageFiles.push(...bundle.stageFiles);
+                targetBundle.payload.entries.push(...bundle.payload.entries);
+                
+                // Re-sort entries by stage index if possible
+                targetBundle.payload.entries.sort((a, b) => {
+                    const aStage = a.raw_report?.scenario?.load?.standardized?.stage ?? 0;
+                    const bStage = b.raw_report?.scenario?.load?.standardized?.stage ?? 0;
+                    return aStage - bStage;
+                });
+
+                // Update validation entries
+                targetBundle.validation.entries.push(...bundle.validation.entries);
+                targetBundle.validation.errors.push(...bundle.validation.errors);
+                targetBundle.validation.warnings.push(...bundle.validation.warnings);
+                
+                // Deduplicate errors/warnings
+                targetBundle.validation.errors = [...new Set(targetBundle.validation.errors)];
+                targetBundle.validation.warnings = [...new Set(targetBundle.validation.warnings)];
+            } else {
+                coalescedBundles.push(bundle);
+            }
+        }
+
+        if (coalescedBundles.length > 0) {
             setStagedFiles(prev => {
-                const combined = [...prev, ...newStagedBundles];
+                const combined = [...prev, ...coalescedBundles];
                 combined.sort((a, b) => {
                     return a.dirKey.localeCompare(b.dirKey, undefined, { numeric: true, sensitivity: 'base' });
                 });
@@ -638,7 +691,11 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
         }
 
         if (addToast) {
-            addToast(`${uploadedCount} stage report file${uploadedCount === 1 ? ' is' : 's are'} loaded across ${newStagedBundles.length} run directory bundle${newStagedBundles.length === 1 ? '' : 's'}.`, 'info');
+            let msg = `${uploadedCount} stage report file${uploadedCount === 1 ? ' is' : 's are'} loaded across ${newStagedBundles.length} run directory bundle${newStagedBundles.length === 1 ? '' : 's'}.`;
+            if (omittedCount > 0) {
+                msg += ` (${omittedCount} unrecognized file${omittedCount === 1 ? ' was' : 's were'} skipped)`;
+            }
+            addToast(msg, 'info');
         }
     };
 
@@ -743,7 +800,9 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                             <Upload size={20} className="text-cyan-500" />
                             Upload and Stage Benchmarks
                         </h2>
-                        <p className="text-xs text-slate-500 mt-1">Validate and stage benchmarks before pushing to local storage or cloud.</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Validate, stage, and consolidate benchmarks. Stage reports are stored as structured JSON and reconstructed to YAML on-the-fly.
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
                         <X size={20} className="text-slate-500" />
@@ -1062,10 +1121,15 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                         <AlertCircle size={18} className="text-red-500 shrink-0" />
                                                     )}
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.payload.model_name || 'Unknown Model'}</span>
-                                                        <span className="text-xs text-slate-500 dark:text-slate-400 select-all font-mono opacity-80 mt-0.5">{bundle.dirKey}</span>
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.name || bundle.payload.runLabel || 'Unnamed Run'}</span>
+                                                        
                                                         
                                                         <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                            {/* Model Name Tag */}
+                                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900/50">
+                                                                Model: {bundle.payload.model_name || 'Unknown'}
+                                                            </span>
+
                                                             {/* Format Check Tag */}
                                                             {bundle.validation.format && bundle.validation.errors.filter(e => !e.toLowerCase().includes('model') && !e.toLowerCase().includes('hardware') && !e.toLowerCase().includes('attribution')).length === 0 ? (
                                                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in zoom-in-95 duration-150">
@@ -1143,6 +1207,38 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                     <div className="mb-4 overflow-hidden border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
                                                         <table className="w-full text-left text-xs border-collapse">
                                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                                                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20">
+                                                                    <td className="px-3 py-2 w-1/4 font-semibold text-slate-500 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">Run Label</td>
+                                                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                                                                        <input 
+                                                                            type="text"
+                                                                            value={bundle.payload.runLabel || ''}
+                                                                            onChange={(e) => {
+                                                                                const newLabel = e.target.value;
+                                                                                setStagedFiles(prev => prev.map(b => {
+                                                                                    if (b.id === bundle.id) {
+                                                                                        const updatedEntries = (b.payload.entries || []).map(entry => ({
+                                                                                            ...entry,
+                                                                                            run_description: newLabel
+                                                                                        }));
+                                                                                        return { 
+                                                                                            ...b, 
+                                                                                            name: newLabel,
+                                                                                            payload: { 
+                                                                                                ...b.payload, 
+                                                                                                runLabel: newLabel,
+                                                                                                entries: updatedEntries
+                                                                                            } 
+                                                                                        };
+                                                                                    }
+                                                                                    return b;
+                                                                                }));
+                                                                            }}
+                                                                            className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-xs w-full max-w-md text-slate-800 dark:text-slate-100 font-semibold"
+                                                                            placeholder="Human-friendly Run Name / Description"
+                                                                        />
+                                                                    </td>
+                                                                </tr>
                                                                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20">
                                                                     <td className="px-3 py-2 w-1/4 font-semibold text-slate-500 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">Run Directory</td>
                                                                     <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300 select-all">{bundle.dirKey}</td>
@@ -1457,8 +1553,7 @@ export const UploadValidationDialog = ({ isOpen, onClose, onCommit, existingRunI
                                                                                     stage: parsedStage?.stageIndex,
                                                                                     model_name: normalized?.model_name || 'Unknown',
                                                                                     throughput: normalized?.throughput,
-                                                                                    latency: latencyVal,
-                                                                                    uid: entry.prism_cloud?.run?.uid || ''
+                                                                                    latency: latencyVal
                                                                                 };
                                                                             })
                                                                             .sort((a, b) => (a.stage ?? 0) - (b.stage ?? 0))

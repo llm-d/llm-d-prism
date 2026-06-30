@@ -203,7 +203,7 @@ export const UnifiedDataTable = (props) => {
                                                           )}
                                                       </button>
                                                     <div>
-                                                        {(stat.model_name || stat.model || meta.model_name)}
+                                                        {benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name)}
                                                     </div>
                                                 </div>
                                            </td>
@@ -278,12 +278,7 @@ export const UnifiedDataTable = (props) => {
                                                       <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 p-2">
                                                           {/* Run Metadata Header */}
                                                           <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">
-                                                              { (benchmarkData[0]?.run_id || benchmarkData[0]?.id) && (
-                                                                  <span className="flex items-center gap-1 max-w-[300px]">
-                                                                      <b className="text-slate-700 dark:text-slate-300">Run ID:</b> 
-                                                                      <span className="select-all opacity-75 truncate" title={benchmarkData[0].id}>{benchmarkData[0].run_id || benchmarkData[0].id}</span>
-                                                                  </span>
-                                                              )}
+
                                                               {benchmarkData[0]?.timestamp && (
                                                                   <span className="flex items-center gap-1">
                                                                       <b className="text-slate-700 dark:text-slate-300">Date:</b> 
@@ -297,12 +292,7 @@ export const UnifiedDataTable = (props) => {
                                                                       })()}</span>
                                                                   </span>
                                                               )}
-                                                              {benchmarkData[0]?.source_info?.file_identifier && (
-                                                                  <span className="flex items-center gap-1 max-w-[400px] truncate" title={benchmarkData[0].source_info.file_identifier}>
-                                                                      <b className="text-slate-700 dark:text-slate-300">File:</b> 
-                                                                      <span className="truncate">{benchmarkData[0].source_info.file_identifier.split('/').pop()}</span>
-                                                                  </span>
-                                                              )}
+
                                                           </div>
 
                                                           <div className="overflow-x-auto">
