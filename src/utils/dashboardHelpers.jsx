@@ -72,10 +72,10 @@ export const INTEGRATIONS = [
     },
     {
         id: 'lpg_lifecycle',
-        name: 'inference-perf',
+        name: 'inference-perf (deprecated)',
         type: 'infperf',
         tags: ['Latency', 'Throughput'],
-        description: 'Output from orchestrated inference-perf runs. Experimental feature.',
+        description: 'Raw output from orchestrated inference-perf runs. Experimental feature.',
         icon: FileJson,
         color: 'text-green-500'
     },
@@ -99,10 +99,10 @@ export const INTEGRATIONS = [
     },
     {
         id: 'benchmark_report_v02',
-        name: 'Local Benchmark Comparison',
+        name: 'Local Benchmark Reports',
         type: 'v0.2',
         tags: ['Local', 'Compare'],
-        description: 'Upload local benchmark_report_v0.2 YAML files from llm-d-benchmark runs. Select a baseline and compare performance and observability metrics across runs.',
+        description: 'Upload local benchmark_report_v0.2 YAML files from llm-d-benchmark runs to view, compare, and stage them for upload.',
         icon: GitCompare,
         color: 'text-violet-500',
         alwaysExpanded: true,

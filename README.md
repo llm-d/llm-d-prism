@@ -8,7 +8,7 @@
 
 AI Platform Engineers and ML Engineers face significant challenges assembling the full end-to-end inference serving stack for their applications, leading to lengthy, manual evaluation cycles, suboptimal performance, and unnecessarily high friction and costs. While many benchmarks and tools exist, the data is often scattered across disconnected docs, spreadsheets, or vendor-specific sites.
 
-Prism helps you choose, configure and optimize the right AI inference infrastructure by unifying benchmark data from disparate sources—cloud APIs, public repositories, and local experiments—into a single interactive analysis experience. Prism makes it easier to navigate the complex trade-offs between throughput, latency cost, and quality with data grounded in validated benchmarks. 
+Prism helps you choose, configure and optimize the right AI inference infrastructure by unifying benchmark data from disparate sources—cloud APIs, public repositories, and local experiments—into a single interactive analysis experience. Prism makes it easier to navigate the complex trade-offs between throughput, latency cost, and quality with data grounded in validated benchmarks.
 
 <p align="center">
   <picture>
@@ -28,7 +28,7 @@ Prism helps you choose, configure and optimize the right AI inference infrastruc
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, coding standards, and how to submit changes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for general development guidelines, coding standards, and how to submit changes.
 
 ## Setup & Deployment
 
@@ -53,26 +53,26 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, coding standa
     DEFAULT_PROJECTS="my-google-project-id" npm start
     ```
 
-### Docker Dev Environment (with HMR)
+### Docker Dev Environment (with Docker Compose)
 
-If you do not have Node/NPM installed on your host machine, or prefer a containerized setup, you can use Docker with volume mounting to get a fast development environment with Hot Module Replacement (HMR):
+The development environment can be managed using Docker Compose, which mounts the source code and configures Application Default Credentials (ADC) automatically:
 
-1. **Run the Dev Container**:
+1. **Start the Stack**:
+
    ```bash
-   docker run -d -p 8081:5173 -p 3000:3000 \
-     -v $(pwd):/app \
-     -v ~/.config/gcloud/application_default_credentials.json:/tmp/adc.json \
-     -e GOOGLE_APPLICATION_DEFAULT_CREDENTIALS=/tmp/adc.json \
-     -w /app \
-     node:20-alpine \
-     sh -c "npm install && npm run dev"
+   docker compose up -d
    ```
-   
+
+   This starts both the backend (port 3000) and frontend (port 5173, mapped to 8081 on host) with Hot Module Replacement (HMR).
+
 2. **Access the Dashboard**:
-   - Dashboard: http://localhost:8081 (Vite with HMR)
+   - Dashboard: http://localhost:8081
    - Backend API: http://localhost:3000
 
-This setup mounts your source code into the container, allowing file changes to trigger instant reloads in the browser via Vite's HMR, without needing to rebuild the Docker image.
+3. **Logs**: To view server logs, use:
+   ```bash
+   docker compose logs -f
+   ```
 
 ### Cloud Deployment (Google Cloud Run)
 
@@ -131,16 +131,18 @@ For automatic deployment on push to `main` branch, see [GitHub Actions Setup Gui
 The workflow uses Workload Identity Federation for secure, keyless authentication and automatically deploys using GitHub repository variables (plus a secret for `GOOGLE_API_KEY`).
 
 ## Multi-Cloud Deployment (AWS, Azure, On-Prem)
+
 Note: Deployment on other clouds is a work in progress and requires testing.
 
 This application can be deployed to any container platform (AWS App Runner, Azure Container Apps, ECS, Kubernetes).
 
 1.  **Build Docker Image**:
+
     ```bash
     docker build -t prism .
     ```
-2.  **Authentication**:
-    The application requires Google Cloud credentials to interface with GCS/GIQ -- which are optional.
+
+2.  **Authentication**: The application requires Google Cloud credentials to interface with GCS/GIQ -- which are optional.
     - **Create a Service Account Key**: Generate a JSON key for a Service Account with `roles/storage.objectViewer` and `roles/serviceusage.serviceUsageConsumer`.
     - **Mount Key**: Mount this JSON file into the container (e.g., at `/app/credentials.json`).
     - **Set Env Var**: Set `GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json`.
@@ -209,8 +211,8 @@ The project uses a standard `.npmrc` to enforce the public npm registry (`https:
 - **Running Locally:** Run `npm run dev`.
 - **Parsing Logic:** Data ingestion logic resides in `src/utils/dataParser.js` and files specific to the data source.
   - **Hardware Metadata:** The parser extracts `accelerator` (e.g., `tpu7x`) and configuration details (tensor parallel size, backend) from `manifest.yaml` when available in GCS/S3 sources.
-  - **Source Identification:** Benchmarks are tagged with standardized IDs: `infperf` (inference-perf), `quality_scores` (Model Quality), `llm-d-results:google_drive` / `llmd_drive` (DRIVE), and `brv02:<run-uid>` (local Benchmark Report v0.2 uploads).
-- **Local Benchmark Comparison:** Users can upload `benchmark_report_v0.2,_*.yaml` files produced by [llm-d-benchmark](https://github.com/llm-d/llm-d-benchmark) directly in the browser via the **Connections → Local Benchmark Comparison** panel. Uploaded runs appear in both the main scatter chart and a dedicated full-width comparison view (bar charts + metric table with % diffs). Parser: `src/utils/benchmarkReportV02Parser.js`. UI: `src/components/DataConnections/BenchmarkReportPanel.jsx` and `src/components/BenchmarkComparisonDashboard.jsx`. State lives in `useDashboardData` under the `brv02*` prefix.
+  - **Source Identification:** Benchmarks are tagged with standardized IDs: `infperf` (inference-perf (deprecated)), `quality_scores` (Model Quality), `llm-d-results:google_drive` / `llmd_drive` (DRIVE), and `brv02:<run-uid>` (local Benchmark Report v0.2 uploads).
+- **Local Benchmark Reports:** Users can upload `benchmark_report_v0.2,_*.yaml` files produced by [llm-d-benchmark](https://github.com/llm-d/llm-d-benchmark) directly in the browser via the **Connections → Local Benchmark Reports** panel. Uploaded runs appear in both the main scatter chart and a dedicated full-width comparison view (bar charts + metric table with % diffs). Parser: `src/utils/benchmarkReportV02Parser.js`. UI: `src/components/DataConnections/BenchmarkReportPanel.jsx` and `src/components/BenchmarkComparisonDashboard.jsx`. State lives in `useDashboardData` under the `brv02*` prefix.
 - **Visuals:** Prioritize intuitive and interactive aesthetics. Use dark mode, glassmorphism, and smooth transitions.
 - **Data handling:**
   - `facetCounts` in `Dashboard.jsx` calculates unique configurations for filter dropdowns.
