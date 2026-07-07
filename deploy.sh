@@ -10,6 +10,8 @@ REGION="us-central1"
 MIN_INSTANCES=""
 MAX_INSTANCES=""
 CONCURRENCY=""
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
 
 # Helper function to print usage
 usage() {
@@ -39,11 +41,14 @@ for ((i=1; i<=$#; i++)); do
     fi
 done
 
-if [ -f "$CONFIG_FILE" ]; then
-    echo "Loading defaults from $CONFIG_FILE..."
-    # Use a subshell to avoid polluting current shell if config has bad syntax
-    source "$CONFIG_FILE"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file '$CONFIG_FILE' not found." >&2
+    exit 1
 fi
+
+echo "Loading defaults from $CONFIG_FILE..."
+# Use a subshell to avoid polluting current shell if config has bad syntax
+source "$CONFIG_FILE"
 
 # Parse all arguments (overrides loaded defaults)
 while [[ "$#" -gt 0 ]]; do
@@ -87,6 +92,8 @@ GCS_BUCKETS="${GCS_BUCKETS:-prism-internal-results}"
 MIN_INSTANCES="$MIN_INSTANCES"
 MAX_INSTANCES="$MAX_INSTANCES"
 CONCURRENCY="$CONCURRENCY"
+GITHUB_CLIENT_ID="$GITHUB_CLIENT_ID"
+GITHUB_CLIENT_SECRET="$GITHUB_CLIENT_SECRET"
 EOL
 
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME"
@@ -112,7 +119,7 @@ DEPLOY_ARGS=(
   --allow-unauthenticated
   --port 8080
   --project $PROJECT_ID
-  --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID",DEFAULT_PROJECTS="${GIQ_PROJECTS:-$PROJECT_ID}",DEFAULT_BUCKETS="${GCS_BUCKETS:-prism-internal-results}",SITE_NAME="$SITE_NAME",GA_TRACKING_ID="$GA_TRACKING_ID",CONTACT_US_URL="$CONTACT_US_URL",GOOGLE_API_KEY="$GOOGLE_API_KEY"
+  --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID",DEFAULT_PROJECTS="${GIQ_PROJECTS:-$PROJECT_ID}",DEFAULT_BUCKETS="${GCS_BUCKETS:-prism-internal-results}",SITE_NAME="$SITE_NAME",GA_TRACKING_ID="$GA_TRACKING_ID",CONTACT_US_URL="$CONTACT_US_URL",GOOGLE_API_KEY="$GOOGLE_API_KEY",GITHUB_CLIENT_ID="$GITHUB_CLIENT_ID",GITHUB_CLIENT_SECRET="$GITHUB_CLIENT_SECRET"
 )
 
 [ -n "$MIN_INSTANCES" ] && DEPLOY_ARGS+=(--min-instances "$MIN_INSTANCES")

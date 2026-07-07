@@ -123,6 +123,8 @@ The following environment variables can be set via `--set-env-vars` in the `gclo
 - **`DEFAULT_BUCKETS`**: Comma-separated list of GCS buckets for results.
 - **`DEFAULT_S3_BUCKETS`**: Comma-separated list of public AWS S3 buckets.
 - **`GOOGLE_API_KEY`**: API Key for Google Drive/Sheets (auto-detected from `.env.local` if present).
+- **`GITHUB_CLIENT_ID`**: The Client ID of your registered GitHub OAuth App (used for authentication).
+- **`GITHUB_CLIENT_SECRET`**: The Client Secret of your registered GitHub OAuth App (used for authentication).
 
 #### Automated Deployment with GitHub Actions
 
