@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler resolution (Vite and TSX compatible) */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Strictness configuration for migration */
+    "strict": true,
+    "noImplicitAny": false, /* Allows importing existing JS files without type errors */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Mixed JS/TS Support */
+    "allowJs": true,
+    "checkJs": false /* Do not check or report errors on existing JS files */
+  },
+  "include": ["src", "server"]
+}
