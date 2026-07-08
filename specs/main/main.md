@@ -94,6 +94,16 @@ A collapsible, multi-column panel that updates dynamically based on indexed data
 - **BFF Proxy**: A Node.js backend handles authentication, allowing Prism to reach Google APIs using either Application Default Credentials (ADC) for organization-wide shared sources or user-provided tokens for private data.
 - **Privacy**: User-pasted results and private tokens are never stored server-side, ensuring data security for sensitive benchmarks.
 
+# Results API Specification
+
+Prism exposes a set of endpoints for benchmark ingestion, validation, and retrieval. The implementation is split between the Express backend and GCS storage.
+
+For detailed specifications, refer to the following documents:
+- **[API Schema & Ingestion Reference](results-api/README.md):** Defines the data contract, validation rules, and GCS metadata usage.
+- **[API Route Reference](results-api/routes.md):** Complete catalog of authentication, results, and configuration endpoints.
+- **[Identity & Access Management (IAM)](results-api/iam.md):** Details on GitHub OAuth integration, role resolution, and GCS allowlist management.
+- **[GitHub App Configuration Guide](../../docs/github-oauth-setup.md):** Setup instructions for the GitHub App.
+
 # Directory Structure
 
 The application is located at the repository root.
@@ -101,13 +111,23 @@ The application is located at the repository root.
 ```
 .
 ├── deploy.sh               # Deployment Script
+├── docs/                   # General Documentation
+│   ├── github-oauth-setup.md # GitHub OAuth Configuration Guide
+│   ├── github-actions-setup.md
+│   └── upstream-versions.md
 ├── server/
 │   └── server.js           # Backend API & Static File Server (Express)
-├── specs/                  # Specifications & Schemas
-│   ├── PRD.md
-│   ├── kv_cache_optimizations_prd.md
-│   ├── quality-metrics-prd.md
-│   └── disaggregated_benchmarks_prd.md
+├── specs/                  # Specifications & Schemas (OPSX)
+│   ├── README.md           # OPSX Protocol Description
+│   ├── main/               # Living Source of Truth
+│   │   ├── main.md         # Main System Architecture
+│   │   ├── roadmap.md      # Feature Roadmap
+│   │   └── results-api/    # Prism Cloud API Specs
+│   │       ├── README.md   # API Schema & Reference
+│   │       ├── iam.md      # Identity & Access Management
+│   │       └── routes.md   # Route Reference
+│   ├── changes/            # Active Proposals & WIP Specs
+│   └── archive/            # Completed/Rejected Specs
 ├── public/
 │   └── data.json           # Local benchmark data sample
 ├── tools/                  # Utility Scripts
@@ -146,9 +166,15 @@ The application is located at the repository root.
 
 # Ideas & Future Work
 
-- **Optimization Insights:** Surfacing advanced tunables like KV Cache Size, Speculative Decoding tokens, and Chunked Prefill stats. For a detailed roadmap, see the [KV Cache Optimizations PRD](kv_cache_optimizations_prd.md).
-- **Quality Benchmarking:** Integration of LMArena or similar for Quality (Z-axis) analysis vs Performance/Cost. For details, see the [Quality Metrics PRD](quality-metrics-prd.md).
-- **Architecture Validation:** Comparison of Aggregated vs. Disaggregated architectures. For details, see the [Disaggregated Benchmarks PRD](disaggregated_benchmarks_prd.md).
+- **Optimization Insights:** Surfacing advanced tunables like KV Cache Size, Speculative Decoding tokens, and Chunked Prefill stats. For a detailed roadmap, see the [KV Cache Optimizations PRD](../changes/kv_cache_optimizations_prd.md).
+- **Quality Benchmarking:** Integration of LMArena or similar for Quality (Z-axis) analysis vs Performance/Cost. For details, see the [Quality Metrics PRD](../archive/quality-metrics-prd.md).
+- **Architecture Validation:** Comparison of Aggregated vs. Disaggregated architectures. For details, see the [Disaggregated Benchmarks Proposal](../changes/disagg-benchmarks-proposal.md).
+
+## Prism Community Store Roadmap
+
+- **Backend Ingestion API (Phase 2.5):** Implement the GCS-backed ingestion API, validation checks, and IAM allowlist enforcement on the server side (as defined in [results-api Specs](results-api/README.md)).
+- **Community Catalog Ingestion (Phase 3):** Enhance the Workload Catalog and comparative views to dynamically list and query verified community-submitted benchmarks.
+- **Robust Categorization & Open Beta (Phase 4):** Integrate advanced validation classifiers to isolate malicious inputs, automatically tag workload patterns, and release to the public.
 
 # Open Questions
 
@@ -158,7 +184,7 @@ The application is located at the repository root.
 
 ## Quality Analysis
 
-Prism integrates intelligence and reasoning metrics (MMLU, GSM8K, Arena Elo) to enable multi-dimensional comparisons beyond raw performance. For a detailed breakdown of quality metrics, data sources (Hugging Face, LMSYS), and planned UI components like the "Tale of the Tape" cards, refer to the [Quality Metrics PRD](quality-metrics-prd.md).
+Prism integrates intelligence and reasoning metrics (MMLU, GSM8K, Arena Elo) to enable multi-dimensional comparisons beyond raw performance. For a detailed breakdown of quality metrics, data sources (Hugging Face, LMSYS), and planned UI components like the "Tale of the Tape" cards, refer to the [Quality Metrics PRD](../archive/quality-metrics-prd.md).
 
 ### Vision & Open Questions
 
