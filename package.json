@@ -16,6 +16,7 @@
     "zipline": "rm -f zipline-upload.zip && npm run build && zip -r zipline-upload.zip dist/*"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.21.0",
     "@tailwindcss/vite": "^4.1.17",
     "clsx": "^2.1.1",
     "compression": "^1.7.4",

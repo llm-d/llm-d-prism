@@ -33,6 +33,7 @@ Thumbs.db
 .env
 .envrc
 .secrets.env
+.deploy_config
 vendor/
 node_modules
 

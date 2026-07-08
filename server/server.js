@@ -21,6 +21,8 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { oauthRouter } from './oauth.ts';
+import { resultsRouter } from './results/index.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -29,7 +31,9 @@ const port = process.env.PORT || 3000;
 
 // Enable gzip compression
 app.use(compression());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(oauthRouter);
+app.use(resultsRouter);
 
 // Trust the first proxy (Cloud Run Load Balancer) to properly resolve X-Forwarded-For
 app.set('trust proxy', 1);
@@ -38,18 +42,19 @@ app.set('trust proxy', 1);
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
     max: 50000, // Effectively unlimited for local dev
-    standardHeaders: true, 
-    legacyHeaders: false, 
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 app.use('/api', limiter);
 
 // Google Auth Client
 const auth = new GoogleAuth();
 
+
 // --- API: Shared Configuration ---
 app.get('/api/config', (req, res) => {
-    // Parse environment variables for default data sources
-    const defaultBuckets = process.env.DEFAULT_BUCKETS ? process.env.DEFAULT_BUCKETS.split(',') : [];
+    const rawBuckets = process.env.DEFAULT_BUCKETS || 'llm-d-benchmarks-staging,llm-d-benchmarks';
+    const defaultBuckets = rawBuckets.split(',');
     const defaultProjects = process.env.DEFAULT_PROJECTS ? process.env.DEFAULT_PROJECTS.split(',') : [];
 
     res.json({
@@ -71,7 +76,7 @@ app.all('/api/giq/*', async (req, res) => {
 
         let accessToken;
         const authHeader = req.headers['authorization'];
-        
+
         // If client provides a specific token (e.g. valid length), use it.
         // Otherwise, fallback to ADC.
         if (authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) {
@@ -83,13 +88,13 @@ app.all('/api/giq/*', async (req, res) => {
              const token = await client.getAccessToken();
              accessToken = token.token;
         }
-        
+
         // Construct target URL
         // Incoming: /api/giq/v1/profiles:fetch
         // Target: https://gkerecommender.googleapis.com/v1/profiles:fetch
-        const targetPath = req.params[0]; 
+        const targetPath = req.params[0];
         const targetUrl = `https://gkerecommender.googleapis.com/${targetPath}`;
-        
+
         console.log(`[Proxy] Forwarding to: ${targetUrl}`);
 
         const headers = {
@@ -109,14 +114,14 @@ app.all('/api/giq/*', async (req, res) => {
         let data;
         try {
             data = JSON.parse(text);
-        } catch (e) {
+        } catch {
             data = { error: 'Non-JSON Response', raw: text };
         }
 
         if (targetUrl.includes('profiles:fetch')) {
             console.log(`[Proxy Debug] PROFILES Data string: ${JSON.stringify(data).substring(0, 200)}...`);
         }
-        
+
         // Debug GIQ Cost Data
         if (targetUrl.includes('benchmarkingData')) {
             console.log(`[Proxy Debug] DETAILS Data string: ${JSON.stringify(data).substring(0, 200)}...`);
@@ -135,7 +140,7 @@ app.all('/api/giq/*', async (req, res) => {
             	}
 			}
         }
-        
+
         if (!response.ok) {
             console.log(`[Proxy Error] ${response.status}:`, JSON.stringify(data));
             return res.status(response.status).json(data);
@@ -156,14 +161,14 @@ app.get('/api/local/list', async (req, res) => {
     if (!fs.existsSync(dir)) {
         return res.json({ items: [] });
     }
-    
+
     const items = [];
-    
+
     const scanDirectory = (currentDir, relativePrefix = '') => {
         const files = fs.readdirSync(currentDir, { withFileTypes: true });
         for (const f of files) {
             if (f.name.startsWith('.')) continue;
-            
+
             const relPath = relativePrefix ? `${relativePrefix}/${f.name}` : f.name;
             if (f.isDirectory()) {
                 scanDirectory(path.join(currentDir, f.name), relPath);
@@ -175,7 +180,7 @@ app.get('/api/local/list', async (req, res) => {
             }
         }
     };
-    
+
     scanDirectory(dir);
     res.json({ items });
 });
@@ -183,14 +188,14 @@ app.get('/api/local/list', async (req, res) => {
 app.get('/api/local/file/*', async (req, res) => {
     const fs = await import('fs');
     const relPath = req.params[0];
-    
+
     const baseDir = path.resolve(__dirname, '../private/benchmarks');
     const filepath = path.resolve(baseDir, relPath);
-    
+
     if (!filepath.startsWith(baseDir)) {
         return res.status(403).send('Forbidden');
     }
-    
+
     if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
         res.sendFile(filepath);
     } else {
@@ -228,10 +233,10 @@ app.all('/api/gcs/*', async (req, res) => {
 
         // Path format: /api/gcs/BUCKET_NAME/APP_PATH...
         // Target: https://storage.googleapis.com/BUCKET_NAME/APP_PATH...
-        // Express decodes req.params[0], so we MUST re-encode the target path properly 
+        // Express decodes req.params[0], so we MUST re-encode the target path properly
         // to handle files in folders (which require %2F instead of / in GCS Object API).
         const rawPath = req.params[0];
-        
+
         // Re-encode object names for the /o/ endpoint
         let targetPath = rawPath;
         if (targetPath.includes('/o/')) {
@@ -239,7 +244,7 @@ app.all('/api/gcs/*', async (req, res) => {
              // Encode the object name part
              targetPath = parts[0] + '/o/' + encodeURIComponent(parts[1]);
         }
-        
+
         // Append query string if present (critical for ?alt=media)
         const queryString = new URLSearchParams(req.query).toString();
         const targetUrl = `https://storage.googleapis.com/${targetPath}${queryString ? `?${queryString}` : ''}`;
@@ -280,12 +285,12 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
         if (!doc) return null;
 
         const aggregate = doc.results?.request_performance?.aggregate || {};
-        
+
         const requests = aggregate.requests || {};
         const totalReqs = requests.total || 0;
         const failures = requests.failures || 0;
         const successRate = totalReqs > 0 ? ((totalReqs - failures) / totalReqs) * 100 : 100;
-        
+
         const throughput = aggregate.throughput || {};
 
         const config = doc.config || {};
@@ -315,7 +320,7 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
         }
 
         const requestRate = doc.scenario?.load?.standardized?.rate_qps || doc.scenario?.load?.rate_qps || doc.config?.rate_qps || 0;
-        
+
         let date = 'Unknown';
         let runId = 'Unknown';
         let suite = 'Unknown';
@@ -375,7 +380,7 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
                         }
                     }
                 }
-            } catch (e) {
+            } catch {
                 // Ignore
             }
         }
@@ -435,7 +440,7 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
         if (model === 'Unknown') {
             model = config.model || (parts[1] === 'optimized-baseline' ? 'Qwen/Qwen3-32B' : parts[6]) || 'Unknown';
         }
-        
+
         const rawNameLower = filePath.toLowerCase();
         let precision = config.precision || 'Unknown';
         if (precision === 'Unknown') {
@@ -493,7 +498,7 @@ const parseServerRegressionReport = (content, filePath, metadataContent, jsonCon
                 p99: (itl.p99 || 0) * 1000,
             }
         };
-    } catch (e) {
+    } catch {
         return null;
     }
 };
@@ -505,12 +510,12 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 app.get('/api/regressions', async (req, res) => {
     const bypassCache = req.query.refresh === 'true';
     const now = Date.now();
-    
+
     if (regressionsCache && (now - lastRegressionsFetch < CACHE_TTL) && !bypassCache) {
         console.log('[Regressions API] Returning cached data');
         return res.json(regressionsCache);
     }
-    
+
     try {
         console.log('[Regressions API] Fetching fresh data from GCS...');
         let client;
@@ -539,7 +544,7 @@ app.get('/api/regressions', async (req, res) => {
         let allItems = [];
         let pageToken = '';
         let hasMore = true;
-        
+
         while (hasMore) {
             const listUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o?prefix=regressions/optimized-baseline/` +
                 (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
@@ -641,9 +646,9 @@ app.get('*', async (req, res) => {
     try {
         const fs = await import('fs/promises');
         const indexPath = path.join(__dirname, '../dist', 'index.html');
-        
+
         let html = await fs.readFile(indexPath, 'utf-8');
-        
+
         // Inject runtime environment variables
         // We inject GOOGLE_API_KEY specifically as it's required for the dashboard
         // Priorities: Process Env > Build Time (already in HTML)
@@ -652,10 +657,10 @@ app.get('*', async (req, res) => {
         };
 
         const scriptTag = `<script>window.env = ${JSON.stringify(runtimeEnv)};</script>`;
-        
+
         // Inject before </head>
         html = html.replace('</head>', `${scriptTag}</head>`);
-        
+
         res.send(html);
     } catch (e) {
         console.error('Error serving index.html:', e);

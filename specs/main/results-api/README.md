@@ -134,22 +134,34 @@ Submission status is solely determined from GCS object metadata context
 location of the benchmark files is instead determined by the deployment
 environment:
 
-- **`staged`**:
-  - **Purpose:** Local preview and validation before submission.
-  - **Staged benchmarks are stored in the local browser, not Prism cloud.**
-- **`submitted_pending_processing`**:
-  - **Purpose:** Uploaded to cloud, awaiting automated preliminary validation
-    (sanity checks, format, attribution).
-- **`submitted_pending_review`**:
-  - **Purpose:** Awaiting admin approval. Can be bypassed/auto-approved based on
-    policy.
-- **`public`**:
-  - **Purpose:** Fully approved and visible in the public catalog.
-- **`promoted`**:
-  - **Purpose:** Selected as part of a "Well-Lit Path" benchmark set, granting
-    higher visibility.
-- **`rejected`**:
-  - **Purpose:** Failed automated checks or rejected by an admin.
+- **`staged`** (Staged):
+  - **Benchmark is locally stored in the browser**, user has not submitted yet.
+  - Useful for previewing benchmarks before submitting.
+  - Useful if user doesn’t even want to upload, they just wanted to locally store it for themselves to view.
+- **`submitted_pending_processing`** (Submitted, Pending Processing):
+  - **Benchmark made it into Prism Cloud** (staging GCS bucket).
+  - Pending automated preliminary processing and filtering.
+    - NOW: includes basic sanity checks:
+      - Are any results zeroed?
+      - Are there too many request failures?
+      - Does it include attributions? Correct formatting (BRV02)?
+    - FUTURE: can include more checks as part of the *validation pipeline*.
+  - Can tack on more metadata or override them on server side.
+    - NOW: necessary for proper attribution enforcement.
+    - FUTURE: necessary for input sanitization in the future.
+- **`submitted_pending_review`** (Submitted, Pending Final Review):
+  - User review, if necessary.
+    - Eventually this stage will be skipped straight to the next one once validation pipeline is robust enough.
+  - See [\[External\] llm-d Results Store Submission Policy](https://docs.google.com/document/u/0/d/1EZI-VYXdM9V3KnoWkFIXmihrgO2t7YZZhgeMuIlZDpI/edit?resourcekey=0-xQu9xYrRcroMn5yogcb_xg).
+- **`public`** (Public):
+  - All reviews done, benchmark now public in the sea of benchmarks.
+  - **UNCLEAR:** Clean way to show potentially thousands of benchmarks, Manage Benchmarks page **will not scale**.
+- **`promoted`** (Public, Promoted):
+  - If chosen during submission to be one of the well-lit paths, then benchmark results have been included in said well-lit path’s results.
+  - Implies additional visibility from just sea of benchmarks.
+- **`rejected`** (Rejected):
+  - Failed any of the above checks (or include reason otherwise).
+  - Deleted off cloud.
 
 ### 6.2 State Transitions
 

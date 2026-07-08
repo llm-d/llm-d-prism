@@ -10,7 +10,10 @@ services:
     environment:
       - GOOGLE_APPLICATION_DEFAULT_CREDENTIALS=/tmp/adc.json
       - PORT=3000
-      - DEFAULT_BUCKETS=llm-d-benchmarks
+      - DEFAULT_BUCKETS=llm-d-benchmarks-staging,llm-d-benchmarks
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - PUBLIC_URL=http://localhost:8081
     ports:
       - "8081:5173"
       - "3000:3000"

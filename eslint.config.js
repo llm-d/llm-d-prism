@@ -27,6 +27,15 @@ export default tseslint.config(
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  // Configuration for Node.js server files
+  {
+    files: ['server/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      }
+    }
+  },
   // Configuration for TypeScript/React TSX files (runs TS rules)
   {
     files: ['**/*.{ts,tsx}'],
