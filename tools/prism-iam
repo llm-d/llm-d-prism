@@ -1,0 +1,226 @@
+#!/bin/bash
+set -eo pipefail
+
+# Print help message
+usage() {
+    echo "Usage:"
+    echo "  $0 <user-allowlist|admin-allowlist> <production|staging> <edit|list|add|remove> [username]"
+    echo "  $0 summarize [production|staging]"
+    echo ""
+    echo "Allowlists:"
+    echo "  user-allowlist   User allowlist file (github-user-allowlist.txt)"
+    echo "  admin-allowlist  Admin allowlist file (github-admin-allowlist.txt)"
+    echo ""
+    echo "Environments:"
+    echo "  production  Uses gs://llm-d-benchmarks"
+    echo "  staging     Uses gs://llm-d-benchmarks-staging"
+    echo ""
+    echo "Actions:"
+    echo "  edit    Open the allowlist file in \$EDITOR and save changes on exit (fails if empty)."
+    echo "  list    Print the list of usernames to stdout."
+    echo "  add     Add a username to the end of the allowlist (errors if duplicate)."
+    echo "  remove  Remove a username from the allowlist (errors if not found)."
+    exit 1
+}
+
+# Helper for summarize command
+print_allowlist() {
+    local bucket="$1"
+    local filename="$2"
+    local list_type="$3"
+    local env="$4"
+    
+    local temp_out
+    temp_out=$(mktemp)
+    if command -v gcloud &> /dev/null; then
+        gcloud storage cat "gs://${bucket}/prism-iam/${filename}" > "$temp_out" 2>/dev/null || touch "$temp_out"
+    elif command -v gsutil &> /dev/null; then
+        gsutil cat "gs://${bucket}/prism-iam/${filename}" > "$temp_out" 2>/dev/null || touch "$temp_out"
+    fi
+    
+    echo "${list_type} ${env}:"
+    if [ -s "$temp_out" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty or whitespace-only lines
+            if [[ ! -z "${line// }" ]]; then
+                echo "  - ${line}"
+            fi
+        done < "$temp_out"
+    else
+        echo "  []"
+    fi
+    rm -f "$temp_out"
+    echo ""
+}
+
+# Check for summarize command
+if [ "$1" == "summarize" ]; then
+    ENV="$2"
+    case "$ENV" in
+        "")
+            print_allowlist "llm-d-benchmarks-staging" "github-user-allowlist.txt" "user-allowlist" "staging"
+            print_allowlist "llm-d-benchmarks-staging" "github-admin-allowlist.txt" "admin-allowlist" "staging"
+            print_allowlist "llm-d-benchmarks" "github-user-allowlist.txt" "user-allowlist" "production"
+            print_allowlist "llm-d-benchmarks" "github-admin-allowlist.txt" "admin-allowlist" "production"
+            ;;
+        staging)
+            print_allowlist "llm-d-benchmarks-staging" "github-user-allowlist.txt" "user-allowlist" "staging"
+            print_allowlist "llm-d-benchmarks-staging" "github-admin-allowlist.txt" "admin-allowlist" "staging"
+            ;;
+        production)
+            print_allowlist "llm-d-benchmarks" "github-user-allowlist.txt" "user-allowlist" "production"
+            print_allowlist "llm-d-benchmarks" "github-admin-allowlist.txt" "admin-allowlist" "production"
+            ;;
+        *)
+            echo "Error: Unknown environment '$ENV' for summarize. Must be 'production' or 'staging' (or empty)." >&2
+            exit 1
+            ;;
+    esac
+    exit 0
+fi
+
+# Check minimum argument count for standard commands
+if [ "$#" -lt 3 ]; then
+    usage
+fi
+
+LIST_TYPE="$1"
+ENV="$2"
+ACTION="$3"
+USERNAME="$4" # Required for add/remove
+
+# 1. Resolve Bucket
+case "$ENV" in
+    production)
+        BUCKET="llm-d-benchmarks"
+        ;;
+    staging)
+        BUCKET="llm-d-benchmarks-staging"
+        ;;
+    *)
+        echo "Error: Unknown environment '$ENV'. Must be 'production' or 'staging'." >&2
+        usage
+        ;;
+esac
+
+# 2. Resolve Filename
+case "$LIST_TYPE" in
+    user-allowlist)
+        FILENAME="github-user-allowlist.txt"
+        ;;
+    admin-allowlist)
+        FILENAME="github-admin-allowlist.txt"
+        ;;
+    *)
+        echo "Error: Unknown allowlist type '$LIST_TYPE'. Must be 'user-allowlist' or 'admin-allowlist'." >&2
+        usage
+        ;;
+esac
+
+GCS_URI="gs://${BUCKET}/prism-iam/${FILENAME}"
+
+# Check action specific requirements
+if [[ "$ACTION" == "add" || "$ACTION" == "remove" ]]; then
+    if [ -z "$USERNAME" ]; then
+        echo "Error: Action '$ACTION' requires a username." >&2
+        usage
+    fi
+fi
+
+# Create a temporary file that will be deleted on exit
+TEMP_FILE=$(mktemp)
+trap 'rm -f "$TEMP_FILE"' EXIT
+
+# Fetch current file from GCS. If it doesn't exist, we treat it as empty or create it.
+fetch_file() {
+    if command -v gcloud &> /dev/null; then
+        gcloud storage cat "$GCS_URI" > "$TEMP_FILE" 2>/dev/null || touch "$TEMP_FILE"
+    elif command -v gsutil &> /dev/null; then
+        gsutil cat "$GCS_URI" > "$TEMP_FILE" 2>/dev/null || touch "$TEMP_FILE"
+    else
+        echo "Error: Neither 'gcloud' nor 'gsutil' CLI is available." >&2
+        exit 1
+    fi
+}
+
+upload_file() {
+    if command -v gcloud &> /dev/null; then
+        gcloud storage cp "$TEMP_FILE" "$GCS_URI"
+    elif command -v gsutil &> /dev/null; then
+        gsutil cp "$TEMP_FILE" "$GCS_URI"
+    else
+        echo "Error: Neither 'gcloud' nor 'gsutil' CLI is available." >&2
+        exit 1
+    fi
+}
+
+case "$ACTION" in
+    list)
+        fetch_file
+        cat "$TEMP_FILE"
+        ;;
+        
+    edit)
+        fetch_file
+        # Default editor to vi if EDITOR is not set
+        EDITOR_BIN="${EDITOR:-vi}"
+        
+        # Calculate initial checksum to check if modified
+        INITIAL_MD5=$(md5sum "$TEMP_FILE" | cut -d' ' -f1)
+        
+        # Open in editor
+        $EDITOR_BIN "$TEMP_FILE"
+        
+        # Fails fatally if file is empty
+        if [ ! -s "$TEMP_FILE" ]; then
+            echo "Error: The file is empty after editing. Aborting upload to prevent lockouts." >&2
+            exit 1
+        fi
+        
+        FINAL_MD5=$(md5sum "$TEMP_FILE" | cut -d' ' -f1)
+        
+        if [ "$INITIAL_MD5" != "$FINAL_MD5" ]; then
+            echo "Changes detected. Uploading to $GCS_URI..."
+            upload_file
+            echo "Successfully updated $GCS_URI."
+        else
+            echo "No changes detected."
+        fi
+        ;;
+        
+    add)
+        fetch_file
+        # Check if username already exists in the file (exact match per line)
+        if grep -Fqx "$USERNAME" "$TEMP_FILE"; then
+            echo "Error: User '$USERNAME' is already in the allowlist." >&2
+            exit 1
+        fi
+        
+        # Add username
+        echo "$USERNAME" >> "$TEMP_FILE"
+        upload_file
+        echo "Successfully added '$USERNAME' to $GCS_URI."
+        ;;
+        
+    remove)
+        fetch_file
+        # Check if username exists
+        if ! grep -Fqx "$USERNAME" "$TEMP_FILE"; then
+            echo "Error: User '$USERNAME' was not found in the allowlist." >&2
+            exit 1
+        fi
+        
+        # Remove username (writing back all lines except the matching one)
+        CLEANED_FILE=$(mktemp)
+        grep -Fvx "$USERNAME" "$TEMP_FILE" > "$CLEANED_FILE" || true
+        mv "$CLEANED_FILE" "$TEMP_FILE"
+        
+        upload_file
+        echo "Successfully removed '$USERNAME' from $GCS_URI."
+        ;;
+        
+    *)
+        echo "Error: Unknown action '$ACTION'. Must be edit, list, add, or remove." >&2
+        usage
+        ;;
+esac

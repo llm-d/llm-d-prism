@@ -20,6 +20,7 @@ RUN npm install --omit=dev
 
 # Copy server and built assets
 COPY server ./server
+COPY src/utils ./src/utils
 COPY --from=build /app/dist ./dist
 
 ENV PORT=8080

@@ -19,15 +19,22 @@ authentication.
 ### `GET /api/auth/github/callback`
 
 Handles redirect callback from GitHub OAuth, exchanges the temporary
-authorization code for a GitHub access token, and redirects back to the frontend
-with the token stored in the URL hash fragment
-(`#access_token=<token>&state=<state>`).
+authorization code for a GitHub access token (and optional refresh token), and
+redirects back to the frontend with the tokens stored in the URL hash fragment
+(`#access_token=<token>&refresh_token=<token>&expires_in=<seconds>&state=<state>`).
 
 ### `GET /api/auth/github/me`
 
 Resolves the current session state.
 
 - **Headers:** `X-Prism-Github-Token: <access_token>` (optional)
+
+### `POST /api/auth/github/refresh`
+
+Exchanges a valid refresh token for a new set of GitHub access and refresh tokens.
+
+- **Request Body:** `{ "refresh_token": "<token>" }`
+- **Response (200 OK):** `{ "access_token": "<token>", "expires_in": <seconds>, "refresh_token": "<token>", "refresh_token_expires_in": <seconds> }`
 
 ### `POST /api/auth/github/logout`
 
