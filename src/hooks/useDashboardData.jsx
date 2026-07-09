@@ -24,10 +24,22 @@ import { useLLMD } from './useLLMD';
 import { useAWS } from './useAWS';
 import { getBenchmarkKey } from '../utils/dashboardHelpers';
 
+const decodeGcsPath = (urlStr) => {
+    if (!urlStr) return '';
+    try {
+        const match = urlStr.match(/[?&]path=([^&]+)/);
+        return match ? decodeURIComponent(match[1]) : urlStr;
+    } catch {
+        return urlStr;
+    }
+};
+
 export const useDashboardData = (initialState, dashboardState) => {
     const { selectedBenchmarks, setSelectedBenchmarks, xAxisMax, setXAxisMax } = dashboardState;
     const pendingRequests = useRef(new Map());
+    const pendingDetailedRequests = useRef(new Set());
     const [data, setData] = useState([]);
+    const [expandedModels, setExpandedModels] = useState(new Set());
     const dataRef = useRef(data);
     useEffect(() => { dataRef.current = data; }, [data]);
     const [loading, setLoading] = useState(true);
@@ -98,6 +110,207 @@ export const useDashboardData = (initialState, dashboardState) => {
             console.error("Failed to persist brv02 selected stages to LocalStorage:", e);
         }
     }, [brv02SelectedStages]);
+
+    const loadDetailedMetrics = useCallback(async (downloadUrls) => {
+        const token = localStorage.getItem('github_oauth_token');
+        const headers = token ? { 'X-Prism-Github-Token': token } : {};
+        
+        const urlsToFetch = downloadUrls.filter(url => {
+            if (!url || pendingDetailedRequests.current.has(url)) {
+                return false;
+            }
+            pendingDetailedRequests.current.add(url);
+            return true;
+        });
+
+        if (urlsToFetch.length === 0) return;
+
+        await Promise.all(urlsToFetch.map(async (url) => {
+            try {
+                const res = await fetch(url, { headers });
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                
+                const content = await res.text();
+                let parsedEntries = [];
+
+                if (url.includes('prism-results-store/')) {
+                    const payload = JSON.parse(content);
+                    const parsedStages = [];
+                    for (const entry of payload.entries) {
+                        const parsedStage = parseReportV02(entry.raw_report, entry.filename);
+                        if (parsedStage) {
+                            parsedStage.runId = payload.runId;
+                            parsedStage.runLabel = payload.runLabel;
+                            parsedStage.run_metadata = payload.run_metadata;
+                            if (payload.metadata?.config) {
+                                parsedStage.config = payload.metadata.config;
+                            }
+                            const fullEntry = stageToEntry(parsedStage);
+                            if (payload.github_author) {
+                                fullEntry.github_author = payload.github_author;
+                            }
+                            fullEntry.isFull = true;
+                            fullEntry.downloadUrl = url;
+                            parsedStages.push(fullEntry);
+                        }
+                    }
+                    parsedEntries = parsedStages;
+                } else {
+                    try {
+                        const jsonContent = JSON.parse(content);
+                        if (Array.isArray(jsonContent)) {
+                            const entries = [];
+                            for (const item of jsonContent) {
+                                if (item && typeof item === 'object' && item.metadata && (item.workload || item.metrics || item.latency)) {
+                                    item.isFull = true;
+                                    item.downloadUrl = url;
+                                    entries.push(item);
+                                } else if (item.metrics || item.load_summary) {
+                                    const filename = item._source_file || url;
+                                    const entry = parseJsonEntry({ ...item, source: 'gcs' }, filename);
+                                    entry.isFull = true;
+                                    entry.downloadUrl = url;
+                                    entries.push(entry);
+                                } else if (item.latency) {
+                                    item.isFull = true;
+                                    item.downloadUrl = url;
+                                    entries.push(item);
+                                }
+                            }
+                            parsedEntries = entries;
+                        } else if (jsonContent && typeof jsonContent === 'object') {
+                            if (jsonContent.metadata && (jsonContent.workload || jsonContent.metrics || jsonContent.latency)) {
+                                jsonContent.isFull = true;
+                                jsonContent.downloadUrl = url;
+                                parsedEntries = [jsonContent];
+                            } else if (jsonContent.metrics || jsonContent.load_summary) {
+                                const entry = parseJsonEntry({ ...jsonContent, source: 'gcs' }, url);
+                                entry.isFull = true;
+                                entry.downloadUrl = url;
+                                parsedEntries = [entry];
+                            } else if (jsonContent.latency) {
+                                jsonContent.isFull = true;
+                                jsonContent.downloadUrl = url;
+                                parsedEntries = [jsonContent];
+                            }
+                        }
+                    } catch {
+                        // Log parsing
+                    }
+                    if (parsedEntries.length === 0) {
+                        const logs = parseLogFile(content, url);
+                        logs.forEach(e => {
+                            e.isFull = true;
+                            e.downloadUrl = url;
+                        });
+                        parsedEntries = logs;
+                    }
+                }
+
+                if (parsedEntries.length > 0) {
+                    setData(prev => {
+                        const targetPath = decodeGcsPath(url);
+                        const filtered = prev.filter(d => decodeGcsPath(d.downloadUrl) !== targetPath);
+                        const oldMatch = prev.find(d => decodeGcsPath(d.downloadUrl) === targetPath);
+                        const source = oldMatch?.source || 'gcs';
+                        
+                        const updatedEntries = parsedEntries.map(e => {
+                            e.source = source;
+                            e.isFull = true;
+                            e.downloadUrl = url;
+                            e.isFromResultStore = oldMatch?.isFromResultStore ?? url.includes('prism-results-store/');
+                            e.source_info = {
+                                ...(e.source_info || {}),
+                                type: 'storage',
+                                origin: source,
+                                raw_url: url
+                            };
+                            if (!e.source_info.file_identifier) {
+                                e.source_info.file_identifier = decodeURIComponent(url).split('/').pop() || 'unknown';
+                            }
+                            e.raw_url = url;
+
+                            if (e.latency?.mean && e.latency.mean < 100) {
+                                e.latency.mean *= 1000;
+                                if (e.latency.p50) e.latency.p50 *= 1000;
+                                if (e.latency.p99) e.latency.p99 *= 1000;
+                                if (e.latency.min) e.latency.min *= 1000;
+                                if (e.latency.max) e.latency.max *= 1000;
+                            }
+                            if (e.ttft?.mean && e.ttft.mean < 100) {
+                                e.ttft.mean *= 1000;
+                                if (e.ttft.p50) e.ttft.p50 *= 1000;
+                                if (e.ttft.p99) e.ttft.p99 *= 1000;
+                                if (e.ttft.min) e.ttft.min *= 1000;
+                                if (e.ttft.max) e.ttft.max *= 1000;
+                            }
+                            return e;
+                        });
+
+                        const oldKey = oldMatch ? getBenchmarkKey(oldMatch) : null;
+                        const newKeys = new Set(updatedEntries.map(e => getBenchmarkKey(e)));
+
+                        if (oldKey && !newKeys.has(oldKey)) {
+                            setSelectedBenchmarks(prevSel => {
+                                if (prevSel.has(oldKey)) {
+                                    const nextSel = new Set(prevSel);
+                                    nextSel.delete(oldKey);
+                                    newKeys.forEach(k => nextSel.add(k));
+                                    return nextSel;
+                                }
+                                return prevSel;
+                            });
+
+                            setExpandedModels(prevExp => {
+                                if (prevExp.has(oldKey) || (oldMatch.model && prevExp.has(oldMatch.model)) || (oldMatch.model_name && prevExp.has(oldMatch.model_name))) {
+                                    const nextExp = new Set(prevExp);
+                                    nextExp.delete(oldKey);
+                                    if (oldMatch.model) nextExp.delete(oldMatch.model);
+                                    if (oldMatch.model_name) nextExp.delete(oldMatch.model_name);
+                                    newKeys.forEach(k => nextExp.add(k));
+                                    return nextExp;
+                                }
+                                return prevExp;
+                            });
+                        }
+
+                        return [...filtered, ...updatedEntries];
+                    });
+                } else {
+                    setData(prev => prev.map(d => (d.downloadUrl && decodeGcsPath(d.downloadUrl) === decodeGcsPath(url)) ? { ...d, isFull: true } : d));
+                }
+            } catch (err) {
+                console.error(`Failed to load detailed metrics for ${url}:`, err);
+                setData(prev => prev.map(d => (d.downloadUrl && decodeGcsPath(d.downloadUrl) === decodeGcsPath(url)) ? { ...d, isFull: true } : d));
+            } finally {
+                pendingDetailedRequests.current.delete(url);
+            }
+        }));
+    }, []);
+
+    useEffect(() => {
+        const fetchNeeded = new Set();
+        data.forEach((d) => {
+            if (!d.isFull && d.downloadUrl && !pendingDetailedRequests.current.has(d.downloadUrl)) {
+                const key = getBenchmarkKey(d);
+                const isSelected = selectedBenchmarks && selectedBenchmarks.has(key);
+                const isExpanded = expandedModels && (
+                    expandedModels.has(key) || 
+                    (d.model && expandedModels.has(d.model)) || 
+                    (d.model_name && expandedModels.has(d.model_name))
+                );
+                const isUnknown = !d.model || d.model === 'Unknown' || d.model_name === 'Unknown';
+                
+                if (isSelected || isExpanded || isUnknown) {
+                    fetchNeeded.add(d.downloadUrl);
+                }
+            }
+        });
+
+        if (fetchNeeded.size > 0) {
+            loadDetailedMetrics(Array.from(fetchNeeded));
+        }
+    }, [data, selectedBenchmarks, expandedModels, loadDetailedMetrics]);
 
     useEffect(() => {
         // Automatically sync all benchmark stage runs into the main scatter plot data array
@@ -198,7 +411,6 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [newProjectId, setNewProjectId] = useState("");
     const [newAuthToken, setNewAuthToken] = useState("");
     const [showSampleData, setShowSampleData] = useState(true);
-    const [expandedModels, setExpandedModels] = useState(new Set());
     const [debugInfo, setDebugInfo] = useState(null);
     const [qualityInspectOpen, setQualityInspectOpen] = useState(false);
     const [expandedIntegration, setExpandedIntegration] = useState(null);
@@ -240,15 +452,15 @@ export const useDashboardData = (initialState, dashboardState) => {
         localStorage.setItem('prism_saved_sources', JSON.stringify(toSave));
     }, [bucketConfigs, awsBucketConfigs, apiConfigs, selectedSources, enableLLMDResults]);
 
-    const removeToast = (id) => {
+    const removeToast = useCallback((id) => {
         setToasts(prev => prev.filter(t => t.id !== id));
-    };
+    }, []);
 
-    const addToast = (message, type = 'info') => {
+    const addToast = useCallback((message, type = 'info') => {
         const id = Date.now() + Math.random();
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => removeToast(id), 8000); // 8 Seconds
-    };
+    }, [removeToast]);
 
     // --- Extracted Block ---
     // Drive Sync Function
@@ -557,19 +769,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                     setAvailableSources(prev => new Set([...prev, ...newSources]));
                     setSelectedSources(prev => new Set([...prev, ...newSources]));
 
-                    // Update models
-                    const allKeys = new Set();
-                    allResults.forEach(r => {
-                        const sourceKey = `${r.type}:${r.id}`;
-                        r.entries.forEach(e => {
-                            allKeys.add(getBenchmarkKey({ ...e, source: sourceKey }));
-                        });
-                    });
 
-                    setSelectedBenchmarks(prev => {
-                        if (prev.size > 0) return prev;
-                        return allKeys;
-                    });
                 }
 
                 if (saved.qualityScoresEnabled) {
@@ -603,20 +803,36 @@ export const useDashboardData = (initialState, dashboardState) => {
         }
     }, [loading]);
 
-    const updateSourceData = (sourceKey, newEntries, profile) => {
+    const updateSourceData = (sourceKey, newEntries, profile, mode = 'replace') => {
+        const append = mode === 'append' || mode === true;
         const normalized = newEntries.map(e => ({ ...e, source: sourceKey }));
 
         setData(prev => {
-            // Remove existing entries for this source
-            const filtered = prev.filter(d => d.source !== sourceKey);
-            // Add new entries, ensuring unique IDs
+            const filtered = append ? prev : prev.filter(d => d.source !== sourceKey);
             const next = [...filtered, ...normalized].map((d, i) => ({ ...d, id: i }));
             return next;
         });
 
         setGcsProfiles(prev => {
-            const existing = prev.filter(p => `${p.type}:${p.bucketName}` !== sourceKey);
-            return [...existing, profile];
+            const match = prev.find(p => `${p.type}:${p.bucketName}` === sourceKey);
+            if (match && append) {
+                return prev.map(p => {
+                    if (`${p.type}:${p.bucketName}` === sourceKey) {
+                        return {
+                            ...p,
+                            files: [...(p.files || []), ...(profile.files || [])],
+                            entryCount: (p.entryCount || 0) + (profile.entryCount || 0),
+                            loadedAt: profile.loadedAt,
+                            nextPageToken: profile.nextPageToken,
+                            loading: false
+                        };
+                    }
+                    return p;
+                });
+            } else {
+                const existing = prev.filter(p => `${p.type}:${p.bucketName}` !== sourceKey);
+                return [...existing, { ...profile, loading: false }];
+            }
         });
 
         setAvailableSources(prev => new Set([...prev, sourceKey]));
@@ -632,6 +848,40 @@ export const useDashboardData = (initialState, dashboardState) => {
             }
             return next;
         });
+    };
+
+    const loadMoreGcs = async (sourceType, id) => {
+        if (sourceType !== 'gcs') return;
+
+        const currentProfile = gcsProfiles.find(p => p.bucketName === id && p.type === 'gcs');
+        if (!currentProfile || !currentProfile.nextPageToken) return;
+
+        // Set loading state on GCS profile card
+        setGcsProfiles(prev => prev.map(p =>
+            p.bucketName === id && p.type === 'gcs' ? { ...p, loading: true } : p
+        ));
+
+        try {
+            const result = await fetchBucketData(id, false, currentProfile.nextPageToken);
+            if (result.profile.error) {
+                setGcsError(result.profile.error);
+                setGcsProfiles(prev => prev.map(p =>
+                    p.bucketName === id && p.type === 'gcs' ? { ...p, loading: false } : p
+                ));
+            } else {
+                updateSourceData(`gcs:${id}`, result.entries, {
+                    ...result.profile,
+                    nextPageToken: result.nextPageToken
+                }, 'append');
+                setGcsSuccess(`Loaded more benchmarks from bucket: ${id}`);
+            }
+        } catch (err) {
+            console.error(`Error loading more benchmarks:`, err);
+            setGcsError(err.message);
+            setGcsProfiles(prev => prev.map(p =>
+                p.bucketName === id && p.type === 'gcs' ? { ...p, loading: false } : p
+            ));
+        }
     };
 
     const handleAddGCSBucket = async (alias = null, bucketNameOverride = null) => {
@@ -1799,7 +2049,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         addToast, removeToast,
         siteName, setSiteName,
         contactUrl, setContactUrl,
-        fetchConfig, fetchBucketData, fetchGiqData,
+        fetchConfig, fetchBucketData, fetchGiqData, loadMoreGcs,
         fetchQualityData, fetchLocalData, fetchArchivedData,
         loadAllData, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, syncDriveData,
         restoreSampleData, removeSampleData, removeLLMDData,

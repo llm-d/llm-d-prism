@@ -39,7 +39,8 @@ export const FilterPanel = ({
     UnifiedDataTable,
     hideShowSelectedOnly,
     renameClearToUnselectAll,
-    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run
+    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+    gcsProfiles, selectedSources, loadMoreGcs
 }) => {
     const [groupBy, setGroupBy] = useState(() => {
         try {
@@ -73,7 +74,7 @@ export const FilterPanel = ({
         const defaults = {
             hardware: true,
             timestamp: true,
-            stage: true,
+            stage: false,
             nodes: false,
             islOsl: false,
             maxTput: true,
@@ -233,7 +234,6 @@ export const FilterPanel = ({
                                 {Object.entries({
                                     hardware: 'Hardware',
                                     timestamp: 'Timestamp',
-                                    stage: 'Stage',
                                     nodes: 'Nodes & Parallelism',
                                     islOsl: 'ISL/OSL',
                                     maxTput: 'Max TPUT',
@@ -475,6 +475,9 @@ export const FilterPanel = ({
                 brv02CustomLabels={brv02CustomLabels}
                 setBrv02CustomLabels={setBrv02CustomLabels}
                 removeBrv02Run={removeBrv02Run}
+                gcsProfiles={gcsProfiles}
+                selectedSources={selectedSources}
+                loadMoreGcs={loadMoreGcs}
             />
         </div>
     );

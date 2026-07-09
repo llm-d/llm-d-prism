@@ -59,7 +59,7 @@ export const FilterPanel = ({
                         </button>
                     </h2>
                     {isFiltersExpanded && (
-                        <div className="w-56 opacity-60 hover:opacity-100 transition-opacity">
+                        <div className="w-56 opacity-40 pointer-events-none select-none" title="Disabled during GCS pagination">
                             <MultiSelectDropdown 
                                 label="Origin / Folder"
                                 options={filterOptions.origins || []}
@@ -73,8 +73,13 @@ export const FilterPanel = ({
                 </div>
                 {/* Filter Groups - Compact Layout */}
                 {isFiltersExpanded && (
-                    <>
-                        <div className="flex flex-col md:flex-row gap-4 border-t border-slate-200 dark:border-slate-700/50 pt-2">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-slate-50/20 dark:bg-slate-900/20 z-20 backdrop-blur-[0.5px] rounded-lg flex items-center justify-center pointer-events-auto">
+                            <span className="bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 px-3 py-1.5 rounded-md text-[11px] font-medium shadow-sm flex items-center gap-1.5 select-none">
+                                ⚠️ Filters disabled during GCS pagination
+                            </span>
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-4 border-t border-slate-200 dark:border-slate-700/50 pt-2 opacity-40 pointer-events-none select-none">
                     
                     {/* Section 1: Application / Model Server */}
                     <div className="flex-1 min-w-[200px]">
@@ -241,7 +246,7 @@ export const FilterPanel = ({
                 baselineBenchmarkKey={baselineBenchmarkKey}
                 setBaselineBenchmarkKey={setBaselineBenchmarkKey}
             />
-            </>
+            </div>
             )}
         </div>
       </div>

@@ -18,7 +18,7 @@ import { getSourceTypeStyle } from "../../utils/dashboardHelpers";
 
 export const CustomGCSPanel = ({
     connectionType, setConnectionType, availableSources, gcsProfiles, 
-    selectedSources, setSelectedSources, removeBucket, refreshSource, 
+    selectedSources, setSelectedSources, removeBucket, refreshSource, loadMoreGcs,
     newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, 
     handleAddBucket, gcsLoading, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket,
     gcsSuccess, gcsError
@@ -139,7 +139,17 @@ export const CustomGCSPanel = ({
                                                       <span>Restoring...</span>
                                                   </div>
                                               ) : (
-                                                  <span>{profile.entryCount} benchmarks loaded</span>
+                                                  <div className="flex items-center gap-2">
+                                                      <span>{profile.entryCount} benchmarks loaded</span>
+                                                      {profile.nextPageToken && (
+                                                          <button 
+                                                              onClick={() => loadMoreGcs('gcs', profile.bucketName)}
+                                                              className="text-[10px] text-blue-600 hover:underline font-semibold"
+                                                          >
+                                                              ● Load More
+                                                          </button>
+                                                      )}
+                                                  </div>
                                               )}
                                           </span>
                                       </div>

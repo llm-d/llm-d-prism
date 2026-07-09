@@ -224,6 +224,13 @@ export const RunComparisonChart = ({
         });
     };
 
+    const isStillLoading = useMemo(() => {
+        return filteredBySource.some(d => {
+            const key = getBenchmarkKey(d);
+            return selectedBenchmarks.has(key) && !d.isFull && d.downloadUrl;
+        });
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey]);
+
     // Build chart data once per render, computing values and diffs for EVERY
     // stat the metric supports (cheap; lets us re-render without recomputing
     // when the user toggles stat visibility).
@@ -478,7 +485,12 @@ export const RunComparisonChart = ({
             </div>
 
             <div className="h-72">
-                {hasPlotData ? (
+                {isStillLoading ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mb-2"></div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Loading detailed performance metrics...</p>
+                    </div>
+                ) : hasPlotData ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             // Recharts caches per-bar layout by registration order, so

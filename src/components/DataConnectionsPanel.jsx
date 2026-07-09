@@ -23,14 +23,14 @@ import { getBenchmarkKey, getIntegrationSourceType, getSourceTypeStyle } from ".
 const DataConnectionsPanel = (props) => {
   const [localSampleError, setLocalSampleError] = React.useState(false);
   const [localSampleColor, setLocalSampleColor] = React.useState(null);
-    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast, brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run, brv02CustomLabels, setBrv02CustomLabels, brv02Loading } = props;
+    const { showDataPanel, setShowDataPanel, INTEGRATIONS, apiConfigs, data, bucketConfigs, availableSources, showSampleData, enableLLMDResults, setEnableLLMDResults, expandedIntegration, setExpandedIntegration, setApiError, setGcsError, setLpgError, removeSampleData, removeLLMDData, restoreSampleData, driveLoading, driveStatus, driveProgress, driveError, refreshSource, loadMoreGcs, setApiConfigs, setData, setSelectedSources, setAvailableSources, newProjectId, setNewProjectId, newAuthToken, setNewAuthToken, handleAddApiSource, gcsLoading, gcsError, apiError, lpgError, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, hostProject, lpgLoading, lpgPasteText, setLpgPasteText, setLpgLoading, parseLogFile, gcsSuccess, setGcsSuccess, connectionType, setConnectionType, gcsProfiles, selectedSources, removeBucket, newBucketAlias, setNewBucketAlias, newBucketName, setNewBucketName, handleAddBucket, chartMode, tputType, costMode, latType, selectedModels, activeFilters, xAxisMax, showPerChip, showSelectedOnly, showPareto, showLabels, showDataLabels, setIsInspectorOpen, qualityMetrics, setQualityInspectOpen, fetchQualityData, state, awsBucketConfigs, handleAddAWSBucket, removeAWSBucket, addToast, brv02Runs, brv02Error, setBrv02Error, handleBrv02Upload, removeBrv02Run, brv02CustomLabels, setBrv02CustomLabels, brv02Loading } = props;
   const [activeOrder, setActiveOrder] = React.useState(() => INTEGRATIONS ? INTEGRATIONS.map(i => i.id) : []);
   const [prevActiveIds, setPrevActiveIds] = React.useState(new Set());
   
     const handleClearCache = async () => {
         try {
             // GCS relies on IndexedDB caching
-            const dbRequest = window.indexedDB.deleteDatabase('PrismCache');
+            const dbRequest = window.indexedDB.deleteDatabase('PrismCacheDB');
             dbRequest.onsuccess = () => {
                 addToast('Cache cleared successfully. Please reload the page.', 'success');
                 setTimeout(() => window.location.reload(), 1500);
@@ -461,7 +461,7 @@ const DataConnectionsPanel = (props) => {
                         connectionType={connectionType} setConnectionType={setConnectionType}
                         availableSources={availableSources} gcsProfiles={gcsProfiles}
                         selectedSources={selectedSources} setSelectedSources={setSelectedSources}
-                        removeBucket={removeBucket} refreshSource={refreshSource}
+                        removeBucket={removeBucket} refreshSource={refreshSource} loadMoreGcs={loadMoreGcs}
                         newBucketAlias={newBucketAlias} setNewBucketAlias={setNewBucketAlias}
                         newBucketName={newBucketName} setNewBucketName={setNewBucketName}
                         handleAddBucket={handleAddBucket} gcsLoading={gcsLoading}

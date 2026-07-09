@@ -208,7 +208,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         addToast, removeToast,
         siteName, setSiteName,
         contactUrl, setContactUrl,
-        fetchConfig, fetchBucketData, fetchGiqData,
+        fetchConfig, fetchBucketData, fetchGiqData, loadMoreGcs,
         fetchQualityData, fetchLocalData, fetchArchivedData,
         loadAllData, handleLpgFileUpload, handleLpgGcsScan, handleLpgGcsLoad, syncDriveData,
         restoreSampleData, removeSampleData, removeLLMDData,
@@ -500,6 +500,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
             throw e;
         }
     };
+
 
     const refreshSource = async (sourceType, id, mode = 'full') => {
         setGcsLoading(true);
@@ -1424,7 +1425,16 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
 
         // 2. Process groups
         groups.forEach((groupingData, benchmarkKey) => {
-            const model = groupingData[0].model_name || groupingData[0].model;
+            const firstEntry = groupingData[0];
+            const isFromResultStore = firstEntry.isFromResultStore || false;
+            const runLabel = firstEntry.runLabel ?? null;
+            const rawModel = firstEntry.model_name || firstEntry.model;
+            const hasModel = rawModel && rawModel !== 'Unknown';
+
+            // For non-result-store benchmarks, show model name first instead of run label
+            const model = (!isFromResultStore)
+                ? (hasModel ? rawModel : 'Unknown')
+                : (runLabel || (hasModel ? rawModel : 'Unknown'));
 
             const maxTput = Math.max(0, ...groupingData.map(x => Number(x.throughput || 0)).filter(t => !isNaN(t)));
             const minLatEntries = groupingData.map(x => Number(x.latency?.mean || 0)).filter(l => !isNaN(l) && l > 0);
@@ -1489,6 +1499,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
             stats.push({
                 benchmarkKey,
                 model,
+                isFromResultStore,
                 configuration, // Explicitly pass configuration
                 maxTput,
                 minLat,
@@ -1948,6 +1959,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                     driveProgress={driveProgress}
                     driveError={driveError}
                     refreshSource={refreshSource}
+                    loadMoreGcs={loadMoreGcs}
                     setApiConfigs={setApiConfigs}
                     setData={setData}
                     setSelectedSources={setSelectedSources}

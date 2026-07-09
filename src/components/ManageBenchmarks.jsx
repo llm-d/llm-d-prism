@@ -54,22 +54,23 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
         removeBrv02Run,
         expandedModels,
         setExpandedModels,
-        handleValidatedUpload
+        handleValidatedUpload,
+        gcsProfiles,
+        loadMoreGcs
     } = dashboardData;
 
     const [isUploadDialogOpen, setIsUploadDialogOpen] = React.useState(false);
     const [initialStagedFiles, setInitialStagedFiles] = React.useState([]);
     const [activeTab, setActiveTab] = React.useState('all'); // 'all' or 'submissions'
 
-    const [submissions, setSubmissions] = React.useState([]);
+    const [serverSubmissions, setServerSubmissions] = React.useState([]);
     const [isLoadingSubmissions, setIsLoadingSubmissions] = React.useState(false);
 
-    // Queries the server's filesystem for actually staged runs, falling back to and
-    // merging with browser local storage runs for a seamless and responsive experience.
+    // Queries the server's filesystem once on mount for staged runs
     React.useEffect(() => {
         let isMounted = true;
 
-        const loadSubmissions = async () => {
+        const loadServerSubmissions = async () => {
             setIsLoadingSubmissions(true);
             try {
                 const res = await fetch('/api/local/list');
@@ -80,7 +81,7 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                     item.name.endsWith('prism_run_upload.json')
                 );
 
-                const serverSubmissions = [];
+                const fetchedSubmissions = [];
                 if (uploadFiles.length > 0) {
                     const fetchPromises = uploadFiles.map(async (file) => {
                         try {
@@ -105,68 +106,19 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                     });
                     
                     const resolved = await Promise.all(fetchPromises);
-                    serverSubmissions.push(...resolved.filter(Boolean));
+                    fetchedSubmissions.push(...resolved.filter(Boolean));
                 }
-
-                const mergedList = [...serverSubmissions];
-                if (brv02Runs && brv02Runs.length > 0) {
-                    brv02Runs.forEach(run => {
-                        if (!mergedList.some(s => s.runId === run.runId)) {
-                            const firstStage = run.stages?.[0];
-                            const resolvedModel = firstStage?.scenario?.model || run.run_metadata?.model || "Custom Model";
-                            const resolvedHw = firstStage?.scenario?.hardware || run.run_metadata?.accelerator || "Detected Hardware";
-                            const submittedAt = firstStage?.timestamp || run.run_metadata?.timestamp || new Date().toISOString().split('T')[0];
-
-                            mergedList.push({
-                                id: `dyn-${run.runId}`,
-                                runId: run.runId,
-                                model: resolvedModel,
-                                hardware: resolvedHw,
-                                wellLitPath: run.wellLitPath || "none / custom",
-                                submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
-                                status: "staged",
-                                feedback: ""
-                            });
-                        }
-                    });
-                }
-
-                // Sort chronologically (latest submissions first)
-                mergedList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
                 if (isMounted) {
-                    setSubmissions(mergedList);
+                    setServerSubmissions(fetchedSubmissions);
                 }
             } catch (error) {
-                console.error("Failed to load submissions:", error);
+                console.error("Failed to load server submissions:", error);
                 if (isMounted) {
                     addToast({
                         message: "Failed to load submitted runs from backend server.",
                         type: "error"
                     });
-                    
-                    const fallbackList = [];
-                    if (brv02Runs && brv02Runs.length > 0) {
-                        brv02Runs.forEach(run => {
-                            const firstStage = run.stages?.[0];
-                            const resolvedModel = firstStage?.scenario?.model || run.run_metadata?.model || "Custom Model";
-                            const resolvedHw = firstStage?.scenario?.hardware || run.run_metadata?.accelerator || "Detected Hardware";
-                            const submittedAt = firstStage?.timestamp || run.run_metadata?.timestamp || new Date().toISOString().split('T')[0];
-
-                            fallbackList.push({
-                                id: `dyn-${run.runId}`,
-                                runId: run.runId,
-                                model: resolvedModel,
-                                hardware: resolvedHw,
-                                wellLitPath: run.wellLitPath || "none / custom",
-                                submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
-                                status: "staged",
-                                feedback: ""
-                            });
-                        });
-                        fallbackList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-                    }
-                    setSubmissions(fallbackList);
                 }
             } finally {
                 if (isMounted) {
@@ -175,12 +127,39 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
             }
         };
 
-        loadSubmissions();
+        loadServerSubmissions();
 
         return () => {
             isMounted = false;
         };
-    }, [brv02Runs, addToast]);
+    }, []);
+
+    const submissions = React.useMemo(() => {
+        const mergedList = [...serverSubmissions];
+        if (brv02Runs && brv02Runs.length > 0) {
+            brv02Runs.forEach(run => {
+                if (!mergedList.some(s => s.runId === run.runId)) {
+                    const firstStage = run.stages?.[0];
+                    const resolvedModel = firstStage?.scenario?.model || run.run_metadata?.model || "Custom Model";
+                    const resolvedHw = firstStage?.scenario?.hardware || run.run_metadata?.accelerator || "Detected Hardware";
+                    const submittedAt = firstStage?.timestamp || run.run_metadata?.timestamp || new Date().toISOString().split('T')[0];
+
+                    mergedList.push({
+                        id: `dyn-${run.runId}`,
+                        runId: run.runId,
+                        model: resolvedModel,
+                        hardware: resolvedHw,
+                        wellLitPath: run.wellLitPath || "none / custom",
+                        submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
+                        status: "staged",
+                        feedback: ""
+                    });
+                }
+            });
+        }
+        mergedList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+        return mergedList;
+    }, [serverSubmissions, brv02Runs]);
 
     const openUploadDialogWithFiles = (files) => {
         let fileList = [];
@@ -805,7 +784,8 @@ export default function ManageBenchmarks({ onNavigate, onNavigateBack, dashboard
                                 UnifiedDataTable,
                                 hideShowSelectedOnly: true,
                                 renameClearToUnselectAll: true,
-                                brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run
+                                brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+                                gcsProfiles, selectedSources, loadMoreGcs
                             }}
                         />
                     </div>

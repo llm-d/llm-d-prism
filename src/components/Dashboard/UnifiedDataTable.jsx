@@ -203,7 +203,16 @@ export const UnifiedDataTable = (props) => {
                                                           )}
                                                       </button>
                                                     <div>
-                                                        {benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name)}
+                                                        {(() => {
+                                                            const isFromResultStore = stat.isFromResultStore || benchmarkData[0]?.isFromResultStore;
+                                                            const runLabel = stat.runLabel || benchmarkData[0]?.runLabel;
+                                                            const modelStr = stat.model_name || stat.model || meta.model_name;
+                                                            const hasModel = modelStr && modelStr !== 'Unknown';
+                                                            if (!isFromResultStore) {
+                                                                return hasModel ? modelStr : 'Unknown';
+                                                            }
+                                                            return runLabel || (hasModel ? modelStr : 'Unknown');
+                                                        })()}
                                                     </div>
                                                 </div>
                                            </td>
@@ -276,8 +285,16 @@ export const UnifiedDataTable = (props) => {
                                               <tr>
                                                   <td colSpan="10" className="p-0">
                                                       <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 p-2">
-                                                          {/* Run Metadata Header */}
-                                                          <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">
+                                                          {benchmarkData.some(d => !d.isFull && d.downloadUrl) ? (
+                                                              <div className="p-5 border border-slate-200 dark:border-slate-700/60 rounded-lg bg-white dark:bg-slate-800/80 animate-pulse space-y-2.5 m-2">
+                                                                  <div className="h-4 bg-slate-200 dark:bg-slate-700/60 rounded w-full" />
+                                                                  <div className="h-4 bg-slate-200/80 dark:bg-slate-700/45 rounded w-5/6" />
+                                                                  <div className="h-4 bg-slate-200/60 dark:bg-slate-700/30 rounded w-4/6" />
+                                                              </div>
+                                                          ) : (
+                                                              <>
+                                                                  {/* Run Metadata Header */}
+                                                                  <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">
 
                                                               {benchmarkData[0]?.timestamp && (
                                                                   <span className="flex items-center gap-1">
@@ -352,6 +369,8 @@ export const UnifiedDataTable = (props) => {
                                                                </tbody>
                                                            </table>
                                                        </div>
+                                                              </>
+                                                          )}
                                                        </div>
                                                   </td>
                                               </tr>

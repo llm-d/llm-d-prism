@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "update-metrics": "python3 tools/update_arena_scores.py",
+    "backfill-metadata": "tsx tools/backfill_metadata/index.ts",
     "artifactregistry-login": "npm_config_registry=https://registry.npmjs.org npx google-artifactregistry-auth",
     "zipline": "rm -f zipline-upload.zip && npm run build && zip -r zipline-upload.zip dist/*"
   },
@@ -19,6 +20,7 @@
     "@google-cloud/storage": "^7.21.0",
     "@tailwindcss/vite": "^4.1.17",
     "clsx": "^2.1.1",
+    "commander": "^14.0.3",
     "compression": "^1.7.4",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",

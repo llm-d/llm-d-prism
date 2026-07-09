@@ -31,10 +31,12 @@ Resolves the current session state.
 
 ### `POST /api/auth/github/refresh`
 
-Exchanges a valid refresh token for a new set of GitHub access and refresh tokens.
+Exchanges a valid refresh token for a new set of GitHub access and refresh
+tokens.
 
 - **Request Body:** `{ "refresh_token": "<token>" }`
-- **Response (200 OK):** `{ "access_token": "<token>", "expires_in": <seconds>, "refresh_token": "<token>", "refresh_token_expires_in": <seconds> }`
+- **Response (200 OK):**
+  `{ "access_token": "<token>", "expires_in": <seconds>, "refresh_token": "<token>", "refresh_token_expires_in": <seconds> }`
 
 ### `POST /api/auth/github/logout`
 
@@ -61,6 +63,21 @@ Submits a benchmark result bundle to the active results store.
 
 Retrieves the complete payload of a single benchmark submission run bundle by
 its UUID.
+
+### `GET /api/benchmarks`
+
+Lists benchmark summaries in a target bucket and prefix, retrieving the minified
+`prism_summary` array from metadata. Each returned item includes an
+`isFromResultStore` boolean indicating whether the benchmark belongs to the
+`prism-results-store/` submission pipeline (`true`) or is a legacy upload
+(`false`). When `isFromResultStore` is `true`, `state` is guaranteed to be set.
+For legacy benchmarks outside the Results Store pipeline (`false`), fields like
+`state`, `model_name`, and `hardware` are omitted.
+
+### `GET /api/benchmarks/content`
+
+Retrieves the full content of a single benchmark run by its GCS path and bucket.
+Enforces Results Store access controls.
 
 ---
 

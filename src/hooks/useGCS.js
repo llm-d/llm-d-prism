@@ -14,18 +14,18 @@
 
 import { useCallback } from 'react';
 import { CacheManager } from '../utils/cacheManager';
-import { parseJsonEntry, parseLogFile } from '../utils/dataParser';
 
 export const useGCS = ({ pendingRequests, addToast }) => {
-    const fetchBucketData = useCallback(async (bucket, forceRefresh = false) => {
-        const cleanBucketName = bucket.replace(/^gs:\/\//, '');
+    const fetchBucketData = useCallback(async (bucket, forceRefresh = false, pageToken = '') => {
+        const cleanBucketName = bucket.replace(/^gs:\/\//, '').replace(/\/$/, '');
+        const shouldCache = cleanBucketName !== 'llm-d-benchmarks' && cleanBucketName !== 'llm-d-benchmarks-staging';
 
-        if (pendingRequests.current.has(`gcs:${cleanBucketName}`) && !forceRefresh) {
-             console.log(`[Dedupe] Already fetching ${cleanBucketName}, returning shared promise.`);
+        if (pendingRequests.current.has(`gcs:${cleanBucketName}`) && !forceRefresh && !pageToken) {
+             console.log(`[Dedupe] Already fetching GCS:${cleanBucketName}, returning shared promise.`);
              return pendingRequests.current.get(`gcs:${cleanBucketName}`);
         }
 
-        if (!forceRefresh) {
+        if (shouldCache && !forceRefresh && !pageToken) {
             const cached = await CacheManager.get('gcs', cleanBucketName);
             if (cached) {
                 console.log(`[Cache Hit] Loading GCS bucket ${cleanBucketName} from cache.`);
@@ -34,77 +34,96 @@ export const useGCS = ({ pendingRequests, addToast }) => {
             }
         }
 
-        let usingProxy = false;
-        
         const fetchPromise = (async () => {
             try {
-                let response = await fetch(`https://storage.googleapis.com/storage/v1/b/${cleanBucketName}/o`);
-                
-                if (response.status === 401 || response.status === 403) {
-                    console.log(`[Bucket] Public access denied for ${cleanBucketName}, trying proxy...`);
-                    response = await fetch(`/api/gcs/storage/v1/b/${cleanBucketName}/o`);
-                    if (response.ok) usingProxy = true;
-                }
+                const token = localStorage.getItem('github_oauth_token');
+                const headers = token ? { 'X-Prism-Github-Token': token } : {};
+                const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+                const response = await fetch(`/api/benchmarks?bucket=${cleanBucketName}&limit=100${tokenParam}`, { headers });
 
-                if (response.status === 404) throw new Error('Bucket not found.');
-                if (response.status === 401 || response.status === 403) throw new Error('Access denied. Bucket must be public or accessible by server service account.');
-                if (!response.ok) throw new Error(`Failed to access bucket (${response.status}).`);
-                
+                if (!response.ok) throw new Error(`Failed to fetch benchmarks listing (${response.status})`);
+
                 const json = await response.json();
                 if (!json.items) throw new Error('No files found in bucket.');
-
-                const filesToProcess = json.items.filter(item => !item.name.endsWith('/'));
-                if (filesToProcess.length === 0) throw new Error('No valid files found in bucket.');
 
                 const newEntries = [];
                 const fileMetadata = [];
 
-                await Promise.all(filesToProcess.map(async (file) => {
+                json.items.forEach((item) => {
                     try {
-                        let fileUrl = file.mediaLink;
-                        if (usingProxy && fileUrl.startsWith('https://storage.googleapis.com/')) {
-                            const path = fileUrl.replace('https://storage.googleapis.com/', '');
-                            fileUrl = `/api/gcs/${path}`;
-                        }
-
-                        const fileRes = await fetch(fileUrl);
-                        if (!fileRes.ok) throw new Error(`Fetch failed: ${fileRes.status}`);
-                        
-                        const content = await fileRes.text();
+                        const hasSummary = item.summary && Array.isArray(item.summary) && item.summary.length > 0;
                         let entries = [];
 
-                        try {
-                            const jsonContent = JSON.parse(content);
-                            if (jsonContent.metrics || jsonContent.load_summary) {
-                                const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${cleanBucketName}` }, file.name);
-                                entries = [entry];
-                            }
-                        } catch {
-                            // Try parsing as log file
+                        if (hasSummary) {
+                            // Map summary stages directly, marking isFull: false
+                            entries = item.summary.map(s => ({
+                                ...s,
+                                runId: item.runId,
+                                isFromResultStore: item.isFromResultStore || false,
+                                source: `gcs:${cleanBucketName}`,
+                                downloadUrl: item.downloadUrl,
+                                isFull: false
+                            }));
+                        } else {
+                            // Synthesize lightweight summary entry from item listing metadata without fetching content
+                            const runLabel = item.runLabel ?? null;
+                            const hasModel = item.model_name && item.model_name !== 'Unknown';
+                            const displayModel = runLabel || (hasModel ? item.model_name : 'Unknown');
+                            const displayHardware = item.hardware?.hardware_name || 'Unknown';
+
+                            entries = [{
+                                runId: item.runId,
+                                runLabel: runLabel,
+                                isFromResultStore: item.isFromResultStore || false,
+                                model: displayModel,
+                                model_name: hasModel ? item.model_name : 'Unknown',
+                                hardware: displayHardware,
+                                precision: 'Unknown',
+                                backend: 'Unknown',
+                                isl: 0,
+                                osl: 0,
+                                timestamp: item.submitted_at || null,
+                                throughput: null,
+                                latency: { mean: null },
+                                components: [],
+                                metadata: {
+                                    model_name: displayModel,
+                                    backend: 'Unknown',
+                                    hardware: displayHardware,
+                                    accelerator_type: displayHardware,
+                                    accelerator_count: 1,
+                                    precision: 'Unknown',
+                                    timestamp: item.submitted_at || null,
+                                    tp: 1,
+                                    architecture: 'unknown',
+                                    components: []
+                                },
+                                workload: {
+                                    input_tokens: 0,
+                                    output_tokens: 0,
+                                    stage: 1
+                                },
+                                github_author: item.github_author,
+                                source: `gcs:${cleanBucketName}`,
+                                downloadUrl: item.downloadUrl,
+                                isFull: false
+                            }];
                         }
-                        
-                        if (entries.length === 0) {
-                            entries = parseLogFile(content, file.name);
-                        }
-                        
+
                         if (entries.length > 0) {
                             entries.forEach(e => {
-                                e.source = `gcs:${cleanBucketName}`; 
-                                let type = 'storage';
-
-                                if (e.source_info) {
-                                    e.source_info.origin = `gcs:${cleanBucketName}`;
-                                    e.source_info.type = type;
-                                } else {
-                                    e.source_info = {
-                                        type,
-                                        origin: `gcs:${cleanBucketName}`,
-                                        file_identifier: file.name,
-                                        raw_url: file.mediaLink
-                                    };
+                                e.source = `gcs:${cleanBucketName}`;
+                                e.source_info = {
+                                    ...(e.source_info || {}),
+                                    type: 'storage',
+                                    origin: `gcs:${cleanBucketName}`,
+                                    raw_url: item.downloadUrl
+                                };
+                                if (!e.source_info.file_identifier) {
+                                    e.source_info.file_identifier = item.runId;
                                 }
-                                e.raw_url = `https://storage.googleapis.com/${cleanBucketName}/${file.name}`;
-                                
+                                e.raw_url = item.downloadUrl;
+
                                 if (e.latency?.mean && e.latency.mean < 100) {
                                     e.latency.mean *= 1000;
                                     if (e.latency.p50) e.latency.p50 *= 1000;
@@ -121,31 +140,40 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                                 }
                                 newEntries.push(e);
                             });
-                            fileMetadata.push({ name: file.name, entryCount: entries.length });
+                            fileMetadata.push({ name: item.runId, entryCount: entries.length });
                         }
                     } catch (e) {
-                        console.warn(`Failed to process ${file.name}:`, e);
-                        fileMetadata.push({ name: file.name, entryCount: 0, error: e.message });
+                        console.warn(`Failed to process ${item.runId}:`, e);
+                        fileMetadata.push({ name: item.runId, entryCount: 0, error: e.message });
                     }
-                }));
+                });
 
                 const result = {
                     bucketName: cleanBucketName,
                     entries: newEntries,
+                    nextPageToken: json.nextPageToken || null,
                     profile: {
                         bucketName: cleanBucketName,
                         files: fileMetadata,
                         entryCount: fileMetadata.filter(f => f.entryCount > 0).length, 
                         loadedAt: new Date().toISOString(),
-                        error: null
+                        error: null,
+                        nextPageToken: json.nextPageToken || null,
+                        type: 'gcs'
                     }
                 };
-                
-                const saved = await CacheManager.set('gcs', cleanBucketName, result);
-                if (!saved) {
-                    addToast(`[Error] Cache Full - Could not save ${cleanBucketName}`, 'error');
+
+                if (shouldCache && !pageToken) {
+                    const saved = await CacheManager.set('gcs', cleanBucketName, result);
+                    if (!saved) {
+                        addToast(`[Error] Cache Full - Could not save ${cleanBucketName}`, 'error');
+                    } else {
+                        addToast(`[Network] Fetched ${cleanBucketName}`, 'info');
+                    }
+                } else if (!pageToken) {
+                    addToast(`[Network] Fetched ${cleanBucketName} (uncached)`, 'info');
                 } else {
-                    addToast(`[Network] Fetched ${cleanBucketName}`, 'info');
+                    addToast(`[Network] Loaded page from ${cleanBucketName}`, 'info');
                 }
                 return result;
 

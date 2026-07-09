@@ -16,16 +16,20 @@ import { Router } from 'express';
 import { listResultsHandler } from './routes/list.ts';
 import { submitResultsHandler } from './routes/submit.ts';
 import { getResultsHandler } from './routes/get.ts';
+import { listBenchmarksHandler, getBenchmarkContentHandler } from './routes/benchmarks.ts';
 
 export const resultsRouter = Router();
 
 resultsRouter.get('/api/results', listResultsHandler);
 resultsRouter.post('/api/results', submitResultsHandler);
 resultsRouter.get('/api/results/:runId', getResultsHandler);
+resultsRouter.get('/api/benchmarks', listBenchmarksHandler);
+resultsRouter.get('/api/benchmarks/content', getBenchmarkContentHandler);
 
 export * from './routes/list.ts';
 export * from './routes/submit.ts';
 export * from './routes/get.ts';
+export * from './routes/benchmarks.ts';
 export * from './processing.ts';
 export * from './gcs.ts';
 export * from './api.ts';

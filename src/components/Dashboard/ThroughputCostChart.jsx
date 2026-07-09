@@ -32,6 +32,13 @@ export const ThroughputCostChart = (props) => {
         baselineBenchmarkKey
     } = props;
 
+    const isStillLoading = React.useMemo(() => {
+        return filteredBySource.some(d => {
+            const key = getBenchmarkKey(d);
+            return selectedBenchmarks.has(key) && !d.isFull && d.downloadUrl;
+        });
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey]);
+
     // We can infer canShowPerChip
     const validData = filteredBySource.filter(d => selectedModels.has(d.model));
     const canShowPerChip = validData.every(d => d.accelerator_count > 0);
@@ -927,6 +934,13 @@ export const ThroughputCostChart = (props) => {
                                    isAnimationActive={false}
                                />
                           )}
+                      
+                      {isStillLoading && (
+                          <div className="absolute inset-0 z-20 bg-slate-900/10 dark:bg-slate-950/20 backdrop-blur-xs flex flex-col items-center justify-center text-center">
+                              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mb-2"></div>
+                              <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Loading detailed performance metrics...</p>
+                          </div>
+                      )}
                         </LineChart>
                       </ResponsiveContainer>
                   </div>

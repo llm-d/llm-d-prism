@@ -96,3 +96,42 @@ export interface PrismResultContext {
     model_name: { value: string };
     run_label: { value: string };
 }
+
+/**
+ * Minified summary structure stored inside the GCS metadata field `prism_summary`.
+ * Contains the key metrics, metadata, and workload configuration for a stage.
+ */
+export interface PrismSummaryEntry {
+    runLabel: string;
+    github_author?: any;
+    model: string;
+    model_name: string;
+    hardware: string;
+    precision: string;
+    backend: string;
+    isl: number;
+    osl: number;
+    timestamp: string | null;
+    throughput: number | null;
+    latency: {
+        mean: number | null;
+    };
+    components: any[];
+    metadata: {
+        model_name: string;
+        backend: string;
+        hardware: string;
+        accelerator_type: string;
+        accelerator_count: number;
+        precision: string;
+        timestamp: string | null;
+        tp: number;
+        architecture: string;
+        components: any[];
+    };
+    workload: {
+        input_tokens: number;
+        output_tokens: number;
+        stage: number;
+    };
+}

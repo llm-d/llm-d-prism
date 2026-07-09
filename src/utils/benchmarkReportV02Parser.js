@@ -32,10 +32,13 @@ const safeNum = (val) => {
     return isNaN(n) ? null : n;
 };
 
-// v0.2 latency values are in seconds — convert to ms for display
-const toMs = (val) => {
+// convert to ms for display, checking units
+const toMs = (val, units = 's') => {
     const n = safeNum(val);
-    return n !== null ? n * 1000 : null;
+    if (n === null) return null;
+    const u = String(units || '').toLowerCase().trim();
+    if (u === 'ms' || u === 'milliseconds' || u.includes('ms')) return n;
+    return n * 1000;
 };
 
 // vllm cache rates are emitted as fractions for kv_cache_usage but as
@@ -164,6 +167,13 @@ export function parseReportV02(yamlText, filename) {
     }
     if (!doc || doc.version !== '0.2') return null;
 
+    // --- Performance ---
+    const reqPerf = doc.results?.request_performance || {};
+    const agg = reqPerf.aggregate || reqPerf;
+    const tput = agg.throughput || {};
+    const lat = agg.latency || {};
+    const reqs = agg.requests || {};
+
     // --- Scenario ---
     const stack = doc.scenario?.stack || [];
     const components = extractComponents(stack);
@@ -186,34 +196,28 @@ export function parseReportV02(yamlText, filename) {
         tp: safeNum(parallelism.tp),
         role: std.role || 'aggregate',
         harness: load.tool || 'unknown',
-        isl: safeNum(load.input_seq_len?.value),
-        osl: safeNum(load.output_seq_len?.value),
+        isl: safeNum(load.input_seq_len?.value) || safeNum(reqs.input_length?.mean) || 0,
+        osl: safeNum(load.output_seq_len?.value) || safeNum(reqs.output_length?.mean) || 0,
         rateQps: safeNum(load.rate_qps),
         concurrency: Number.isFinite(load.concurrency) ? safeNum(load.concurrency) : null,
     };
 
-    // --- Performance ---
-    const agg = doc.results?.request_performance?.aggregate || {};
-    const tput = agg.throughput || {};
-    const lat = agg.latency || {};
-    const reqs = agg.requests || {};
-
     const performance = {
-        outputTokenRate: safeNum(tput.output_token_rate?.mean),
-        inputTokenRate: safeNum(tput.input_token_rate?.mean),
-        requestRate: safeNum(tput.request_rate?.mean),
-        ttftMean: toMs(lat.time_to_first_token?.mean),
-        ttftP50: toMs(lat.time_to_first_token?.p50),
-        ttftP99: toMs(lat.time_to_first_token?.p99),
-        tpotMean: toMs(lat.time_per_output_token?.mean),
-        tpotP50: toMs(lat.time_per_output_token?.p50),
-        tpotP99: toMs(lat.time_per_output_token?.p99),
-        itlMean: toMs(lat.inter_token_latency?.mean),
-        itlP50: toMs(lat.inter_token_latency?.p50),
-        itlP99: toMs(lat.inter_token_latency?.p99),
-        e2eMean: toMs(lat.request_latency?.mean),
-        e2eP50: toMs(lat.request_latency?.p50),
-        e2eP99: toMs(lat.request_latency?.p99),
+        outputTokenRate: safeNum(tput.output_token_rate?.mean) || safeNum(tput.output_token_rate),
+        inputTokenRate: safeNum(tput.input_token_rate?.mean) || safeNum(tput.input_token_rate),
+        requestRate: safeNum(tput.request_rate?.mean) || safeNum(tput.request_rate),
+        ttftMean: toMs(lat.time_to_first_token?.mean || lat.time_to_first_token, lat.time_to_first_token?.units),
+        ttftP50: toMs(lat.time_to_first_token?.p50, lat.time_to_first_token?.units),
+        ttftP99: toMs(lat.time_to_first_token?.p99, lat.time_to_first_token?.units),
+        tpotMean: toMs(lat.time_per_output_token?.mean || lat.time_per_output_token, lat.time_per_output_token?.units),
+        tpotP50: toMs(lat.time_per_output_token?.p50, lat.time_per_output_token?.units),
+        tpotP99: toMs(lat.time_per_output_token?.p99, lat.time_per_output_token?.units),
+        itlMean: toMs(lat.inter_token_latency?.mean || lat.inter_token_latency, lat.inter_token_latency?.units),
+        itlP50: toMs(lat.inter_token_latency?.p50, lat.inter_token_latency?.units),
+        itlP99: toMs(lat.inter_token_latency?.p99, lat.inter_token_latency?.units),
+        e2eMean: toMs(lat.request_latency?.mean || lat.request_latency, lat.request_latency?.units),
+        e2eP50: toMs(lat.request_latency?.p50, lat.request_latency?.units),
+        e2eP99: toMs(lat.request_latency?.p99, lat.request_latency?.units),
         totalRequests: safeNum(reqs.total),
         failures: safeNum(reqs.failures),
     };
