@@ -25,7 +25,7 @@ Use this skill when:
 ### Step 2: Validate Product Phase
 1. Check if the product spec exists: `specs/changes/[feature-name]/product_spec.md` (or `prd.md`, or `proposal.md` with product details).
 2. If it does not exist, pause and instruct the user to draft the Product Spec first.
-3. Check the roadmap ([specs/main/roadmap.md](file:///usr/local/google/home/jkramberger/jetski-temp/llm-d-prism/specs/main/roadmap.md)) to verify if the product spec is referenced.
+3. Check the roadmap ([specs/main/roadmap.md](../../specs/main/roadmap.md)) to verify if the product spec is referenced.
 4. If not referenced, alert the user that the feature is not currently tracked in the roadmap and must be added.
 
 ### Step 3: Validate UI/UX Phase

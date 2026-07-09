@@ -35,7 +35,7 @@ To ensure high-fidelity UI/UX design matches technical capabilities and backend 
 
 1. **Product Specification**:
    - Product requirements must be drafted as a spec (e.g., `product_spec.md` or `prd.md`) within a new subdirectory under `specs/changes/[feature-name]/`.
-   - The spec must be referenced in the main roadmap ([specs/main/roadmap.md](file:///usr/local/google/home/jkramberger/jetski-temp/llm-d-prism/specs/main/roadmap.md)), showing the relative prioritization and ordering of the feature specs.
+   - The spec must be referenced in the main roadmap ([specs/main/roadmap.md](specs/main/roadmap.md)), showing the relative prioritization and ordering of the feature specs.
 
 2. **UI/UX Mockups & Functional Specs**:
    - The UI/UX team consumes the product specs and designs the interface mocks.
