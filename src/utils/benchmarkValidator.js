@@ -1,5 +1,7 @@
 import yaml from 'js-yaml';
 import { parseReportV02, stageToEntry } from './benchmarkReportV02Parser.js';
+import { normalizeModelName, normalizeHardware } from './dataParser.js';
+
 
 export function validateFormat(fileContent, filename) {
     let parsedDoc;
@@ -89,7 +91,46 @@ export function validateBenchmark(fileContent, filename) {
             result.errors.push(`Error parsing BRV02: ${e.message}`);
         }
     } else if (result.format === "inference-perf") {
-        result.errors.push("inference-perf support is pending implementation.");
+        try {
+            const parsed = parsedData;
+            const modelName = parsed.model || "Unknown Model";
+            const throughput = parsed.throughput || parsed.metrics?.throughput || 0;
+            
+            let latencyVal = 0;
+            if (typeof parsed.latency === 'number') {
+                latencyVal = parsed.latency;
+            } else if (parsed.latency && typeof parsed.latency === 'object') {
+                latencyVal = parsed.latency.mean || parsed.latency.request_latency?.mean || 0;
+            } else if (parsed.metrics?.latency) {
+                latencyVal = typeof parsed.metrics.latency === 'number' ? parsed.metrics.latency : parsed.metrics.latency.mean || 0;
+            }
+
+            const stageMatch = filename.match(/stage_?(\d+)/i);
+            const stageIndex = stageMatch ? parseInt(stageMatch[1], 10) : 0;
+
+            if (throughput <= 0 && latencyVal <= 0) {
+                result.errors.push(`[${filename}] Stage metrics are zero or negative: throughput=${throughput}, latency=${latencyVal}`);
+            }
+
+            result.entries = [{
+                model_name: modelName,
+                stage: stageIndex
+            }];
+            result.hasHardware = !!(parsed.hardware || parsed.accelerator || (parsed.scenario?.stack && parsed.scenario.stack.some(c => c.config?.accelerator?.model)));
+            
+            const dirParts = filename.split('/');
+            if (dirParts.length > 1) dirParts.pop();
+            const runId = dirParts.join('/');
+
+            result.prism_cloud = {
+                run_id: runId || 'inference-perf-run',
+                original_uid: filename,
+                filepath: filename,
+                label: filename.split('/').pop() || 'stage'
+            };
+        } catch (e) {
+            result.errors.push(`Error parsing inference-perf: ${e.message}`);
+        }
     }
 
     return result;
@@ -111,8 +152,8 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
 
     const { model_name, hardware, entries, format } = uploadData;
 
-    if (!format || format !== 'brv02') {
-        errors.push(`Format must be 'brv02' in upload structure, found '${format || 'unknown'}'`);
+    if (!format || (format !== 'brv02' && format !== 'inference-perf')) {
+        errors.push(`Format must be 'brv02' or 'inference-perf' in upload structure, found '${format || 'unknown'}'`);
     }
 
     if (!model_name) {
@@ -140,27 +181,60 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
         }
 
         try {
-            const parsedStage = parseReportV02(stageContent, entry.filename);
-            if (!parsedStage) {
-                errors.push(`File ${entry.filename || 'unknown'} could not be parsed as a valid BRV02 stage`);
-                continue;
+            let parsedStage;
+            let normalizedEntry;
+            let stageIndex = 0;
+
+            if (format === 'inference-perf') {
+                try {
+                    const parsed = entry.filename?.endsWith('.json') ? JSON.parse(stageContent) : yaml.load(stageContent);
+                    parsedStage = parsed;
+                    
+                    const throughput = parsed.throughput || parsed.metrics?.throughput || 0;
+                    let latencyVal = 0;
+                    if (typeof parsed.latency === 'number') {
+                        latencyVal = parsed.latency;
+                    } else if (parsed.latency && typeof parsed.latency === 'object') {
+                        latencyVal = parsed.latency.mean || parsed.latency.request_latency?.mean || 0;
+                    } else if (parsed.metrics?.latency) {
+                        latencyVal = typeof parsed.metrics.latency === 'number' ? parsed.metrics.latency : parsed.metrics.latency.mean || 0;
+                    }
+
+                    const stageMatch = entry.filename?.match(/stage_?(\d+)/i);
+                    stageIndex = stageMatch ? parseInt(stageMatch[1], 10) : 0;
+
+                    normalizedEntry = {
+                        model_name: parsed.model || "Unknown Model",
+                        hardware: parsed.hardware || parsed.accelerator || "Unknown",
+                        throughput,
+                        latency: latencyVal
+                    };
+                } catch (e) {
+                    errors.push(`File ${entry.filename || 'unknown'} could not be parsed as valid inference-perf JSON/YAML: ${e.message}`);
+                    continue;
+                }
+            } else {
+                parsedStage = parseReportV02(stageContent, entry.filename);
+                if (!parsedStage) {
+                    errors.push(`File ${entry.filename || 'unknown'} could not be parsed as a valid BRV02 stage`);
+                    continue;
+                }
+                parsedStage.model_name = uploadData.model_name || null;
+                parsedStage.hardware = uploadData.hardware || null;
+                parsedStage.config = uploadData.config || null;
+                normalizedEntry = stageToEntry(parsedStage);
+                stageIndex = parsedStage.stageIndex ?? 0;
             }
 
-            // Propagate metadata for normalization
-            parsedStage.run_metadata = uploadData.run_metadata || null;
-            parsedStage.config = uploadData.config || null;
-
-            const normalizedEntry = stageToEntry(parsedStage);
-
             // 1. Verify model name matches root $.model_name
-            if (normalizedEntry.model_name !== model_name) {
-                errors.push(`Stage ${parsedStage.stageIndex ?? 'unknown'} (${entry.filename}) has mismatching model name: expected '${model_name}', but found '${normalizedEntry.model_name}'`);
+            if (normalizeModelName(normalizedEntry.model_name) !== normalizeModelName(model_name)) {
+                errors.push(`Stage ${stageIndex} (${entry.filename}) has mismatching model name: expected '${model_name}', but found '${normalizedEntry.model_name}'`);
             }
 
             // 2. Verify hardware matches root $.hardware.hardware_name
             const rootHw = hardware ? hardware.hardware_name : '';
-            if (normalizedEntry.hardware !== rootHw) {
-                const msg = `Stage ${parsedStage.stageIndex ?? 'unknown'} (${entry.filename}) has mismatching hardware: expected '${rootHw}', but found '${normalizedEntry.hardware}'`;
+            if (normalizeHardware(normalizedEntry.hardware) !== normalizeHardware(rootHw) && normalizedEntry.hardware !== 'Unknown') {
+                const msg = `Stage ${stageIndex} (${entry.filename}) has mismatching hardware: expected '${rootHw}', but found '${normalizedEntry.hardware}'`;
                 if (isUpload) {
                     errors.push(msg);
                 } else {
@@ -186,7 +260,7 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
             // 4. Verify no zero or negative metrics
             const latencyVal = normalizedEntry.latency && typeof normalizedEntry.latency === 'object' ? normalizedEntry.latency.mean : normalizedEntry.latency;
             if (normalizedEntry.throughput === null || normalizedEntry.throughput <= 0 || latencyVal === null || latencyVal <= 0) {
-                errors.push(`Stage ${parsedStage.stageIndex ?? 'unknown'} (${entry.filename}) has zero or negative metrics.`);
+                errors.push(`Stage ${stageIndex} (${entry.filename}) has zero or negative metrics.`);
             }
 
         } catch (e) {

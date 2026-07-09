@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import { useState, useRef, useEffect } from 'react';
-import { Loader } from 'lucide-react';
+import { Loader, ArrowRight } from 'lucide-react';
 import Dashboard from './components/Dashboard';
-import ManageBenchmarks from './components/ManageBenchmarks';
+import ResultsStore from './components/ResultsStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrismHome from './components/PrismHome';
 import Milestone1Dashboard from './components/Milestone1Dashboard';
@@ -24,6 +24,7 @@ import WorkloadCatalog from './components/WorkloadCatalog';
 import RegressionsAnalysisDashboard from './components/RegressionsAnalysisDashboard';
 import AgenticWorkloadsDashboard from './components/AgenticWorkloadsDashboard';
 import PrefixCacheOffloadingDashboard from './components/PrefixCacheOffloadingDashboard';
+import SubmitValidationPage from './components/DataConnections/SubmitValidationPage';
 
 import LeftNavigation from './components/LeftNavigation';
 import { useDashboardState } from './hooks/useDashboardState';
@@ -34,18 +35,50 @@ function App() {
   const dashboardState = useDashboardState();
   const dashboardData = useDashboardData(dashboardState.initialState, dashboardState);
 
+  const [stagedBundles, setStagedBundles] = useState(() => {
+    try {
+      const active = localStorage.getItem('prism_active_staged_bundles');
+      return active ? JSON.parse(active) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const checkStaged = () => {
+      try {
+        const active = localStorage.getItem('prism_active_staged_bundles');
+        const parsed = active ? JSON.parse(active) : [];
+        if (JSON.stringify(parsed) !== JSON.stringify(stagedBundles)) {
+          setStagedBundles(parsed);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    const interval = setInterval(checkStaged, 1000);
+    return () => clearInterval(interval);
+  }, [stagedBundles]);
+
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     // Legacy 'benchmark-comparison' deep links land on the Benchmark Browser,
-    // where the comparison renders inline once brv02 runs are uploaded.
+    // where the comparison renders inline once brv02 runs are submitted.
     const view = params.get('view') || 'home';
-    return view === 'benchmark-comparison' ? 'benchmark-browser' : view;
-  }); // 'home' | 'benchmark-browser' | 'intelligent-routing' | 'schema-explorer' | 'workload-catalog' | 'guided-analysis' | 'regressions-analysis'
+    if (view === 'benchmark-comparison') return 'benchmark-browser';
+    if (view === 'manage-benchmarks') return 'results-store';
+    return view;
+  });
+
+  const [navigationParams, setNavigationParams] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { intent: params.get('intent') || null };
+  });
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [bypassLoading, setBypassLoading] = useState(false);
 
-  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles } = dashboardData;
+  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles, gcsProgressStats } = dashboardData;
   const hasFetchedConfig = useRef(false);
 
   useEffect(() => {
@@ -72,14 +105,23 @@ function App() {
     const onPopState = () => {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view') || 'home';
-      setCurrentView(view === 'benchmark-comparison' ? 'benchmark-browser' : view);
+      if (view === 'benchmark-comparison') {
+        setCurrentView('benchmark-browser');
+      } else if (view === 'manage-benchmarks') {
+        setCurrentView('results-store');
+      } else {
+        setCurrentView(view);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
 
-  const handleNavigate = (view) => {
+  const handleNavigate = (view, extraParams = {}) => {
+    if (currentView !== 'submit-benchmarks') {
+      localStorage.setItem('prism_previous_view', currentView);
+    }
     setCurrentView(view);
     setIsMobileNavOpen(false); // Close mobile nav on navigation
     
@@ -89,6 +131,25 @@ function App() {
     if (view !== 'workload-catalog') {
       params.delete('workload');
     }
+    
+    const resolvedParams = {};
+    if (view === 'submit-benchmarks') {
+      if (extraParams && typeof extraParams === 'object' && extraParams.intent) {
+        params.set('intent', extraParams.intent);
+        resolvedParams.intent = extraParams.intent;
+      } else if (typeof extraParams === 'string') {
+        params.set('intent', extraParams);
+        resolvedParams.intent = extraParams;
+      } else {
+        params.delete('intent');
+        resolvedParams.intent = null;
+      }
+    } else {
+      params.delete('intent');
+      resolvedParams.intent = null;
+    }
+    setNavigationParams(resolvedParams);
+
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
     
     // Reset scroll position on navigation
@@ -99,7 +160,7 @@ function App() {
   };
 
   const activeLoading = loading || isRestoringConnections || (gcsProfiles && gcsProfiles.some(p => p.loading));
-  const shouldShowLoading = activeLoading && !bypassLoading && (currentView === 'benchmark-browser' || currentView === 'manage-benchmarks');
+  const shouldShowLoading = activeLoading && !bypassLoading && (currentView === 'benchmark-browser' || currentView === 'results-store');
 
   return (
     <ErrorBoundary>
@@ -113,6 +174,20 @@ function App() {
                 <div className="text-lg font-semibold text-slate-200">
                   Loading Benchmark Data...
                 </div>
+                {gcsProgressStats && gcsProgressStats.total > 0 && (
+                  <div className="space-y-2 pt-1 animate-in fade-in duration-300">
+                    <div className="text-xs text-slate-400 font-mono">
+                      Fetched {gcsProgressStats.loaded} of {gcsProgressStats.total} files
+                    </div>
+                    {/* Progress Bar Container */}
+                    <div className="w-56 h-1 bg-slate-800 rounded-full overflow-hidden mx-auto border border-slate-900">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300 rounded-full" 
+                        style={{ width: `${(gcsProgressStats.loaded / gcsProgressStats.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => setBypassLoading(true)}
@@ -123,11 +198,34 @@ function App() {
             </div>
           ) : (
             <>
+              {/* Global staged benchmarks banner removed in favor of localized Results Store dashboard alert banner */}
               {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-              {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-              {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+              {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
+              {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
               {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
-              {currentView === 'manage-benchmarks' && <ManageBenchmarks onNavigateBack={() => handleNavigate('benchmark-browser')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
+              {currentView === 'results-store' && (
+                <ResultsStore 
+                  onNavigateBack={() => {
+                    const prevView = localStorage.getItem('prism_previous_view') || 'benchmark-browser';
+                    handleNavigate(prevView);
+                  }} 
+                  onNavigate={handleNavigate} 
+                  dashboardState={dashboardState} 
+                  dashboardData={dashboardData} 
+                />
+              )}
+              {currentView === 'submit-benchmarks' && (
+                <SubmitValidationPage 
+                  onNavigateBack={() => {
+                    const prevView = localStorage.getItem('prism_previous_view') || 'results-store';
+                    handleNavigate(prevView);
+                  }}
+                  onNavigate={handleNavigate} 
+                  dashboardState={dashboardState} 
+                  dashboardData={dashboardData} 
+                  initialIntent={navigationParams.intent}
+                />
+              )}
               {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
               {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
               {currentView === 'prefix-cache-offloading' && <PrefixCacheOffloadingDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}

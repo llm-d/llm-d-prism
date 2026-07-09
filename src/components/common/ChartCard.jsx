@@ -15,8 +15,8 @@
 import React from 'react';
 
 export const ChartCard = ({ title, children }) => (
-  <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg transition-colors">
-    <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-4">{title}</h3>
+  <div className="bg-slate-900/50 border border-slate-800/80 backdrop-blur-xl p-6 rounded-2xl shadow-2xl transition-all duration-300">
+    <h3 className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-5 font-mono">{title}</h3>
     {children}
   </div>
 );

@@ -31,10 +31,12 @@ Resolves the current session state.
 
 ### `POST /api/auth/github/refresh`
 
-Exchanges a valid refresh token for a new set of GitHub access and refresh tokens.
+Exchanges a valid refresh token for a new set of GitHub access and refresh
+tokens.
 
 - **Request Body:** `{ "refresh_token": "<token>" }`
-- **Response (200 OK):** `{ "access_token": "<token>", "expires_in": <seconds>, "refresh_token": "<token>", "refresh_token_expires_in": <seconds> }`
+- **Response (200 OK):**
+  `{ "access_token": "<token>", "expires_in": <seconds>, "refresh_token": "<token>", "refresh_token_expires_in": <seconds> }`
 
 ### `POST /api/auth/github/logout`
 
@@ -61,6 +63,21 @@ Submits a benchmark result bundle to the active results store.
 
 Retrieves the complete payload of a single benchmark submission run bundle by
 its UUID.
+
+### `POST /api/results/:runId/status`
+
+Updates the review status and/or registers admin feedback for a staged or
+pending benchmark result submission.
+
+- **Headers:** `X-Prism-Github-Token: <access_token>` (required)
+- **Request Body:**
+  `{ "status": "<submission_state>", "feedback": "<optional_reason_string>", "reviewer": "<optional_username>" }`
+- **Authorization Rules:**
+    - **Admin:** Full access to change state to any status level (e.g. `public`,
+      `rejected`, `submitted_pending_review`, etc.).
+    - **Contributor (Owner):** Can only change state to
+      `submitted_pending_processing` or `submitted_pending_review` to promote or
+      resubmit their own benchmark.
 
 ---
 

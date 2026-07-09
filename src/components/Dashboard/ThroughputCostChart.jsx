@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line } from 'recharts';
-import { RotateCcw, Maximize, Minimize } from 'lucide-react';
+import { RotateCcw, Maximize, Minimize, ChevronUp, ChevronDown } from 'lucide-react';
 import { CustomLabel, CustomChartTooltip, CustomXAxis, CustomYAxis, ChartCard } from '../common';
 import { getBucket, getEffectiveTp, getParetoFrontier } from '../../utils/dashboardHelpers';
 import { normalizeQualityModelName } from '../../utils/qualityParser';
@@ -33,6 +33,7 @@ export const ThroughputCostChart = (props) => {
     } = props;
 
     // We can infer canShowPerChip
+    const [showFilters, setShowFilters] = React.useState(false);
     const validData = filteredBySource.filter(d => selectedModels.has(d.model));
     const canShowPerChip = validData.every(d => d.accelerator_count > 0);
 
@@ -675,6 +676,317 @@ export const ThroughputCostChart = (props) => {
                      
                      smartLabels[a.id] = label;
                  });
+            }
+
+            if (theme === 'dark') {
+                const dataMax = validData.length > 0 ? Math.max(...validData.map(d => Number(getVal(d, xKey)) || 0)) : (Math.max(...filteredBySource.map(d => Number(getVal(d, xKey)) || 0)) || 100);
+                const step = Math.max(0.01, dataMax / 100);
+                const currentMax = xAxisMax === Infinity ? dataMax : xAxisMax;
+
+                return (
+                    <div className="bg-slate-900/80 border border-slate-700/60 rounded-2xl shadow-2xl flex flex-col w-full min-h-[550px] overflow-visible backdrop-blur-sm relative">
+                        <div className="flex flex-col w-full h-full">
+                            {/* Drawer Chart Header */}
+                            <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/85 flex justify-between items-center gap-6 shadow-sm rounded-t-2xl">
+                                <div className="flex flex-col gap-1">
+                                    <h3 className="text-base font-bold text-white font-mono">
+                                        {yLabel} vs {xLabel}
+                                    </h3>
+                                    <div className="text-[10px] text-slate-500 font-medium font-sans">
+                                        Toggle axis dimensions, normalizations and filters below
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setShowFilters(!showFilters)} 
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-wider border border-slate-750"
+                                >
+                                    Filters
+                                    {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+
+                            {/* Drawer Expandable Filter Panel */}
+                            {showFilters && (
+                                <div className="bg-slate-900/90 border-b border-slate-800 px-6 py-4 grid grid-cols-1 lg:grid-cols-2 gap-6 items-center animate-fadeIn">
+                                    <div className="flex flex-col gap-3.5">
+                                        {/* X-Axis Group */}
+                                        <div className="flex items-center gap-3">
+                                             <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">X-Axis:</span>
+                                             <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
+                                                 <button onClick={() => setChartMode('tpot')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'tpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TPOT</button>
+                                                 <button onClick={() => setChartMode('ntpot')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'ntpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>NTPOT</button>
+                                                 <button onClick={() => setChartMode('ttft')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'ttft' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TTFT</button>
+                                                 <button onClick={() => setChartMode('itl')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'itl' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>ITL</button>
+                                                 <button onClick={() => setChartMode('lat')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'lat' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>E2E Latency</button>
+                                             </div>
+                                         </div>
+
+                                        {/* Y-Axis Group */}
+                                        <div className="flex items-center gap-3">
+                                             <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">Y-Axis:</span>
+                                             <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
+                                                 <button onClick={() => setTputType('output')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${tputType === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Output</button>
+                                                 <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.input ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Input</button>
+                                                 <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.total ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Total</button>
+                                                 <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.qps ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>QPS</button>
+                                                 <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.cost ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Cost</button>
+                                             </div>
+                                             {tputType === 'cost' && (
+                                                 <select 
+                                                     value={costMode} 
+                                                     onChange={(e) => setCostMode(e.target.value)}
+                                                     className="bg-slate-950 border border-slate-800 rounded-md text-[10px] px-2 py-1 text-slate-350 outline-none focus:border-cyan-500 font-mono"
+                                                 >
+                                                     <option value="spot">Spot</option>
+                                                     <option value="on_demand">On Demand</option>
+                                                     <option value="cud_1y">CUD 1y</option>
+                                                     <option value="cud_3y">CUD 3y</option>
+                                                 </select>
+                                             )}
+                                         </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-3.5 lg:items-end w-full">
+                                         <div className="flex flex-wrap items-center gap-3 justify-start lg:justify-end w-full">
+                                             {/* Normalization & Scale Options */}
+                                             <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5">
+                                                 <button onClick={() => setIsLogScaleX(!isLogScaleX)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log Scale</button>
+                                                 <div className="h-3 w-px bg-slate-850" />
+                                                 <button onClick={() => canShowPerChip && setShowPerChip(!showPerChip)} disabled={!canShowPerChip} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!canShowPerChip ? 'text-slate-700 cursor-not-allowed opacity-40' : showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per chip">Per Chip</button>
+                                             </div>
+
+                                             {/* Visual Toggles Group */}
+                                             <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5">
+                                                 <button onClick={() => setShowLabels(!showLabels)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showLabels ? 'bg-indigo-655 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Labels</button>
+                                                 <button onClick={() => setShowDataLabels(!showDataLabels)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showDataLabels ? 'bg-pink-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Points</button>
+                                                 <button onClick={() => setShowPareto(!showPareto)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showPareto ? 'bg-amber-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Pareto</button>
+                                             </div>
+
+                                             {/* Cap Input */}
+                                             <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800/80 px-3 py-1 rounded-lg">
+                                                 <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider">Cap:</span>
+                                                 <input 
+                                                     type="range" 
+                                                     min={0} 
+                                                     max={dataMax} 
+                                                     step={step} 
+                                                     value={currentMax} 
+                                                     onChange={(e) => {
+                                                         const val = parseFloat(e.target.value);
+                                                         if (val >= dataMax * 0.99) setXAxisMax(Infinity);
+                                                         else setXAxisMax(val);
+                                                     }} 
+                                                     className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
+                                                 />
+                                                 <input 
+                                                     type="number" 
+                                                     value={xAxisMax === Infinity ? '' : xAxisMax} 
+                                                     placeholder={dataMax.toFixed(0)} 
+                                                     onChange={(e) => {
+                                                         const val = parseFloat(e.target.value);
+                                                         if (!val || isNaN(val)) setXAxisMax(Infinity);
+                                                         else setXAxisMax(val);
+                                                     }} 
+                                                     className="w-14 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-extrabold transition-all" 
+                                                 />
+                                                 <span className="text-[9px] text-slate-500 font-mono font-bold">ms</span>
+                                             </div>
+                                         </div>
+                                     </div>
+                                </div>
+                            )}
+
+                            {/* Chart Plot Area */}
+                            <div className="flex-1 min-h-[480px] p-4 relative overflow-visible flex flex-col bg-slate-950/20 rounded-b-2xl">
+                                {zoomDomain && (
+                                    <button 
+                                        onClick={() => setZoomDomain(null)}
+                                        className="absolute top-4 right-4 z-10 bg-slate-800/85 hover:bg-slate-700 text-slate-350 hover:text-white text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md border border-slate-750 shadow-lg flex items-center gap-1 cursor-pointer transition-all"
+                                    >
+                                        <RotateCcw size={10} /> Reset Zoom
+                                    </button>
+                                )}
+
+                                <div 
+                                    ref={chartContainerRef}
+                                    className={`relative w-full h-[55vh] select-none ${isZoomEnabled ? (isDragging ? 'cursor-grabbing' : 'cursor-default') : 'cursor-default'}`}
+                                    onWheel={handleWheel}
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                >
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart margin={{ top: 25, right: 20, left: 35, bottom: 25 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.35} />
+                                            <CustomXAxis 
+                                                type="number" 
+                                                dataKey="vx" 
+                                                label={xLabel} 
+                                                domain={curX}
+                                                scale={isLogScaleX ? 'log' : 'auto'}
+                                                allowDataOverflow={true}
+                                                theme={theme}
+                                                ticks={isLogScaleX ? (() => {
+                                                    const min = curX[0];
+                                                    const max = curX[1];
+                                                    const ticks = [];
+                                                    let current = Math.pow(10, Math.ceil(Math.log10(min)));
+                                                    while (current <= max) {
+                                                        ticks.push(current);
+                                                        current *= 10;
+                                                    }
+                                                    return ticks;
+                                                })() : undefined}
+                                                tickFormatter={(val) => {
+                                                    const v = Number(val);
+                                                    return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+                                                }}
+                                            />
+                                            <CustomYAxis 
+                                                label={yLabel} 
+                                                domain={curY}
+                                                allowDataOverflow={true}
+                                                theme={theme}
+                                                tickFormatter={(val) => {
+                                                    const v = Number(val);
+                                                    return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+                                                }}
+                                            />
+                                            <Tooltip
+                                                content={<CustomChartTooltip
+                                                    xLabel={xLabel}
+                                                    yLabel={yLabel}
+                                                    costMode={costMode}
+                                                    qualityMetrics={qualityMetrics}
+                                                    baselineBenchmarkKey={baselineBenchmarkKey}
+                                                    baselineSeries={baselineSeries}
+                                                />}
+                                                wrapperStyle={{ outline: 'none', zIndex: 100 }}
+                                                cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                                animationDuration={150}
+                                            />
+
+                                            {uniqueBenchmarks.map((benchmarkKey) => {
+                                                const sample = visibleDataPoints.find(d => d.benchmarkKey === benchmarkKey);
+                                                if (!sample) return null;
+                                                const model = sample.model;
+                                                if (!selectedBenchmarks.has(benchmarkKey)) return null;
+                                                
+                                                const color = benchmarkColorMap.get(benchmarkKey) || modelColorMap.get(model) || '#38bdf8';
+                                                const lineData = visibleDataPoints
+                                                     .filter(d => d.benchmarkKey === benchmarkKey)
+                                                     .sort((a, b) => {
+                                                         const qpsA = Number(getVal(a, 'metrics.request_rate')) || 0;
+                                                         const qpsB = Number(getVal(b, 'metrics.request_rate')) || 0;
+                                                         if (qpsA !== qpsB) return qpsA - qpsB;
+                                                         return a.vx - b.vx;
+                                                     });
+                                                  
+                                                if (!lineData.length) return null;
+                                                
+                                                let displayName = model;
+                                                if (sample.metadata?.workload_id) {
+                                                     displayName = `${model} (${sample.metadata.workload_id})`;
+                                                } else if (benchmarkKey.startsWith('inference-perf:')) {
+                                                     const filename = benchmarkKey.replace('inference-perf:', '').replace(/\.[^.]+$/, '');
+                                                     displayName = `${model} (${filename})`;
+                                                } else if (benchmarkKey.startsWith('file:')) {
+                                                     const parts = benchmarkKey.split(':');
+                                                     displayName = `${model} (${parts[parts.length - 1]})`;
+                                                }
+
+                                                const isBaseline = benchmarkKey === baselineBenchmarkKey;
+                                                
+                                                return (
+                                                    <Line 
+                                                         key={benchmarkKey}
+                                                         data={lineData}
+                                                         type="monotone" 
+                                                         dataKey="vy" 
+                                                         name={displayName} 
+                                                         stroke={color} 
+                                                         strokeWidth={isBaseline ? 2.5 : 2} 
+                                                         strokeDasharray={isBaseline ? "4 4" : "0"}
+                                                         dot={showDataLabels ? { r: 3, fill: color, strokeWidth: 0 } : false} 
+                                                         isAnimationActive={false}
+                                                    />
+                                                );
+                                            })}
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Hardware / Color Legend */}
+                                <div className="mt-1 border-t border-slate-800 pt-3 px-6 pb-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">
+                                            {chartColorMode === 'hardware' ? 'Hardware / Machine Types' : 
+                                             chartColorMode === 'model' ? 'Models' : 'Node Configurations'}
+                                        </h4>
+                                        
+                                        {/* Color Mode Selector */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-500 font-medium">Color By:</span>
+                                            <select 
+                                                value={chartColorMode}
+                                                onChange={(e) => setChartColorMode(e.target.value)}
+                                                className="bg-slate-850 border border-slate-800 rounded text-[10px] px-2 py-1 text-slate-200 outline-none focus:border-cyan-500"
+                                            >
+                                                <option value="hardware">Hardware</option>
+                                                <option value="node_config">Node Config</option>
+                                                <option value="model">Model</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex flex-wrap gap-x-8 gap-y-3">
+                                        {sortedGroupKeys.map(key => {
+                                            let palette;
+                                            if (chartColorMode === 'hardware') {
+                                                palette = colorPalettes[key] || colorPalettes['other'];
+                                            } else {
+                                                const groupIndex = sortedGroupKeys.indexOf(key);
+                                                palette = categoricalPalettes[groupIndex % categoricalPalettes.length];
+                                            }
+                                            
+                                            let label = groupLabels[key] || key;
+                                            if (chartColorMode === 'hardware') {
+                                                 const hwMap = {
+                                                     'h100': 'H100',
+                                                     'a100': 'A100',
+                                                     'h200': 'H200',
+                                                     'b200': 'B200',
+                                                     'gb200': 'GB200',
+                                                     'tpu_v5': 'TPU v5',
+                                                     'tpu_v6': 'TPU v6',
+                                                     'tpu_v7': 'TPU v7',
+                                                     'tpu': 'TPU v7',
+                                                     'l4': 'L4',
+                                                     'mi300': 'MI300',
+                                                     'rtx': 'RTX PRO 6K',
+                                                     'other': 'Other'
+                                                 };
+                                                 label = hwMap[key] || key;
+                                            }
+
+                                            return (
+                                                <div key={key} className="flex flex-col gap-1">
+                                                    <div className="flex rounded overflow-hidden shadow-sm">
+                                                        {palette.map(c => (
+                                                            <div key={c} className="w-4 h-3" style={{ backgroundColor: c }} />
+                                                        ))}
+                                                    </div>
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight max-w-[200px] truncate" title={label}>{label}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
             }
 
             return (

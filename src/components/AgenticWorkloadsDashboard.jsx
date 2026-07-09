@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { CustomXAxis, CustomYAxis } from './common';
 import { scanAgenticWorkloads } from '../utils/gcsScanner';
+import { getLocalDashboardRuns } from '../utils/dashboardHelpers';
 
 const SCENARIOS = [
     { id: 0, name: 'K8s Service (Reference)', label: 'Reference', description: 'Standard K8s round-robin pod routing' },
@@ -163,7 +164,7 @@ const getThroughputValue = (report, metric) => {
     return report.throughput?.[metric] || 0;
 };
 
-export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, onToggleMobileNav }) {
+export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, onToggleMobileNav, dashboardData }) {
     const [shareToast, setShareToast] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeRecipeTab, setActiveRecipeTab] = useState(0);
@@ -193,11 +194,19 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             try {
                 setLoading(true);
                 const reports = await scanAgenticWorkloads();
-                setData(reports);
-                if (reports.length > 0) {
-                    const concurrencies = [...new Set(reports.map(r => r.concurrency))].sort((a, b) => a - b);
+                
+                // Get local runs targeting agentic-serving
+                const localRuns = dashboardData?.brv02Runs 
+                    ? getLocalDashboardRuns(dashboardData.brv02Runs, 'agentic-serving')
+                    : [];
+                
+                const combinedReports = [...reports, ...localRuns];
+                setData(combinedReports);
+                
+                if (combinedReports.length > 0) {
+                    const concurrencies = [...new Set(combinedReports.map(r => r.concurrency))].sort((a, b) => a - b);
                     setSelectedConcurrency(concurrencies[concurrencies.length - 1]);
-                    const maxLatency = Math.max(...reports.flatMap(r => [r.ttft.p99, r.tpot.p99, r.ntpot.p99, r.itl.p99, r.e2e.p99]));
+                    const maxLatency = Math.max(...combinedReports.flatMap(r => [r.ttft.p99, r.tpot.p99, r.ntpot.p99, r.itl.p99, r.e2e.p99]));
                     setZoomXMax(Math.ceil(maxLatency / 1000) * 1000);
                 }
             } catch (e) {
@@ -208,7 +217,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             }
         };
         fetchData();
-    }, []);
+    }, [dashboardData?.brv02Runs]);
 
     const metadata = useMemo(() => {
         if (!data.length) return null;
@@ -504,26 +513,30 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
     );
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full font-sans">
-            <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full font-sans relative overflow-hidden bg-[radial-gradient(#334155_1.2px,transparent_1.2px)] bg-[size:24px_24px] bg-repeat">
+            {/* Pulsing Vibrant Neon Glow Background Shapes */}
+            <div className="absolute top-0 -left-1/4 w-1/2 h-1/2 bg-blue-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
+            <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-emerald-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+
+            <header className="w-full h-16 border-b border-slate-900/65 flex justify-between items-center px-6 bg-slate-950/20 backdrop-blur-md fixed top-0 left-0 right-0 z-[49]">
                 <div className="flex items-center gap-4">
-                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden">
+                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-slate-800/60 md:hidden">
                         <Menu className="h-6 w-6" />
                     </button>
                     {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                        <button onClick={onNavigateBack} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-colors cursor-pointer border border-transparent hover:border-slate-800/60">
                             <ArrowLeft className="h-5 w-5" />
                         </button>
                     )}
-                    <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
+                    <div className="flex items-center gap-2.5 border-r border-slate-800 pr-4">
                         <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hidden sm:inline">
+                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 select-none inline-block sm:inline-block pl-0.5 py-0.5">
                             Prism
                         </span>
                     </div>
                     <div className="flex items-center">
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate">Agentic serving</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
+                        <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">Agentic serving</h1>
+                        <span className="ml-3 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hidden sm:inline uppercase tracking-wider font-mono">
                             Guided path
                         </span>
                     </div>
@@ -534,7 +547,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                         href="https://llm-d.ai/community"
                         target="_blank"
                         rel="noreferrer"
-                        className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 cursor-pointer"
+                        className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-350 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 cursor-pointer"
                         title="Contact us"
                     >
                         <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
@@ -544,7 +557,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                         navigator.clipboard.writeText(window.location.href);
                         setShareToast(true);
                         setTimeout(() => setShareToast(false), 2000);
-                    }} className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative cursor-pointer">
+                    }} className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-355 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative cursor-pointer">
                         <Share2 className="w-3.5 h-3.5 mr-1.5" />
                         <span>Share link</span>
                         {shareToast && (
@@ -556,7 +569,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                 </div>
             </header>
 
-            <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-6">
+            <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-6 z-10 relative">
 
                 <div className="relative overflow-hidden border border-slate-800/80 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-5 shadow-2xl backdrop-blur-xl group transition-all duration-500 hover:border-amber-500/30">
                     <div className="absolute -top-24 -right-24 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl group-hover:bg-amber-500/20 transition-all duration-700 pointer-events-none" />

@@ -17,15 +17,15 @@ import { XAxis, YAxis } from 'recharts';
 
 export const CustomXAxis = ({ label, theme, ...props }) => (
     <XAxis 
-        stroke={theme === 'dark' ? "#94a3b8" : "#475569"} 
-        tick={{ fill: theme === 'dark' ? '#cbd5e1' : '#334155', fontSize: 11 }}
-        tickLine={{ stroke: theme === 'dark' ? '#cbd5e1' : '#475569' }}
-        axisLine={{ stroke: theme === 'dark' ? '#94a3b8' : '#475569' }}
+        stroke="#475569" 
+        tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+        tickLine={{ stroke: '#334155' }}
+        axisLine={{ stroke: '#334155' }}
         label={{ 
             value: label, 
             position: 'bottom', 
             offset: 0,
-            style: { fill: theme === 'dark' ? '#f8fafc' : '#0f172a', fontSize: 11, fontWeight: 600 }
+            style: { fill: '#cbd5e1', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'sans-serif' }
         }}
         tickFormatter={(val) => {
             const v = Number(val);
@@ -38,15 +38,16 @@ export const CustomXAxis = ({ label, theme, ...props }) => (
 
 export const CustomYAxis = ({ label, theme, ...props }) => (
     <YAxis 
-        stroke={theme === 'dark' ? "#94a3b8" : "#475569"} 
-        tick={{ fill: theme === 'dark' ? '#cbd5e1' : '#334155', fontSize: 11 }}
-        tickLine={{ stroke: theme === 'dark' ? '#cbd5e1' : '#475569' }}
-        axisLine={{ stroke: theme === 'dark' ? '#94a3b8' : '#475569' }}
+        stroke="#475569" 
+        tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+        tickLine={{ stroke: '#334155' }}
+        axisLine={{ stroke: '#334155' }}
         label={{ 
             value: label, 
             angle: -90, 
             position: 'insideLeft', 
-            style: { fill: theme === 'dark' ? '#f8fafc' : '#0f172a', fontSize: 11, fontWeight: 600, textAnchor: 'middle' }
+            offset: -10,
+            style: { fill: '#cbd5e1', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAnchor: 'middle', fontFamily: 'sans-serif' }
         }}
         tickFormatter={(val) => {
             const v = Number(val);

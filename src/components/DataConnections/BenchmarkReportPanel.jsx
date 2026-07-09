@@ -97,7 +97,7 @@ export const BenchmarkReportPanel = ({
 
                 {/* Drop zone — always visible, additive uploads */}
                 <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Upload Report Files / Folder</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Submit Report Files / Folder</label>
                     <div
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -134,7 +134,7 @@ export const BenchmarkReportPanel = ({
                     </div>
                     {/* Directory Upload Option */}
                     <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-2">
-                        <span>Or, upload a whole run directory:</span>
+                        <span>Or, submit a whole run directory:</span>
                         {loading ? (
                             <span className="text-slate-400 dark:text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed">
                                 Select Directory

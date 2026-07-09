@@ -97,6 +97,10 @@ const parseNum = (val, label, diagnostics) => {
 // e.g. "openai/gpt-oss-120b" -> "gpt-oss-120b"
 export const normalizeModelName = (name) => {
     if (!name) return 'unknown';
+    
+    if (typeof name !== 'string') {
+        name = name.name || name.model_name || name.model || String(name);
+    }
 
     // 1. If it's a path or org prefixed, take the last segment
     const parts = name.split('/');
