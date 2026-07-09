@@ -39,11 +39,22 @@ const isOAuthConfigured = (): boolean => {
 
 // Middleware to enforce configuration check
 oauthRouter.use((req: Request, res: Response, next) => {
-    if (!isOAuthConfigured()) {
-        res.status(501).json({
-            error: 'GitHub OAuth is not configured. The server does not yet support GitHub authentication.'
-        });
-        return;
+    if (req.path.startsWith('/api/auth/github')) {
+        if (!isOAuthConfigured()) {
+            if (req.path === '/api/auth/github/me') {
+                res.json({
+                    authenticated: false,
+                    configured: false,
+                    username: null,
+                    permission: 'none'
+                });
+                return;
+            }
+            res.status(501).json({
+                error: 'GitHub OAuth is not configured. The server does not yet support GitHub authentication.'
+            });
+            return;
+        }
     }
     next();
 });
