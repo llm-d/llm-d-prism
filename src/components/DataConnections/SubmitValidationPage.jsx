@@ -1603,12 +1603,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         </div>
                     </div>
 
-                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-4 flex gap-3 text-xs leading-normal">
-                        <ShieldAlert className="text-amber-500 shrink-0 mt-0.5" size={16} />
-                        <p className="text-slate-400 font-medium">
-                            By submitting, you initiate a formal pull-request style review. Prism maintainers will inspect the payload, manifests, and evidence logs before merging these results into the public Results Store.
-                        </p>
-                    </div>
+                    {user?.permission === 'none' ? (
+                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl p-4 flex gap-3 text-xs leading-normal shadow-[0_4px_20px_rgba(245,158,11,0.05)] animate-in fade-in duration-200">
+                            <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={16} />
+                            <div className="space-y-1 font-medium">
+                                <p className="text-white font-bold">Closed Beta Restriction</p>
+                                <p>You are not in the Results Store closed-beta. Check back later once the feature is released.</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-4 flex gap-3 text-xs leading-normal">
+                            <ShieldAlert className="text-amber-500 shrink-0 mt-0.5" size={16} />
+                            <p className="text-slate-400 font-medium">
+                                By submitting, you initiate a formal pull-request style review. Prism maintainers will inspect the payload, manifests, and evidence logs before merging these results into the public Results Store.
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -2971,10 +2981,19 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                         {wizardStep === 4 && (
                             <div className="flex items-center gap-3">
+                                {user?.permission === 'none' && (
+                                    <span className="text-[10px] text-amber-500 font-semibold max-w-[240px] text-right">
+                                        You are not in the Results Store closed-beta. Check back later once the feature is released.
+                                    </span>
+                                )}
                                 <button 
                                     onClick={handleSubmit}
-                                    disabled={isSubmitting}
-                                    className="px-5 py-2 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl shadow-md hover:shadow-emerald-500/10 flex items-center gap-1.5 transition-all cursor-pointer border border-emerald-500/20"
+                                    disabled={isSubmitting || user?.permission === 'none'}
+                                    className={`px-5 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all ${
+                                        isSubmitting || user?.permission === 'none'
+                                        ? 'bg-slate-900/40 text-slate-500 border border-slate-900/50 cursor-not-allowed opacity-50 shadow-none'
+                                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md hover:shadow-emerald-500/10 cursor-pointer border border-emerald-500/20'
+                                    }`}
                                 >
                                     {isSubmitting ? <Loader size={14} className="animate-spin" /> : <Check size={14} />} Submit to Review Queue
                                 </button>

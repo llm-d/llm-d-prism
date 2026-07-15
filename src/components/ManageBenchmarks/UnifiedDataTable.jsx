@@ -14,7 +14,7 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RotateCcw, ChevronDown, ChevronUp, Star, Pin, CheckSquare, Square, Check, Pencil, Trash2, Code2, Copy, X, Database, Eye, ShieldCheck, AlertCircle, TrendingUp, AlertTriangle, Search, FileText, FileClock, Sliders, Activity, Send, Play } from 'lucide-react';
+import { RotateCcw, ChevronDown, ChevronUp, Star, Pin, CheckSquare, Square, Check, Pencil, Trash2, Code2, Copy, X, Database, Eye, ShieldCheck, AlertCircle, TrendingUp, AlertTriangle, Search, FileText, FileClock, Sliders, Activity, Send, Play, Loader } from 'lucide-react';
 import { RunComparisonChart } from '../Dashboard/RunComparisonChart';
 import { ThroughputCostChart } from '../Dashboard/ThroughputCostChart';
 import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
@@ -1266,73 +1266,88 @@ export const UnifiedDataTable = (props) => {
             <div className="relative">
                 <div className="flex flex-col gap-4 pr-1">
                     {filteredStats.length === 0 ? (
-                    <div className="w-full py-16 px-8 flex flex-col items-center justify-center text-center bg-slate-900/80 border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-xl mb-6">
-                        <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 ${emptyConfig.radialGlow} rounded-full blur-3xl pointer-events-none`} />
-                        <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-5 ${emptyConfig.glowClass}`}>
-                            {emptyConfig.icon}
-                        </div>
-                        <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">
-                            {emptyConfig.title}
-                        </h3>
-                        <p className="text-sm text-slate-400 max-w-md mb-8 leading-relaxed">
-                            {emptyConfig.description}
-                        </p>
-                        {emptyConfig.action}
-
-                        {!isFiltered && modelStats.length > 0 && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full max-w-4xl mx-auto">
-                                {/* Card 1: Cloud Store */}
-                                <div 
-                                    onClick={() => setShowDataPanel && setShowDataPanel(true)}
-                                    className="group bg-slate-950/80 border border-slate-800/80 hover:border-cyan-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(34,211,238,0.15)]"
-                                >
-                                    <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/5 rounded-full blur-xl group-hover:bg-cyan-500/15 transition-colors" />
-                                    <h4 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors mb-1.5">
-                                        Connect Cloud Store
-                                    </h4>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        Index GCS, AWS S3, or Google Drive shared result archives.
-                                    </p>
+                        loadingConnections ? (
+                            <div className="w-full py-20 px-8 flex flex-col items-center justify-center text-center bg-slate-900/80 border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-xl mb-6">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+                                <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-5 shadow-[0_0_30px_rgba(59,130,246,0.2)] bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                                    <Loader className="w-8 h-8 animate-spin" />
                                 </div>
-
-                                {/* Card 2: Upload v0.2 YAML / JSON */}
-                                <label className="group bg-slate-950/80 border border-slate-800/80 hover:border-blue-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept=".yaml,.yml,.json" 
-                                        onChange={(e) => {
-                                            if (e.target.files?.[0]) {
-                                                alert(`Parsed report ${e.target.files[0].name}`);
-                                            }
-                                        }} 
-                                    />
-                                    <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition-colors mb-1.5">
-                                        Ingest v0.2 Report
-                                    </h4>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        Directly parse standalone benchmark YAML/JSON reports.
-                                    </p>
-                                </label>
-
-                                {/* Card 3: Clear Filters / Reset */}
-                                <div 
-                                    onClick={clearFilters}
-                                    className="group bg-slate-950/80 border border-slate-800/80 hover:border-purple-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]"
-                                >
-                                    <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/5 rounded-full blur-xl group-hover:bg-purple-500/15 transition-colors" />
-                                    <h4 className="text-base font-bold text-white group-hover:text-purple-400 transition-colors mb-1.5 flex items-center gap-2">
-                                        <RotateCcw className="w-4 h-4 text-purple-400 group-hover:rotate-180 transition-transform duration-500" />
-                                        Reset Filters
-                                    </h4>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        Clear all active facet slices to reveal the entire catalog.
-                                    </p>
-                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">
+                                    Loading Benchmark Results...
+                                </h3>
+                                <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                                    Prism is currently loading benchmark records from connected data sources. They will appear here dynamically.
+                                </p>
                             </div>
-                        )}
-                    </div>
-                ) : (
+                        ) : (
+                            <div className="w-full py-16 px-8 flex flex-col items-center justify-center text-center bg-slate-900/80 border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-xl mb-6">
+                                <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 ${emptyConfig.radialGlow} rounded-full blur-3xl pointer-events-none`} />
+                                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-5 ${emptyConfig.glowClass}`}>
+                                    {emptyConfig.icon}
+                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">
+                                    {emptyConfig.title}
+                                </h3>
+                                <p className="text-sm text-slate-400 max-w-md mb-8 leading-relaxed">
+                                    {emptyConfig.description}
+                                </p>
+                                {emptyConfig.action}
+
+                                {!isFiltered && modelStats.length > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full max-w-4xl mx-auto">
+                                        {/* Card 1: Cloud Store */}
+                                        <div 
+                                            onClick={() => setShowDataPanel && setShowDataPanel(true)}
+                                            className="group bg-slate-950/80 border border-slate-800/80 hover:border-cyan-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(34,211,238,0.15)]"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/5 rounded-full blur-xl group-hover:bg-cyan-500/15 transition-colors" />
+                                            <h4 className="text-base font-bold text-white group-hover:text-cyan-400 transition-colors mb-1.5">
+                                                Connect Cloud Store
+                                            </h4>
+                                            <p className="text-xs text-slate-400 leading-relaxed">
+                                                Index GCS, AWS S3, or Google Drive shared result archives.
+                                            </p>
+                                        </div>
+
+                                        {/* Card 2: Upload v0.2 YAML / JSON */}
+                                        <label className="group bg-slate-950/80 border border-slate-800/80 hover:border-blue-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                accept=".yaml,.yml,.json" 
+                                                onChange={(e) => {
+                                                    if (e.target.files?.[0]) {
+                                                        alert(`Parsed report ${e.target.files[0].name}`);
+                                                    }
+                                                }} 
+                                            />
+                                            <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition-colors mb-1.5">
+                                                Ingest v0.2 Report
+                                            </h4>
+                                            <p className="text-xs text-slate-400 leading-relaxed">
+                                                Directly parse standalone benchmark YAML/JSON reports.
+                                            </p>
+                                        </label>
+
+                                        {/* Card 3: Clear Filters / Reset */}
+                                        <div 
+                                            onClick={clearFilters}
+                                            className="group bg-slate-950/80 border border-slate-800/80 hover:border-purple-500/50 rounded-2xl p-6 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer flex flex-col items-start text-left relative overflow-hidden shadow-lg hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/5 rounded-full blur-xl group-hover:bg-purple-500/15 transition-colors" />
+                                            <h4 className="text-base font-bold text-white group-hover:text-purple-400 transition-colors mb-1.5 flex items-center gap-2">
+                                                <RotateCcw className="w-4 h-4 text-purple-400 group-hover:rotate-180 transition-transform duration-500" />
+                                                Reset Filters
+                                            </h4>
+                                            <p className="text-xs text-slate-400 leading-relaxed">
+                                                Clear all active facet slices to reveal the entire catalog.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    ) : (
                     Object.entries(groupedStats).map(([groupKey, stats]) => {
                         const isAllSelected = stats.every(s => selectedBenchmarks.has(s.benchmarkKey));
                         return (
@@ -1698,7 +1713,19 @@ export const UnifiedDataTable = (props) => {
                                                                                             const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
                                                                                             
                                                                                             if (canResubmit && status === 'staged') {
-                                                                                                return (
+                                                                                                return user?.permission === 'none' ? (
+                                                                                                    <div className="relative group/tooltip inline-block">
+                                                                                                        <button
+                                                                                                            disabled
+                                                                                                            className="px-2.5 py-1 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-500 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-not-allowed select-none flex items-center gap-1 opacity-60"
+                                                                                                        >
+                                                                                                            <Send className="w-2.5 h-2.5" /> Submit for Review
+                                                                                                        </button>
+                                                                                                        <div className="absolute right-0 bottom-full mb-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-350 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                            You are not in the Results Store closed-beta. Check back later once the feature is released.
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ) : (
                                                                                                     <button
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation();
@@ -2314,14 +2341,29 @@ export const UnifiedDataTable = (props) => {
 
                                 {selectedStagedRuns.length > 0 && (
                                     <div className="flex justify-end pt-1 select-none">
-                                        <button
-                                            id="drawer-publish-selected-btn"
-                                            onClick={handlePublishSelected}
-                                            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-650 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_0_12px_rgba(6,182,212,0.15)] transition-all hover:scale-[1.02] cursor-pointer flex items-center gap-1.5"
-                                        >
-                                            <Send size={12} />
-                                            Publish Selected ({selectedStagedRuns.length})
-                                        </button>
+                                        {user?.permission === 'none' ? (
+                                            <div className="relative group/tooltip inline-block">
+                                                <button
+                                                    disabled
+                                                    className="px-4 py-2 bg-slate-800 text-slate-500 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-700/50 cursor-not-allowed flex items-center gap-1.5 opacity-60"
+                                                >
+                                                    <Send size={12} />
+                                                    Publish Selected ({selectedStagedRuns.length})
+                                                </button>
+                                                <div className="absolute right-0 bottom-full mb-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-350 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center normal-case tracking-normal animate-in fade-in slide-in-from-bottom-2 duration-150">
+                                                    You are not in the Results Store closed-beta. Check back later once the feature is released.
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                id="drawer-publish-selected-btn"
+                                                onClick={handlePublishSelected}
+                                                className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-650 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_0_12px_rgba(6,182,212,0.15)] transition-all hover:scale-[1.02] cursor-pointer flex items-center gap-1.5"
+                                            >
+                                                <Send size={12} />
+                                                Publish Selected ({selectedStagedRuns.length})
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
@@ -2425,13 +2467,27 @@ export const UnifiedDataTable = (props) => {
                                                                     </button>
                                                                 )}
                                                                 {canResubmit && status === 'submitted_pending_processing' && (
-                                                                    <button
-                                                                        onClick={() => handleActionClick(async () => updateSubmissionStatus && await updateSubmissionStatus(runId, 'submitted_pending_review', '', stat.model, stat.hardware))}
-                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                        className="flex items-center gap-1 px-3 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow transition-all hover:scale-[1.03] disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                                                                    >
-                                                                        <Send className="w-3 h-3" /> Submit for Review
-                                                                    </button>
+                                                                    user?.permission === 'none' ? (
+                                                                        <div className="relative group/tooltip inline-block">
+                                                                            <button
+                                                                                disabled
+                                                                                className="flex items-center gap-1 px-3 py-2 bg-slate-800 text-slate-500 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-700/50 cursor-not-allowed opacity-60"
+                                                                            >
+                                                                                <Send className="w-3 h-3" /> Submit for Review
+                                                                            </button>
+                                                                            <div className="absolute right-0 bottom-full mb-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-350 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                You are not in the Results Store closed-beta. Check back later once the feature is released.
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleActionClick(async () => updateSubmissionStatus && await updateSubmissionStatus(runId, 'submitted_pending_review', '', stat.model, stat.hardware))}
+                                                                            disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                            className="flex items-center gap-1 px-3 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow transition-all hover:scale-[1.03] disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                                        >
+                                                                            <Send className="w-3 h-3" /> Submit for Review
+                                                                        </button>
+                                                                    )
                                                                 )}
                                                                 {isAdmin && (status === 'submitted_pending_review' || status === 'in_review') && (
                                                                     <div className="flex items-center gap-2">

@@ -46,13 +46,30 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [gcsSuccess, setGcsSuccess] = useState(null);
     const [apiError, setApiError] = useState(null);
     const [gcsProgress, setGcsProgress] = useState({});
+    const [loadingTasks, setLoadingTasks] = useState({});
+
+    const updateTaskProgress = useCallback((id, updates) => {
+        setLoadingTasks(prev => {
+            const existing = prev[id] || { id, name: id, loaded: 0, total: 0, status: 'pending', currentAction: '' };
+            return {
+                ...prev,
+                [id]: { ...existing, ...updates }
+            };
+        });
+    }, []);
 
     const handleProgress = useCallback(({ loaded, total, bucketName }) => {
         setGcsProgress(prev => ({
             ...prev,
             [bucketName]: { loaded, total }
         }));
-    }, []);
+        updateTaskProgress(`gcs:${bucketName}`, {
+            loaded,
+            total,
+            status: loaded === total ? 'completed' : 'loading',
+            currentAction: loaded === total ? 'Completed' : `Fetched ${loaded} of ${total} files`
+        });
+    }, [updateTaskProgress]);
 
     const gcsProgressStats = useMemo(() => {
         let loaded = 0;
@@ -422,6 +439,44 @@ export const useDashboardData = (initialState, dashboardState) => {
 
                 setGcsProgress({});
                 if (restoredBuckets.length === 0 && restoredAwsBuckets.length === 0 && restoredApis.length === 0 && !saved.qualityScoresEnabled) return;
+
+                const initialTasks = {};
+                restoredBuckets.forEach(b => {
+                    const bName = typeof b === 'string' ? b : b.bucket;
+                    initialTasks[`gcs:${bName}`] = {
+                        id: `gcs:${bName}`,
+                        name: `gs://${bName}`,
+                        type: 'gcs',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                restoredAwsBuckets.forEach(b => {
+                    const bName = typeof b === 'string' ? b : b.bucket;
+                    initialTasks[`aws:${bName}`] = {
+                        id: `aws:${bName}`,
+                        name: `aws://${bName}`,
+                        type: 'aws',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                restoredApis.forEach(pid => {
+                    initialTasks[`giq:${pid}`] = {
+                        id: `giq:${pid}`,
+                        name: `GIQ: ${pid}`,
+                        type: 'giq',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                setLoadingTasks(initialTasks);
                 
                 // 1. Instant Feedback: Render Cards in Loading State
                 setBucketConfigs(prev => Array.from(new Set([...prev, ...restoredBuckets])));
@@ -461,6 +516,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         if (!res.profile.error) {
                             allResults.push({ type: 'gcs', id: bName, ...res });
                         } else {
+                            updateTaskProgress(`gcs:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             // Update individual profile error
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === bName && p.type === 'gcs'
@@ -469,6 +525,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`gcs:${bName}`, { status: 'failed', currentAction: `Error: ${err.message || 'Failed to connect'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === bName && p.type === 'gcs'
                                 ? { ...p, loading: false, error: "Failed to connect" }
@@ -485,6 +542,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         if (!res.profile.error) {
                             allResults.push({ type: 'aws', id: bName, ...res });
                         } else {
+                            updateTaskProgress(`aws:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === bName && p.type === 'aws'
                                     ? { ...p, loading: false, error: res.profile.error }
@@ -492,6 +550,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`aws:${bName}`, { status: 'failed', currentAction: `Error: ${err.message || 'Failed to connect'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === bName && p.type === 'aws'
                                 ? { ...p, loading: false, error: "Failed to connect" }
@@ -504,12 +563,18 @@ export const useDashboardData = (initialState, dashboardState) => {
                 for (const pid of restoredApis) {
                     const token = localStorage.getItem(`giq_token_${pid}`) || '';
                     try {
-                        let res = await fetchGiqData(pid, token);
+                        const giqProgressCallback = (progressInfo) => {
+                            updateTaskProgress(`giq:${pid}`, {
+                                ...progressInfo,
+                                status: progressInfo.status || 'loading'
+                            });
+                        };
+                        let res = await fetchGiqData(pid, token, false, giqProgressCallback);
 
                         // Auto-Retry Logic: If User Token Expired (401/403), retry with ADC
                         if (res.profile.error && token && (res.profile.error.includes('401') || res.profile.error.includes('403'))) {
                             console.log(`[Persistence] Token expired for ${pid}. Retrying with ADC...`);
-                            const retryRes = await fetchGiqData(pid, '');
+                            const retryRes = await fetchGiqData(pid, '', false, giqProgressCallback);
                             if (!retryRes.profile.error) {
                                 res = retryRes; // Success! Use retry result
                             }
@@ -520,6 +585,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         if (!res.profile.error) {
                             allResults.push({ type: 'giq', id: pid, ...res });
                         } else {
+                            updateTaskProgress(`giq:${pid}`, { status: 'failed', currentAction: res.profile.error });
                             // If backend returns error (e.g. 401/403 despite ADC), show it
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === pid && p.type === 'giq'
@@ -528,6 +594,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`giq:${pid}`, { status: 'failed', currentAction: `Error: ${err.message || 'Connection Failed'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === pid && p.type === 'giq'
                                 ? { ...p, loading: false, error: "Connection Failed" }
@@ -952,12 +1019,14 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     // --- Extracted Block ---
     async function fetchArchivedData() {
+        updateTaskProgress('archive:google_drive', { status: 'loading', loaded: 0, total: 2, currentAction: 'Fetching archived drive data...' });
         try {
             const files = [
                 '/data/archive/llmd_results/archived_drive_data.json',
                 '/data/archive/llmd_results/llm-d-benchmarks.json'
             ];
 
+            let loadedCount = 0;
             const results = await Promise.all(files.map(async (file) => {
                 try {
                     const res = await fetch(`${file}?t=${Date.now()}`);
@@ -970,8 +1039,12 @@ export const useDashboardData = (initialState, dashboardState) => {
                 } catch (e) {
                     console.warn(`Failed to load ${file}`, e);
                     return [];
+                } finally {
+                    loadedCount++;
+                    updateTaskProgress('archive:google_drive', { loaded: loadedCount, currentAction: `Loaded ${loadedCount} of ${files.length} archive files` });
                 }
             }));
+            updateTaskProgress('archive:google_drive', { status: 'completed', currentAction: 'Completed' });
 
             const allBenchmarks = results.flat();
             console.log(`Loaded ${allBenchmarks.length} unified archived benchmarks from ${files.length} files.`);
@@ -1126,6 +1199,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             });
         } catch (e) {
             console.error("Failed to load archived data", e);
+            updateTaskProgress('archive:google_drive', { status: 'failed', currentAction: `Error: ${e.message}` });
             return [];
         }
     }
@@ -1136,6 +1210,56 @@ export const useDashboardData = (initialState, dashboardState) => {
         setLoading(true);
         setGcsLoading(true);
         setGcsError(null);
+
+        const apisToFetch = [...apiConfigs];
+        if (fetchedConfig && fetchedConfig.projects) {
+            fetchedConfig.projects.forEach(p => {
+                if (!apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === p)) {
+                    apisToFetch.push({ projectId: p, token: '' });
+                }
+            });
+        }
+        if (fetchedConfig && fetchedConfig.hostProject && !apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === fetchedConfig.hostProject)) {
+            apisToFetch.push({ projectId: fetchedConfig.hostProject, token: '' });
+        }
+
+        const initialTasks = {};
+        if (enableLLMDResults) {
+            initialTasks['archive:google_drive'] = {
+                id: 'archive:google_drive',
+                name: 'llm-d Google Drive',
+                type: 'archive',
+                loaded: 0,
+                total: 2,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        }
+        bucketConfigs.forEach(b => {
+            const bName = typeof b === 'string' ? b : b.bucket;
+            initialTasks[`gcs:${bName}`] = {
+                id: `gcs:${bName}`,
+                name: `gs://${bName}`,
+                type: 'gcs',
+                loaded: 0,
+                total: 0,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        });
+        apisToFetch.forEach(config => {
+            const projectId = typeof config === 'string' ? config : config.projectId;
+            initialTasks[`giq:${projectId}`] = {
+                id: `giq:${projectId}`,
+                name: `GIQ: ${projectId}`,
+                type: 'giq',
+                loaded: 0,
+                total: 0,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        });
+        setLoadingTasks(initialTasks);
 
         const failedSources = [];
 
@@ -1229,19 +1353,6 @@ export const useDashboardData = (initialState, dashboardState) => {
             // 3. Fetch API Sources
             const apiProfiles = [];
 
-            // Build a list of APIs to fetch, combining apiConfigs and any discovered projects from fetchConfig
-            const apisToFetch = [...apiConfigs];
-            if (fetchedConfig && fetchedConfig.projects) {
-                fetchedConfig.projects.forEach(p => {
-                    if (!apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === p)) {
-                        apisToFetch.push({ projectId: p, token: '' });
-                    }
-                });
-            }
-            if (fetchedConfig && fetchedConfig.hostProject && !apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === fetchedConfig.hostProject)) {
-                apisToFetch.push({ projectId: fetchedConfig.hostProject, token: '' });
-            }
-
             for (const config of apisToFetch) {
                 // Backward compatibility check
                 const projectId = typeof config === 'string' ? config : config.projectId;
@@ -1251,7 +1362,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                 // if (!token) ... check removed.
 
                 try {
-                    const apiData = await fetchGiqData(projectId, token);
+                    const giqProgressCallback = (progressInfo) => {
+                        updateTaskProgress(`giq:${projectId}`, {
+                            ...progressInfo,
+                            status: progressInfo.status || 'loading'
+                        });
+                    };
+                    const apiData = await fetchGiqData(projectId, token, forceRefresh, giqProgressCallback);
 
                     // Check for profile error from fetchGiqData
                     if (apiData.profile.error) {
@@ -2244,6 +2361,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         loading, setLoading,
         isRestoringConnections,
         gcsProgressStats,
+        loadingTasks,
         gcsLoading, setGcsLoading,
         gcsError, setGcsError,
         gcsSuccess, setGcsSuccess,

@@ -17,7 +17,7 @@ import { CacheManager } from '../utils/cacheManager';
 import { parseGiqData } from '../utils/dataParser';
 
 export const useGIQ = ({ pendingRequests, addToast, setLoading }) => {
-    const fetchGiqData = async (projectId, authToken, forceRefresh = false) => {
+    const fetchGiqData = async (projectId, authToken, forceRefresh = false, onProgress = null) => {
             console.log(`[useGIQ] fetchGiqData START for ${projectId}. Token provided: ${!!authToken}, forceRefresh: ${forceRefresh}`);
             // Deduplication Check: Return existing promise if already fetching/loading
             if (pendingRequests.current.has(`giq:${projectId}`) && !forceRefresh) {
@@ -70,6 +70,13 @@ export const useGIQ = ({ pendingRequests, addToast, setLoading }) => {
     
                          do {
                             pageCount++;
+                            if (onProgress) {
+                                onProgress({
+                                    loaded: Math.min(pageCount, 10),
+                                    total: 10,
+                                    currentAction: `Discovering profiles page ${pageCount}...`
+                                });
+                            }
                             const bodyPayload = { pageToken: nextPageToken };
                             const fetchHeaders = {
                                 'Content-Type': 'application/json',
@@ -131,9 +138,18 @@ export const useGIQ = ({ pendingRequests, addToast, setLoading }) => {
                     const fullResponses = { list: listJson, details: [] };
                     
                     const DETAIL_BATCH_SIZE = 5;
+                    const totalDetailsBatches = Math.ceil(profiles.length / DETAIL_BATCH_SIZE);
                     for (let i = 0; i < profiles.length; i += DETAIL_BATCH_SIZE) {
                         if (i > 0) await new Promise(r => setTimeout(r, 200));
                         const batch = profiles.slice(i, i + DETAIL_BATCH_SIZE);
+                        const batchIndex = Math.floor(i / DETAIL_BATCH_SIZE);
+                        if (onProgress) {
+                            onProgress({
+                                loaded: batchIndex,
+                                total: totalDetailsBatches,
+                                currentAction: `Fetching details for ${batch.map(p => p.modelServerInfo?.model).filter(Boolean).join(', ')}...`
+                            });
+                        }
                         try {
                             const batchPromises = batch.map(async (p) => {
                                 if (!p.modelServerInfo) return [];
@@ -343,8 +359,17 @@ export const useGIQ = ({ pendingRequests, addToast, setLoading }) => {
                     }
     
                     const BATCH_SIZE = 3;
+                    const totalEnrichBatches = Math.ceil(enrichTasks.length / BATCH_SIZE);
                     for (let i = 0; i < enrichTasks.length; i += BATCH_SIZE) {
                         const batch = enrichTasks.slice(i, i + BATCH_SIZE);
+                        const enrichIndex = Math.floor(i / BATCH_SIZE);
+                        if (onProgress) {
+                            onProgress({
+                                loaded: enrichIndex,
+                                total: totalEnrichBatches,
+                                currentAction: `Enriching pricing data batch ${enrichIndex + 1} of ${totalEnrichBatches}...`
+                            });
+                        }
                         try {
                             await Promise.all(batch.map(task => task()));
                         } catch (batchErr) {
@@ -376,10 +401,16 @@ export const useGIQ = ({ pendingRequests, addToast, setLoading }) => {
                     } else {
                         addToast(`[Network] Fetched GIQ: ${projectId}`, 'info');
                     }
+                    if (onProgress) {
+                        onProgress({ loaded: 1, total: 1, status: 'completed', currentAction: 'Completed' });
+                    }
                     return resultPayload;
     
                 } catch (error) {
                     console.error("GIQ API Fetch Error:", error);
+                    if (onProgress) {
+                        onProgress({ status: 'failed', currentAction: error.message });
+                    }
                     return {
                         sourceName: `giq:${projectId}`,
                         entries: [],

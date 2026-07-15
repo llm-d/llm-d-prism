@@ -822,10 +822,17 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                                         >
                                             {user?.username}
                                         </a>
-                                        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-500">
-                                            <Shield size={10} className="text-cyan-400" />
-                                            <span>Role: {user?.permission}</span>
-                                        </div>
+                                        {user?.permission === 'none' ? (
+                                            <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] rounded-lg flex items-start gap-1.5 leading-normal font-medium">
+                                                <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                                                <span>You are not in the Results Store closed-beta. Check back later once the feature is released.</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-500">
+                                                <Shield size={10} className="text-cyan-400" />
+                                                <span>Role: {user?.permission}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <button
                                         id="sign-out-button"

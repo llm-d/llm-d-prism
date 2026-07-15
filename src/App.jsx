@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader, ArrowRight } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import ResultsStore from './components/ResultsStore';
@@ -78,7 +78,7 @@ function App() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [bypassLoading, setBypassLoading] = useState(false);
 
-  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles, gcsProgressStats } = dashboardData;
+  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles, loadingTasks } = dashboardData;
   const hasFetchedConfig = useRef(false);
 
   useEffect(() => {
@@ -160,78 +160,126 @@ function App() {
   };
 
   const activeLoading = loading || isRestoringConnections || (gcsProfiles && gcsProfiles.some(p => p.loading));
-  const shouldShowLoading = activeLoading && !bypassLoading && (currentView === 'benchmark-browser' || currentView === 'results-store');
+
+  const { overallProgress, itemsFetched, totalItems, activeSourcesList } = useMemo(() => {
+    const tasks = Object.values(loadingTasks || {});
+    if (tasks.length === 0) return { overallProgress: 0, itemsFetched: 0, totalItems: 0, activeSourcesList: [] };
+
+    let loaded = 0;
+    let total = 0;
+    const activeSources = [];
+
+    tasks.forEach(t => {
+      if (t.status === 'loading' || t.status === 'pending') {
+        loaded += (t.loaded || 0);
+        total += (t.total || 0);
+        activeSources.push(t.name);
+      }
+    });
+
+    const progress = total > 0 ? (loaded / total) * 100 : 0;
+    return {
+      overallProgress: Math.min(Math.max(progress, 0), 100),
+      itemsFetched: loaded,
+      totalItems: total,
+      activeSourcesList: activeSources
+    };
+  }, [loadingTasks]);
+
+  const showOverlays = activeLoading && !bypassLoading && (currentView === 'benchmark-browser' || currentView === 'results-store');
 
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-950 w-full overflow-hidden font-sans relative flex flex-col">
         <LeftNavigation currentView={currentView} onNavigate={handleNavigate} isMobileOpen={isMobileNavOpen} />
         <main ref={mainRef} className="flex-1 overflow-y-auto flex flex-col relative w-full h-screen">
-          {shouldShowLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-100 transition-colors space-y-6 pl-28">
-              <Loader className="animate-spin text-blue-500" size={40} />
-              <div className="text-center space-y-2">
-                <div className="text-lg font-semibold text-slate-200">
-                  Loading Benchmark Data...
-                </div>
-                {gcsProgressStats && gcsProgressStats.total > 0 && (
-                  <div className="space-y-2 pt-1 animate-in fade-in duration-300">
-                    <div className="text-xs text-slate-400 font-mono">
-                      Fetched {gcsProgressStats.loaded} of {gcsProgressStats.total} files
-                    </div>
-                    {/* Progress Bar Container */}
-                    <div className="w-56 h-1 bg-slate-800 rounded-full overflow-hidden mx-auto border border-slate-900">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-300 rounded-full" 
-                        style={{ width: `${(gcsProgressStats.loaded / gcsProgressStats.total) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => setBypassLoading(true)}
-                className="text-xs text-slate-500 hover:text-slate-300 underline transition-colors"
-              >
-                Skip Waiting (Data may successfully arrive later)
-              </button>
+          {/* Top Spark Progress Bar */}
+          {showOverlays && (
+            <div className="fixed top-0 left-0 right-0 h-1 bg-slate-900 z-[9999] pointer-events-none">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 transition-all duration-300 shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                style={{ width: `${overallProgress}%` }}
+              />
             </div>
-          ) : (
-            <>
-              {/* Global staged benchmarks banner removed in favor of localized Results Store dashboard alert banner */}
-              {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
-              {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
-              {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
-              {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
-              {currentView === 'results-store' && (
-                <ResultsStore 
-                  onNavigateBack={() => {
-                    const prevView = localStorage.getItem('prism_previous_view') || 'benchmark-browser';
-                    handleNavigate(prevView);
-                  }} 
-                  onNavigate={handleNavigate} 
-                  dashboardState={dashboardState} 
-                  dashboardData={dashboardData} 
+          )}
+
+          <>
+            {/* Global staged benchmarks banner removed in favor of localized Results Store dashboard alert banner */}
+            {currentView === 'home' && <PrismHome onNavigate={handleNavigate} />}
+            {currentView === 'inference-scheduling' && <Milestone1Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
+            {currentView === 'agentic-serving' && <AgenticWorkloadsDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} dashboardData={dashboardData} />}
+            {currentView === 'benchmark-browser' && <Dashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} dashboardState={dashboardState} dashboardData={dashboardData} />}
+            {currentView === 'results-store' && (
+              <ResultsStore 
+                onNavigateBack={() => {
+                  const prevView = localStorage.getItem('prism_previous_view') || 'benchmark-browser';
+                  handleNavigate(prevView);
+                }} 
+                onNavigate={handleNavigate} 
+                dashboardState={dashboardState} 
+                dashboardData={dashboardData} 
+              />
+            )}
+            {currentView === 'submit-benchmarks' && (
+              <SubmitValidationPage 
+                onNavigateBack={() => {
+                  const prevView = localStorage.getItem('prism_previous_view') || 'results-store';
+                  handleNavigate(prevView);
+                }}
+                onNavigate={handleNavigate} 
+                dashboardState={dashboardState} 
+                dashboardData={dashboardData} 
+                initialIntent={navigationParams.intent}
+              />
+            )}
+            {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
+            {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
+            {currentView === 'prefix-cache-offloading' && <PrefixCacheOffloadingDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+            {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
+            {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
+          </>
+
+          {/* Bottom-Right Persistent Status Toast */}
+          {showOverlays && (
+            <div className="fixed bottom-6 right-6 z-[100] w-96 bg-slate-900/95 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-md flex flex-col space-y-3 text-sm select-none border-slate-700/50 animate-in slide-in-from-bottom duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Loader className="w-4 h-4 animate-spin text-blue-500" />
+                  <span className="font-semibold text-slate-200">Fetching {activeSourcesList.length} source{activeSourcesList.length !== 1 ? 's' : ''}</span>
+                </div>
+                <button
+                  onClick={() => setBypassLoading(true)}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                >
+                  Skip Waiting
+                </button>
+              </div>
+              
+              <div className="flex flex-col space-y-1">
+                <span className="text-xs text-slate-400 font-medium">Active Sources:</span>
+                <div className="text-xs font-mono text-blue-400 bg-slate-950/60 p-2 rounded-lg border border-slate-850 max-h-20 overflow-y-auto break-all flex flex-col gap-1">
+                  {activeSourcesList.length > 0 ? (
+                    activeSourcesList.map((src, i) => (
+                      <div key={i} className="truncate">• {src}</div>
+                    ))
+                  ) : (
+                    <div>Initializing...</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+                <span>{totalItems > 0 ? `${totalItems - itemsFetched} out of ${totalItems} items left` : 'Discovering items...'}</span>
+                <span>{Math.round(overallProgress)}%</span>
+              </div>
+
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-950">
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-300 rounded-full" 
+                  style={{ width: `${overallProgress}%` }}
                 />
-              )}
-              {currentView === 'submit-benchmarks' && (
-                <SubmitValidationPage 
-                  onNavigateBack={() => {
-                    const prevView = localStorage.getItem('prism_previous_view') || 'results-store';
-                    handleNavigate(prevView);
-                  }}
-                  onNavigate={handleNavigate} 
-                  dashboardState={dashboardState} 
-                  dashboardData={dashboardData} 
-                  initialIntent={navigationParams.intent}
-                />
-              )}
-              {currentView === 'schema-explorer' && <SchemaExplorer onNavigateBack={() => handleNavigate('home')} />}
-              {currentView === 'workload-catalog' && <WorkloadCatalog onNavigateBack={() => handleNavigate('home')} />}
-              {currentView === 'prefix-cache-offloading' && <PrefixCacheOffloadingDashboard onNavigateBack={() => handleNavigate('home')} onNavigate={handleNavigate} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-              {currentView === 'regressions-analysis' && <RegressionsAnalysisDashboard onNavigateBack={() => handleNavigate('home')} onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} />}
-              {currentView === 'guided-analysis' && <div className="p-8 text-center text-slate-400 mt-20">Guided Analysis Coming Soon... <button onClick={() => handleNavigate('home')} className="underline ml-2 text-indigo-400">Back</button></div>}
-            </>
+              </div>
+            </div>
           )}
         </main>
       </div>
