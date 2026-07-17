@@ -15,6 +15,8 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, AlertTriangle, CheckCircle, Database, FileJson, ArrowRight } from 'lucide-react';
 import { normalizeQualityModelName } from '../utils/qualityParser';
+import { Badge, Checkbox, EmptyState, Input, Select } from './ui';
+import { cn } from '../utils/cn';
 
 const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelectionId }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,7 +73,9 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className="dark fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      {/* The inspector is deliberately dark regardless of app theme; the `dark`
+          class scopes the theme tokens so the ui/ primitives inside follow suit. */}
       <div className="bg-slate-900 border border-slate-700 w-full max-w-6xl h-[90vh] rounded-xl flex flex-col shadow-2xl overflow-hidden">
         
         {/* Header */}
@@ -98,21 +102,21 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
             <div className="p-3 border-b border-slate-700 space-y-3 bg-slate-800/20">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 text-slate-500" size={14} />
-                <input 
-                  type="text" 
-                  placeholder="Search models, files..." 
-                  className="w-full bg-slate-800 border border-slate-700 rounded pl-9 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                <Input
+                  type="text"
+                  placeholder="Search models, files..."
+                  className="pl-9 text-xs"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
               
               <div className="flex gap-2">
-                 <select 
-                    value={filterSource} 
+                 <Select
+                    value={filterSource}
                     onChange={(e) => setFilterSource(e.target.value)}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500 appearance-none"
-                    style={{ backgroundImage: 'none' }} 
+                    className="flex-1 px-2 py-1.5 text-xs appearance-none"
+                    style={{ backgroundImage: 'none' }}
                  >
                      <option value="all">All Sources</option>
                      {Array.from(new Set(data.map(d => d.source_info?.origin || 'Unknown')))
@@ -121,15 +125,13 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                             <option key={source} value={source}>{source}</option>
                         ))
                      }
-                 </select>
+                 </Select>
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={filterProblematic} 
+                <Checkbox
+                  checked={filterProblematic}
                   onChange={(e) => setFilterProblematic(e.target.checked)}
-                  className="rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-0"
                 />
                 <span className="text-xs text-slate-300 font-medium">Show problematic only</span>
               </label>
@@ -144,9 +146,10 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                   <div 
                     key={entry.id}
                     onClick={() => setSelectedEntry(entry)}
-                    className={`p-3 border-b border-slate-700/50 cursor-pointer transition-colors ${
+                    className={cn(
+                      'p-3 border-b border-slate-700/50 cursor-pointer transition-colors',
                       isSelected ? 'bg-blue-900/40 border-l-2 border-l-blue-400' : 'hover:bg-slate-800/50 border-l-2 border-l-transparent'
-                    }`}
+                    )}
                   >
                     <div className="flex items-start justify-between mb-1">
                       <span className="text-xs font-semibold text-slate-200 truncate pr-2" title={entry.metadata?.model_name}>
@@ -155,7 +158,7 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                       {isProblematic && <AlertTriangle size={12} className="text-amber-400 shrink-0" />}
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 mb-1">
-                        <span className="uppercase px-1 rounded bg-slate-800 border border-slate-700">{entry.source_info?.type || 'UNK'}</span>
+                        <Badge tone="neutral" size="xs">{entry.source_info?.type || 'UNK'}</Badge>
                         <span className="truncate max-w-[120px]">{entry.source_info?.origin || 'Unknown'}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px]">
@@ -181,9 +184,9 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
                 <div className="flex items-center justify-between">
                    <h3 className="text-xl font-medium text-white">{selectedEntry.metadata?.model_name || 'Unknown Model'}</h3>
                    <div className="flex gap-2">
-                      <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700 font-mono">
+                      <Badge tone="neutral" size="md" className="font-mono">
                         ID: {selectedEntry.id}
-                      </span>
+                      </Badge>
                    </div>
                 </div>
 
@@ -308,10 +311,11 @@ const DataInspector = ({ data, qualityMetrics, isOpen, onClose, initialSelection
 
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                <Database size={48} className="mb-4 opacity-50" />
-                <p>Select an entry to inspect normalization details</p>
-              </div>
+              <EmptyState
+                className="h-full"
+                icon={<Database size={48} className="opacity-50" />}
+                message="Select an entry to inspect normalization details"
+              />
             )}
           </div>
 

@@ -11,7 +11,9 @@
 // limitations under the License.
 
 import React from "react";
-import { FileJson, X, AlertCircle, Loader } from "lucide-react";
+import { FileJson, X, AlertCircle } from "lucide-react";
+import { Label, Spinner } from "../ui";
+import { cn } from "../../utils/cn";
 
 export const BenchmarkReportPanel = ({
     error, setError, onUpload,
@@ -97,16 +99,17 @@ export const BenchmarkReportPanel = ({
 
                 {/* Drop zone — always visible, additive uploads */}
                 <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Submit Report Files / Folder</label>
+                    <Label className="text-[10px] font-bold uppercase text-slate-500 mb-2">Submit Report Files / Folder</Label>
                     <div
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        className={`border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center text-center transition-colors relative group cursor-pointer ${
+                        className={cn(
+                            'border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center text-center transition-colors relative group cursor-pointer',
                             isDragging
                                 ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20'
                                 : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                        }`}
+                        )}
                     >
                         <input
                             type="file"
@@ -117,9 +120,9 @@ export const BenchmarkReportPanel = ({
                             disabled={loading}
                         />
                         {loading ? (
-                            <Loader size={20} className="animate-spin text-cyan-500 mb-1.5" />
+                            <Spinner className="w-5 h-5 text-cyan-500 dark:text-cyan-500 mb-1.5" />
                         ) : (
-                            <FileJson size={20} className={`mb-1.5 transition-colors ${isDragging ? 'text-cyan-500' : 'text-slate-400 group-hover:text-cyan-500'}`} />
+                            <FileJson size={20} className={cn('mb-1.5 transition-colors', isDragging ? 'text-cyan-500' : 'text-slate-400 group-hover:text-cyan-500')} />
                         )}
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                             {loading ? (

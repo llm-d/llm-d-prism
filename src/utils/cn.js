@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
-export const ChartCard = ({ title, children }) => (
-  <div className="bg-slate-900/50 border border-slate-800/80 backdrop-blur-xl p-6 rounded-2xl shadow-2xl transition-all duration-300">
-    <h3 className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-5 font-mono">{title}</h3>
-    {children}
-  </div>
-);
+// Compose Tailwind class lists with conflict resolution: later classes win
+// (e.g. cn('p-4', condition && 'p-6') keeps only 'p-6' when the condition holds).
+export function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}

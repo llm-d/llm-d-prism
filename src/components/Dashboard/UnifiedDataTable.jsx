@@ -14,6 +14,8 @@
 
 import React from 'react';
 import { RotateCcw, ChevronDown, ChevronUp, Star, Pin } from 'lucide-react';
+import { Badge, Button, EmptyState, Panel } from '../ui';
+import { cn } from '../../utils/cn';
 import { getEffectiveTp, getBucket, getSourceTag, getSubmissionStatusDetails } from '../../utils/dashboardHelpers';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 
@@ -54,26 +56,27 @@ export const UnifiedDataTable = (props) => {
                       
                       <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-500">Only show selected</span>
-                          <button 
+                          <button
                               onClick={() => setShowSelectedOnly(!showSelectedOnly)}
-                              className={`w-8 h-4 rounded-full relative transition-colors ${showSelectedOnly ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                              className={cn('w-8 h-4 rounded-full relative transition-colors', showSelectedOnly ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600')}
                           >
-                              <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${showSelectedOnly ? 'translate-x-4' : 'translate-x-0'}`} />
+                              <div className={cn('absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform', showSelectedOnly ? 'translate-x-4' : 'translate-x-0')} />
                           </button>
                       </div>
                   </div>
 
                   {selectedModels.size > 0 && (
-                      <button
+                      <Button
+                          variant="ghost"
+                          size="xs"
                           onClick={() => setSelectedBenchmarks(new Set())}
-                          className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                       >
                           Clear All
-                      </button>
+                      </Button>
                   )}
             </div>
                           {/* Unified Data Table */}
-              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-xs">
+              <Panel padding="none" className="bg-slate-50 dark:bg-slate-900/50 rounded-lg shadow-none overflow-hidden text-xs">
                    <div className="max-h-[500px] overflow-y-auto">
                        <table className="w-full text-left text-slate-600 dark:text-slate-300">
                            <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium sticky top-0 z-10 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-700/50">
@@ -105,37 +108,39 @@ export const UnifiedDataTable = (props) => {
                            <tbody className="divide-y divide-slate-700/50">
                                {modelStats.length === 0 ? (
                                    <tr>
-                                <td colSpan="100%" className="text-center py-8 text-slate-400">
-                                    <div className="flex flex-col items-center justify-center gap-2">
-                                        <span>No benchmarks match your current filters.</span>
-                                        <button 
-                                            onClick={() => {
-                                                setActiveFilters({
-                                                    models: new Set(),
-                                                    hardware: new Set(),
-                                                    machines: new Set(),
-                                                    precisions: new Set(),
-                                                    tp: new Set(),
-                                                    isl: new Set(),
-                                                    osl: new Set(),
-                                                    ratio: new Set(),
-                                                    acc_count: new Set(),
-                                                    modelServer: new Set(),
-                                                    useCase: new Set(),
-                                                    servingStack: new Set(),
-                                                    optimizations: new Set(),
-                                                    components: new Set(),
-                                                    pdRatio: new Set(),
-                                                    origins: new Set()
-                                                });
-                                                setShowSelectedOnly(false);
-                                                
-                                            }}
-                                            className="text-blue-400 hover:text-blue-300 hover:underline text-sm flex items-center gap-1"
-                                        >
-                                            <RotateCcw size={12} /> Clear all filters
-                                        </button>
-                                    </div>
+                                <td colSpan="100%">
+                                    <EmptyState
+                                        message="No benchmarks match your current filters."
+                                        action={
+                                            <button
+                                                onClick={() => {
+                                                    setActiveFilters({
+                                                        models: new Set(),
+                                                        hardware: new Set(),
+                                                        machines: new Set(),
+                                                        precisions: new Set(),
+                                                        tp: new Set(),
+                                                        isl: new Set(),
+                                                        osl: new Set(),
+                                                        ratio: new Set(),
+                                                        acc_count: new Set(),
+                                                        modelServer: new Set(),
+                                                        useCase: new Set(),
+                                                        servingStack: new Set(),
+                                                        optimizations: new Set(),
+                                                        components: new Set(),
+                                                        pdRatio: new Set(),
+                                                        origins: new Set()
+                                                    });
+                                                    setShowSelectedOnly(false);
+
+                                                }}
+                                                className="text-blue-400 hover:text-blue-300 hover:underline text-sm flex items-center gap-1"
+                                            >
+                                                <RotateCcw size={12} /> Clear all filters
+                                            </button>
+                                        }
+                                    />
                                 </td>
                             </tr>
                                ) : (
@@ -162,16 +167,21 @@ export const UnifiedDataTable = (props) => {
                                       return (
                                        <React.Fragment key={stat.benchmarkKey || stat.model}>
                                        <tr
-                                           className={`transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-100 dark:border-slate-800/50 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''} ${stat.benchmarkKey === baselineBenchmarkKey ? 'ring-1 ring-inset ring-cyan-400/40' : ''}`}
+                                           className={cn(
+                                               'transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-100 dark:border-slate-800/50',
+                                               isSelected && 'bg-blue-50 dark:bg-blue-900/10',
+                                               stat.benchmarkKey === baselineBenchmarkKey && 'ring-1 ring-inset ring-cyan-400/40'
+                                           )}
                                            onClick={(e) => {
                                                // Prevent toggling if clicking specific action buttons if any
                                                toggleBenchmark(stat.benchmarkKey);
                                            }}
                                        >
                                            <td className="px-3 py-2 text-center">
-                                               <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all mx-auto ${
+                                               <div className={cn(
+                                                   'w-3.5 h-3.5 rounded border flex items-center justify-center transition-all mx-auto',
                                                    isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
-                                               }`}>
+                                               )}>
                                                    {isSelected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
                                                </div>
                                            </td>
@@ -185,13 +195,14 @@ export const UnifiedDataTable = (props) => {
                                                                 toggleBaseline(stat.benchmarkKey);
                                                             }}
                                                             title={isBaseline ? 'Clear baseline' : 'Set as baseline'}
-                                                            className={`p-0.5 rounded transition-colors ${
+                                                            className={cn(
+                                                                'p-0.5 rounded transition-colors',
                                                                 isBaseline
                                                                     ? 'text-cyan-500 dark:text-cyan-400'
                                                                     : 'text-slate-300 dark:text-slate-600 hover:text-cyan-500 dark:hover:text-cyan-400'
-                                                            }`}
+                                                            )}
                                                         >
-                                                            <Pin size={11} className={`transition-transform duration-300 ${isBaseline ? 'rotate-[45deg]' : '-rotate-45 opacity-60'}`} fill={isBaseline ? 'currentColor' : 'none'} />
+                                                            <Pin size={11} className={cn('transition-transform duration-300', isBaseline ? 'rotate-[45deg]' : '-rotate-45 opacity-60')} fill={isBaseline ? 'currentColor' : 'none'} />
                                                         </button>
                                                     );
                                                 })()}
@@ -287,23 +298,23 @@ export const UnifiedDataTable = (props) => {
                                                         const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
                                                         if (isMine) {
                                                             return (
-                                                                <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                <Badge tone="success" size="sm" className="normal-case tracking-normal font-semibold">
                                                                     Yours
-                                                                </span>
+                                                                </Badge>
                                                             );
                                                         }
                                                         if (isResultsStore) {
                                                             return (
-                                                                <span className="text-[10px] bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/50 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                <Badge tone="info" size="sm" className="normal-case tracking-normal font-semibold">
                                                                     Community
-                                                                </span>
+                                                                </Badge>
                                                             );
                                                         }
                                                         return null;
                                                     })()}
-                                                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 truncate max-w-[100px] inline-block font-semibold" title={benchmarkData[0]?.source_info?.origin || benchmarkData[0]?.source}>
-                                                        {getSourceTag(benchmarkData[0])}
-                                                    </span>
+                                                    <Badge tone="neutral" size="sm" className="normal-case tracking-normal font-semibold max-w-[100px]" title={benchmarkData[0]?.source_info?.origin || benchmarkData[0]?.source}>
+                                                        <span className="truncate">{getSourceTag(benchmarkData[0])}</span>
+                                                    </Badge>
                                                 </div>
                                             </td>
                                        </tr>
@@ -345,7 +356,7 @@ export const UnifiedDataTable = (props) => {
                                                                       {(() => {
                                                                           const details = getSubmissionStatusDetails(benchmarkData[0]?.source_info?.submission_state);
                                                                           return (
-                                                                              <span className={`px-1.5 py-0.5 rounded border text-[11px] font-bold ${details.bg} ${details.text} ${details.border}`}>
+                                                                              <span className={cn('px-1.5 py-0.5 rounded border text-[11px] font-bold', details.bg, details.text, details.border)}>
                                                                                   {details.label}
                                                                               </span>
                                                                           );
@@ -444,7 +455,7 @@ export const UnifiedDataTable = (props) => {
                            </tbody>
                        </table>
                    </div>
-              </div>
+              </Panel>
         </div>
     );
 };

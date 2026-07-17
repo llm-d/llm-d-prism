@@ -19,6 +19,7 @@ import {
     Blocks,
     Server
 } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 const MENU_GROUPS = [
     {
@@ -71,7 +72,7 @@ const ITEM_THEMES = {
         indicator: 'bg-gradient-to-b from-cyan-400 to-blue-500 shadow-[0_0_8px_rgba(6,182,212,0.6)]'
     },
     'regressions-analysis': {
-        activeBg: 'bg-gradient-to-r from-rose-950/20 via-red-950/10 to-slate-950/20 border-rose-500/20 text-rose-350',
+        activeBg: 'bg-gradient-to-r from-rose-950/20 via-red-950/10 to-slate-950/20 border-rose-500/20 text-rose-300',
         activeIcon: 'bg-gradient-to-br from-rose-500 to-red-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.35)]',
         indicator: 'bg-gradient-to-b from-rose-400 to-red-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
     },
@@ -114,7 +115,12 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
     })).filter(group => group.items.length > 0);
 
     return (
-        <aside className={`fixed top-20 left-4 h-[calc(100vh-6rem)] ${isMobileOpen ? 'flex' : 'hidden md:flex'} flex-col border border-slate-900/65 bg-slate-950/50 backdrop-blur-xl rounded-3xl transition-all duration-300 z-50 shadow-[0_20px_50px_rgba(0,0,0,0.5)] ${isExpanded ? 'w-80' : 'w-20'}`}>
+        <aside className={cn(
+            'fixed top-20 left-4 h-[calc(100vh-6rem)]',
+            isMobileOpen ? 'flex' : 'hidden md:flex',
+            'flex-col border border-slate-900/65 bg-slate-950/50 backdrop-blur-xl rounded-3xl transition-all duration-300 z-50 shadow-[0_20px_50px_rgba(0,0,0,0.5)]',
+            isExpanded ? 'w-80' : 'w-20'
+        )}>
 
 
 
@@ -142,28 +148,30 @@ export default function LeftNavigation({ currentView, onNavigate, isMobileOpen }
                                         onClick={() => handleItemClick(item.view, item.disabled)}
                                         aria-disabled={item.disabled}
                                         title={!isExpanded ? item.label : undefined}
-                                        className={`group relative flex items-center gap-4 px-3 py-2.5 rounded-2xl transition-all duration-300 w-full text-left font-normal border ${
-                                            isActive 
-                                                ? (ITEM_THEMES[item.view]?.activeBg || 'bg-gradient-to-r from-cyan-950/20 via-blue-950/10 to-slate-950/20 border-cyan-500/20 text-cyan-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.02)]') 
+                                        className={cn(
+                                            'group relative flex items-center gap-4 px-3 py-2.5 rounded-2xl transition-all duration-300 w-full text-left font-normal border',
+                                            isActive
+                                                ? (ITEM_THEMES[item.view]?.activeBg || 'bg-gradient-to-r from-cyan-950/20 via-blue-950/10 to-slate-950/20 border-cyan-500/20 text-cyan-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.02)]')
                                                 : 'border-transparent text-slate-400 hover:bg-slate-900/30 hover:text-white cursor-pointer'
-                                        }`}
+                                        )}
                                     >
                                         {/* Active Side Indicator */}
                                         {isActive && (
-                                            <div className={`absolute left-1 top-3.5 bottom-3.5 w-1 rounded-full ${ITEM_THEMES[item.view]?.indicator || 'bg-gradient-to-b from-cyan-400 to-blue-500'}`} />
+                                            <div className={cn('absolute left-1 top-3.5 bottom-3.5 w-1 rounded-full', ITEM_THEMES[item.view]?.indicator || 'bg-gradient-to-b from-cyan-400 to-blue-500')} />
                                         )}
 
-                                        <div className={`p-1.5 rounded-xl transition-all duration-300 ${
-                                            isActive 
-                                                ? (ITEM_THEMES[item.view]?.activeIcon || 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.35)]') 
+                                        <div className={cn(
+                                            'p-1.5 rounded-xl transition-all duration-300',
+                                            isActive
+                                                ? (ITEM_THEMES[item.view]?.activeIcon || 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.35)]')
                                                 : 'bg-transparent text-slate-400 group-hover:text-slate-200'
-                                        }`}>
+                                        )}>
                                             <Icon className="w-5 h-5 shrink-0" />
                                         </div>
 
                                         {isExpanded && (
                                             <div className="flex flex-1 items-center justify-between truncate">
-                                                <span className={`text-sm tracking-wide truncate ${isActive ? 'text-white font-medium' : 'font-normal'}`}>
+                                                <span className={cn('text-sm tracking-wide truncate', isActive ? 'text-white font-medium' : 'font-normal')}>
                                                     {item.label}
                                                 </span>
 

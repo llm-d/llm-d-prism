@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import React from "react";
-import { Loader, FileJson, Plus, Check } from "lucide-react";
+import { FileJson, Plus, Check } from "lucide-react";
+import { Button, Input, Label, Spinner, Textarea } from "../ui";
 
 export const LPGPanel = ({
     lpgError, handleLpgFileUpload, lpgLoading, lpgPasteText, setLpgPasteText,
@@ -86,16 +87,16 @@ export const LPGPanel = ({
                 )}
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Load from GCS</label>
+                    <Label className="text-[10px] font-bold uppercase text-slate-500 mb-0">Load from GCS</Label>
                     <div className="flex flex-col gap-2">
                         {/* GCS Bucket Load */}
                         <div className="space-y-2">
-                            <input
+                            <Input
                                 type="text"
                                 placeholder="gs://bucket-name/optional/folder"
                                 value={gcsInput}
                                 onChange={(e) => setGcsInput(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none font-mono"
+                                className="text-xs font-mono"
                                 disabled={lpgLoading}
                                 onBlur={(e) => {
                                     let val = e.target.value.trim();
@@ -108,14 +109,17 @@ export const LPGPanel = ({
                                 The bucket must be public or accessible by <span className="font-mono text-[9px] bg-slate-200 dark:bg-slate-700 px-1 rounded">{serviceAccount}</span> (needs Storage Object Viewer).
                             </div>
                             {!gcsScanResult ? (
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="w-full"
                                     onClick={performScan}
                                     disabled={lpgLoading || !gcsInput.trim()}
-                                    className={`w-full text-xs font-semibold px-4 py-2 rounded transition-colors shadow-sm flex items-center justify-center gap-2 ${gcsInput.trim() && !lpgLoading ? 'bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-white text-white dark:text-slate-900' : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed'}`}
+                                    isLoading={lpgLoading}
                                 >
-                                    {lpgLoading ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                                    {!lpgLoading && <Plus size={12} />}
                                     Scan Bucket
-                                </button>
+                                </Button>
                             ) : (
                                 <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded p-3 space-y-3 mt-2">
                                     <div className="flex items-center justify-between text-xs">
@@ -134,7 +138,7 @@ export const LPGPanel = ({
                                             disabled={lpgLoading || isLoadingRecent || isLoadingAll}
                                             className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold px-2 py-1.5 rounded transition-colors shadow-sm flex items-center justify-center gap-1"
                                         >
-                                            {isLoadingAll ? <Loader size={12} className="animate-spin" /> : null}
+                                            {isLoadingAll ? <Spinner className="w-3 h-3 text-white dark:text-white" /> : null}
                                             Load Folder
                                         </button>
                                     ) : (
@@ -144,17 +148,19 @@ export const LPGPanel = ({
                                                 disabled={lpgLoading || isLoadingRecent || isLoadingAll}
                                                 className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold px-2 py-1.5 rounded transition-colors shadow-sm flex items-center justify-center gap-1"
                                             >
-                                                {isLoadingRecent ? <Loader size={12} className="animate-spin" /> : null}
+                                                {isLoadingRecent ? <Spinner className="w-3 h-3 text-white dark:text-white" /> : null}
                                                 Load Most Recent (1)
                                             </button>
-                                            <button
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                className="w-full"
                                                 onClick={() => performLoad(gcsScanResult.folderNames, false)}
                                                 disabled={lpgLoading || isLoadingRecent || isLoadingAll}
-                                                className="w-full bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-semibold px-2 py-1.5 rounded transition-colors shadow-sm flex items-center justify-center gap-1"
+                                                isLoading={isLoadingAll}
                                             >
-                                                {isLoadingAll ? <Loader size={12} className="animate-spin" /> : null}
                                                 Load All
-                                            </button>
+                                            </Button>
                                         </div>
                                     )}
                                 </div>
@@ -180,7 +186,7 @@ export const LPGPanel = ({
                                     />
                                     {lpgLoading ? (
                                         <div className="flex flex-col items-center gap-2">
-                                            <Loader size={20} className="animate-spin text-blue-500" />
+                                            <Spinner className="w-5 h-5 text-blue-500 dark:text-blue-500" />
                                             <span className="text-xs text-slate-500">Parsing logs...</span>
                                         </div>
                                     ) : (
@@ -201,11 +207,11 @@ export const LPGPanel = ({
                                     <div className="absolute inset-x-0 top-0 flex items-center justify-center -mt-2">
                                         <span className="bg-slate-100 dark:bg-slate-800/50 px-2 text-[10px] text-slate-400 uppercase">or paste text</span>
                                     </div>
-                                    <textarea
+                                    <Textarea
                                         placeholder="Paste LPG log output here..."
                                         value={lpgPasteText}
                                         onChange={(e) => setLpgPasteText(e.target.value)}
-                                        className="w-full h-24 mt-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none resize-none font-mono"
+                                        className="h-24 mt-3 resize-none"
                                         disabled={lpgLoading}
                                     />
                                     {lpgPasteText && lpgPasteText.trim() !== '' && (
@@ -243,7 +249,7 @@ export const LPGPanel = ({
                                             disabled={lpgLoading}
                                             className="mt-2 w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded transition-colors shadow-sm flex items-center justify-center gap-2"
                                         >
-                                            {lpgLoading ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                                            {lpgLoading ? <Spinner className="w-3 h-3 text-white dark:text-white" /> : <Plus size={12} />}
                                             Parse Pasted Text
                                         </button>
                                     )}

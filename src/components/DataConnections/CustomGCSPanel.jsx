@@ -13,8 +13,10 @@
 // limitations under the License.
 
 import React from "react";
-import { ChevronDown, ChevronUp, Cloud, Eye, EyeOff, Trash2, RefreshCw, Loader, Plus, Database } from "lucide-react";
+import { ChevronDown, ChevronUp, Cloud, Eye, EyeOff, Trash2, RefreshCw, Plus, Database } from "lucide-react";
 import { getSourceTypeStyle } from "../../utils/dashboardHelpers";
+import { Badge, Button, Input, Panel, Spinner, StatusChip, ToggleGroup } from "../ui";
+import { cn } from "../../utils/cn";
 
 export const CustomGCSPanel = ({
     connectionType, setConnectionType, availableSources, gcsProfiles, 
@@ -31,7 +33,7 @@ export const CustomGCSPanel = ({
              >
                 <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-2">
                     Custom Connections 
-                    <span className="bg-slate-200 dark:bg-slate-800 text-slate-500 rounded-full px-1.5 py-0.5 text-[9px]">
+                    <Badge tone="neutral" size="xs" className="rounded-full">
                         {(() => {
                             return [...availableSources].filter(s => {
                                 if (s.startsWith('giq:')) return false;
@@ -39,7 +41,7 @@ export const CustomGCSPanel = ({
                                 return true;
                             }).length;
                         })()}
-                    </span>
+                    </Badge>
                 </h3>
                 {connectionType === 'custom_hidden' ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronUp size={14} className="text-slate-400" />}
              </div>
@@ -65,7 +67,7 @@ export const CustomGCSPanel = ({
                              if (!aActive && bActive) return 1;
                              return 0;
                          }).map(profile => (
-                            <div key={profile.bucketName} className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-200 group">
+                            <Panel key={profile.bucketName} padding="none" className="rounded-lg shadow-sm transition-all duration-200 group">
                                  <div className="p-4">
                                      <div className="flex justify-between items-start mb-2">
                                          <div className="flex items-center gap-2">
@@ -75,16 +77,16 @@ export const CustomGCSPanel = ({
                                               <div>
                                                   <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
                                                   <div className="flex items-center gap-1">
-                                                       <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom GCS</span>
+                                                       <Badge tone="neutral" size="sm">Custom GCS</Badge>
                                                        {(() => {
                                                            const style = getSourceTypeStyle('Cloud');
                                                            return (
-                                                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                               <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', style.bg, style.text, style.border)}>
                                                                    Cloud
                                                                </span>
                                                            );
                                                        })()}
-                                                       <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
+                                                       <StatusChip status="active" className="normal-case tracking-normal" />
                                                   </div>
                                               </div>
                                          </div>
@@ -101,9 +103,12 @@ export const CustomGCSPanel = ({
                                                 }
                                                 setSelectedSources(newSet);
                                             }}
-                                            className={`p-1.5 rounded transition-colors ${selectedSources.has(`gcs:${profile.bucketName}`) 
-                                                ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20' 
-                                                : 'text-slate-300 dark:text-slate-600 hover:text-slate-500'}`}
+                                            className={cn(
+                                                'p-1.5 rounded transition-colors',
+                                                selectedSources.has(`gcs:${profile.bucketName}`)
+                                                    ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                                    : 'text-slate-300 dark:text-slate-600 hover:text-slate-500'
+                                            )}
                                             title={selectedSources.has(`gcs:${profile.bucketName}`) ? "Hide Data" : "Show Data"}
                                         >
                                             {selectedSources.has(`gcs:${profile.bucketName}`) ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -135,7 +140,7 @@ export const CustomGCSPanel = ({
                                           <span className="text-[10px] text-slate-400">
                                               {profile.loading ? (
                                                   <div className="flex items-center gap-1.5 text-blue-500">
-                                                      <Loader size={10} className="animate-spin" />
+                                                      <Spinner className="w-2.5 h-2.5 text-blue-500 dark:text-blue-500" />
                                                       <span>Restoring...</span>
                                                   </div>
                                               ) : (
@@ -144,7 +149,7 @@ export const CustomGCSPanel = ({
                                           </span>
                                       </div>
                                  </div>
-                             </div>
+                             </Panel>
                          ))}
 
                          {gcsProfiles.filter(p => p.type === 'aws').sort((a, b) => {
@@ -154,7 +159,7 @@ export const CustomGCSPanel = ({
                              if (!aActive && bActive) return 1;
                              return 0;
                          }).map(profile => (
-                            <div key={profile.bucketName} className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-200 group">
+                            <Panel key={profile.bucketName} padding="none" className="rounded-lg shadow-sm transition-all duration-200 group">
                                  <div className="p-4">
                                      <div className="flex justify-between items-start mb-2">
                                          <div className="flex items-center gap-2">
@@ -164,16 +169,16 @@ export const CustomGCSPanel = ({
                                               <div>
                                                   <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.alias || profile.bucketName}</h4>
                                                   <div className="flex items-center gap-1">
-                                                       <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">Custom AWS</span>
+                                                       <Badge tone="neutral" size="sm">Custom AWS</Badge>
                                                        {(() => {
                                                            const style = getSourceTypeStyle('Cloud');
                                                            return (
-                                                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                               <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', style.bg, style.text, style.border)}>
                                                                    Cloud
                                                                </span>
                                                            );
                                                        })()}
-                                                       <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
+                                                       <StatusChip status="active" className="normal-case tracking-normal" />
                                                   </div>
                                               </div>
                                          </div>
@@ -190,9 +195,12 @@ export const CustomGCSPanel = ({
                                                 }
                                                 setSelectedSources(newSet);
                                             }}
-                                            className={`p-1.5 rounded transition-colors ${selectedSources.has(`aws:${profile.bucketName}`) 
-                                                ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20' 
-                                                : 'text-slate-300 dark:text-slate-600 hover:text-slate-500'}`}
+                                            className={cn(
+                                                'p-1.5 rounded transition-colors',
+                                                selectedSources.has(`aws:${profile.bucketName}`)
+                                                    ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+                                                    : 'text-slate-300 dark:text-slate-600 hover:text-slate-500'
+                                            )}
                                             title={selectedSources.has(`aws:${profile.bucketName}`) ? "Hide Data" : "Show Data"}
                                         >
                                             {selectedSources.has(`aws:${profile.bucketName}`) ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -224,7 +232,7 @@ export const CustomGCSPanel = ({
                                           <span className="text-[10px] text-slate-400">
                                               {profile.loading ? (
                                                   <div className="flex items-center gap-1.5 text-orange-500">
-                                                      <Loader size={10} className="animate-spin" />
+                                                      <Spinner className="w-2.5 h-2.5 text-orange-500 dark:text-orange-500" />
                                                       <span>Restoring...</span>
                                                   </div>
                                               ) : (
@@ -233,70 +241,81 @@ export const CustomGCSPanel = ({
                                           </span>
                                       </div>
                                  </div>
-                             </div>
+                             </Panel>
                          ))}
                      </div>
 
                      {/* Custom Add Form */}
                      <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 space-y-3">
                          <h4 className="text-[10px] font-bold text-slate-500 uppercase">Add New Source</h4>
-                         <div className="flex gap-2 p-1 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-xs">
-                              <button onClick={() => setConnectionType('gcs')} className={`flex-1 py-1 rounded text-center transition-colors ${connectionType === 'gcs' ? 'bg-slate-200 dark:bg-slate-700 font-medium' : 'text-slate-500'}`}>GCS Bucket</button>
-                              <button onClick={() => setConnectionType('aws')} className={`flex-1 py-1 rounded text-center transition-colors ${connectionType === 'aws' ? 'bg-slate-200 dark:bg-slate-700 font-medium' : 'text-slate-500'}`}>AWS Bucket</button>
-                         </div>
+                         <ToggleGroup
+                              fullWidth
+                              options={[
+                                  { value: 'gcs', label: 'GCS Bucket' },
+                                  { value: 'aws', label: 'AWS Bucket' },
+                              ]}
+                              value={connectionType}
+                              onChange={setConnectionType}
+                         />
 
                          {connectionType === 'gcs' && (
                              <div className="space-y-2">
-                                 <input 
-                                    type="text" 
-                                    placeholder="Source Name (Optional)" 
+                                 <Input
+                                    type="text"
+                                    placeholder="Source Name (Optional)"
                                     value={newBucketAlias}
                                     onChange={(e) => setNewBucketAlias(e.target.value)}
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                    className="text-xs"
                                  />
-                                 <input 
-                                    type="text" 
-                                    placeholder="gs://bucket-name" 
+                                 <Input
+                                    type="text"
+                                    placeholder="gs://bucket-name"
                                     value={newBucketName}
                                     onChange={(e) => setNewBucketName(e.target.value)}
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                    className="text-xs"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddBucket(newBucketAlias)}
                                  />
-                                 <button 
+                                 <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="w-full"
                                       onClick={() => handleAddBucket(newBucketAlias)}
                                       disabled={gcsLoading || !newBucketName}
-                                      className="w-full bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-3 py-2 rounded text-xs font-medium flex items-center justify-center gap-2"
+                                      isLoading={gcsLoading}
                                   >
-                                      {gcsLoading ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                                      {!gcsLoading && <Plus size={12} />}
                                       Add Bucket
-                                  </button>
+                                  </Button>
                              </div>
                          )}
                           {connectionType === 'aws' && (
                               <div className="space-y-2">
-                                  <input 
-                                     type="text" 
-                                     placeholder="Source Name (Optional)" 
+                                  <Input
+                                     type="text"
+                                     placeholder="Source Name (Optional)"
                                      value={newBucketAlias}
                                      onChange={(e) => setNewBucketAlias(e.target.value)}
-                                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                     className="text-xs"
                                   />
-                                  <input 
-                                     type="text" 
-                                     placeholder="s3-bucket-name" 
+                                  <Input
+                                     type="text"
+                                     placeholder="s3-bucket-name"
                                      value={newBucketName}
                                      onChange={(e) => setNewBucketName(e.target.value)}
-                                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                     className="text-xs"
                                      onKeyDown={(e) => e.key === 'Enter' && handleAddAWSBucket(newBucketAlias)}
                                   />
-                                  <button 
+                                  <Button
+                                       variant="secondary"
+                                       size="sm"
+                                       className="w-full"
                                        onClick={() => handleAddAWSBucket(newBucketAlias)}
                                        disabled={gcsLoading || !newBucketName}
-                                       className="w-full bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-3 py-2 rounded text-xs font-medium flex items-center justify-center gap-2"
+                                       isLoading={gcsLoading}
                                    >
-                                       {gcsLoading ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                                       {!gcsLoading && <Plus size={12} />}
                                        Add Bucket
-                                   </button>
+                                   </Button>
                               </div>
                           )}
                      </div>

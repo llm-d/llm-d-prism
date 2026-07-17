@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Zap, BarChart2, ArrowRight, Server, Cpu, CheckCircle, Shield, TrendingUp, HelpCircle, FileCode, Link, Database, Sliders, Layers, ChevronDown, ChevronUp, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 const PrismHome = ({ onNavigate }) => {
     const [currentRoadmapIndex, setCurrentRoadmapIndex] = useState(0);
@@ -302,10 +303,11 @@ const PrismHome = ({ onNavigate }) => {
                                             }}
                                             className="p-1 cursor-pointer flex items-center justify-center group"
                                         >
-                                            <div 
-                                                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                                            <div
+                                                className={cn(
+                                                    'w-1.5 h-1.5 rounded-full transition-all duration-300',
                                                     idx === currentRoadmapIndex ? 'bg-purple-400 w-3' : 'bg-slate-700 group-hover:bg-slate-550'
-                                                }`}
+                                                )}
                                             />
                                         </button>
                                     ))}

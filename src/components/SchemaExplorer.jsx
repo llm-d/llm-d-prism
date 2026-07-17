@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowLeft, MessageCircle, Share2 } from 'lucide-react';
+import { Button } from './ui';
 
 const SchemaExplorer = ({ onNavigateBack }) => {
     return (
@@ -36,12 +37,14 @@ const SchemaExplorer = ({ onNavigateBack }) => {
                     >
                         <MessageCircle className="w-4 h-4 mr-2" /> Contact us
                     </a>
-                    <button 
-                        className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-500 bg-slate-900/10 cursor-not-allowed flex items-center border border-slate-800/40 relative"
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="relative"
                         disabled
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share view 
-                    </button>
+                        <Share2 className="w-4 h-4" /> Share view
+                    </Button>
                 </div>
             </header>
 

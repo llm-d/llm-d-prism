@@ -13,11 +13,13 @@
 // limitations under the License.
 
 import React, { useMemo, useCallback } from 'react';
-import { Database, Eye, ArrowLeft, ArrowRight, MessageCircle, X, Loader, HelpCircle, Upload, UploadCloud, CheckCircle, Send, AlertCircle, Github, Shield, LogOut, ChevronDown } from 'lucide-react';
+import { Database, Eye, ArrowLeft, ArrowRight, MessageCircle, X, HelpCircle, Upload, UploadCloud, CheckCircle, Send, AlertCircle, Github, Shield, LogOut, ChevronDown } from 'lucide-react';
 import { FilterPanel } from './ManageBenchmarks/FilterPanel';
 import { UnifiedDataTable } from './ManageBenchmarks/UnifiedDataTable';
 import { INTEGRATIONS, getSourceTag, getBenchmarkKey, getBucket, getRatioType, getAcceleratorCount, getEffectiveTp, sortBuckets } from '../utils/dashboardHelpers';
 import { useGitHubAuth } from '../hooks/useGitHubAuth.js';
+import { Button, Modal, Spinner, Checkbox } from './ui';
+import { cn } from '../utils/cn';
 
 
 
@@ -730,9 +732,11 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             {/* Toast Stack */}
             <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
                 {toasts.map(t => (
-                    <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all animate-in slide-in-from-right duration-300 flex items-center justify-between gap-4 ${t.type === 'error' ? 'bg-red-500/90 backdrop-blur' :
-                        t.type === 'success' ? 'bg-green-500/90 backdrop-blur' : 'bg-blue-600/90 backdrop-blur'
-                        }`}>
+                    <div key={t.id} className={cn(
+                        'px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all animate-in slide-in-from-right duration-300 flex items-center justify-between gap-4',
+                        t.type === 'error' ? 'bg-red-500/90 backdrop-blur' :
+                            t.type === 'success' ? 'bg-green-500/90 backdrop-blur' : 'bg-blue-600/90 backdrop-blur'
+                    )}>
                         <span>{t.message}</span>
                         <button onClick={() => removeToast(t.id)} className="hover:bg-white/20 rounded-full p-1 opacity-75 hover:opacity-100">
                             <X size={14} />
@@ -765,35 +769,41 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                     {/* User Auth Section */}
                     {authLoading ? (
                         <div className="flex items-center justify-center w-8 h-8 rounded-full border border-slate-850 bg-slate-900/40">
-                            <Loader className="w-4 h-4 animate-spin text-slate-400" />
+                            <Spinner size="sm" className="text-slate-400 dark:text-slate-400" />
                         </div>
                     ) : !isConfigured ? (
                         <div className="relative group/tooltip inline-block">
-                            <button
+                            <Button
+                                variant="secondary"
+                                size="sm"
                                 disabled
-                                className="px-3.5 py-2 text-xs font-semibold rounded-xl text-slate-500 bg-slate-900/20 flex items-center gap-2 border border-slate-900 cursor-not-allowed opacity-50 select-none"
+                                className="gap-2 select-none disabled:pointer-events-auto disabled:cursor-not-allowed"
                             >
                                 <Github size={14} />
                                 Sign in with GitHub
-                            </button>
+                            </Button>
                             <div className="absolute right-0 top-full mt-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-200 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center">
                                 GitHub Login is not configured yet.
                             </div>
                         </div>
                     ) : !isAuthenticated ? (
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={login}
-                            className="px-3.5 py-2 text-xs font-semibold rounded-xl text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center gap-2 border border-slate-800 hover:border-slate-700 cursor-pointer shadow-sm hover:text-white"
+                            className="gap-2"
                         >
                             <Github size={14} />
                             Sign in with GitHub
-                        </button>
+                        </Button>
                     ) : (
                         <div className="relative" ref={userDropdownRef}>
-                            <button
+                            <Button
                                 id="user-profile-badge"
+                                variant="secondary"
+                                size="sm"
                                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900/80 hover:border-slate-700 transition-all cursor-pointer select-none text-slate-300 hover:text-white"
+                                className="gap-2 select-none"
                             >
                                 {user?.avatarUrl ? (
                                     <img 
@@ -807,8 +817,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                                     </div>
                                 )}
                                 <span className="text-xs font-semibold truncate max-w-[120px]">{user?.username}</span>
-                                <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${showUserDropdown ? 'rotate-180' : ''}`} />
-                            </button>
+                                <ChevronDown size={14} className={cn('text-slate-400 transition-transform duration-200', showUserDropdown && 'rotate-180')} />
+                            </Button>
 
                             {showUserDropdown && (
                                 <div className="absolute right-0 mt-2 w-48 bg-slate-950 border border-slate-900 rounded-xl shadow-xl z-[100] py-1 animate-in fade-in slide-in-from-top-2 duration-150">
@@ -891,145 +901,140 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             </main>
 
             {/* Post-Upload Guided Action Dialog */}
-            {postUploadType && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-                    {/* Backdrop */}
-                    <div 
-                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" 
-                        onClick={handleCloseDialog}
-                    />
-                    {/* Modal Container */}
-                    <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl z-10 flex flex-col space-y-4 text-left overflow-hidden bg-gradient-to-b from-[#0e172a] to-[#090d16] animate-in zoom-in-95 duration-200">
-                        {/* Header Glowing Accent */}
-                        <div className={`absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r ${
-                            postUploadType === 'staged' 
-                            ? 'from-amber-500 via-orange-400 to-yellow-500' 
-                            : 'from-emerald-500 via-cyan-400 to-blue-500'
-                        }`} />
-
-                        {/* Close Button */}
-                        <button 
-                            onClick={handleCloseDialog}
-                            className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                        >
-                            <X size={18} />
-                        </button>
-
-                        {/* Icon and Title */}
-                        <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg ${
-                                postUploadType === 'staged' 
-                                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 shadow-amber-500/5' 
+            <Modal
+                isOpen={!!postUploadType}
+                onClose={handleCloseDialog}
+                size="md"
+                className="overflow-hidden bg-gradient-to-b from-[#0e172a] to-[#090d16]"
+                title={(
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            'w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg',
+                            postUploadType === 'staged'
+                                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400 shadow-amber-500/5'
                                 : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-emerald-500/5'
-                            }`}>
-                                {postUploadType === 'staged' ? <UploadCloud size={20} /> : <CheckCircle size={20} />}
-                            </div>
-                            <div>
-                                 <h3 className="text-lg font-bold text-white tracking-wide">
-                                    {postUploadType === 'staged' ? 'Runs Staged Successfully!' : 'Benchmark Submitted for Review!'}
-                                </h3>
-                                <span className="text-[10px] text-slate-500">
-                                    {postUploadType === 'staged' ? 'LOCAL SESSION STAGING' : 'SUBMISSION QUEUED'}
-                                </span>
-                            </div>
+                        )}>
+                            {postUploadType === 'staged' ? <UploadCloud size={20} /> : <CheckCircle size={20} />}
                         </div>
-
-                        {/* Description */}
-                        <p className="text-xs text-slate-300 leading-relaxed pt-1">
-                            {postUploadType === 'staged' 
-                                ? "Your benchmark files have been validated and staged locally in your browser session. They are currently visible only to you and ready for analysis."
-                                : "Your runs have been successfully posted to the validation server and are currently in the maintainer review queue. A public preview is available in your catalog."
-                            }
-                        </p>
-
-                        {/* Steps / Guide */}
-                        <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 space-y-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 border-b border-slate-900 pb-1.5">
-                                Recommended Next Steps
+                        <div>
+                            <div className="text-lg font-bold text-white tracking-wide">
+                                {postUploadType === 'staged' ? 'Runs Staged Successfully!' : 'Benchmark Submitted for Review!'}
                             </div>
-                            
-                            {postUploadType === 'staged' ? (
-                                <div className="space-y-3.5">
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-200">Compare & Inspect</span>
-                                            <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                                                Select the staged run in the table (marked in <span className="text-amber-400 font-medium">amber</span>) along with public runs, and click <span className="text-cyan-400 font-medium">Compare & Inspect</span> to compare their performance curves.
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-200">Add Metadata & Manifests</span>
-                                            <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                                                Expand the run row in the table, verify details, and upload manifests or evidence files to make your benchmark review-ready.
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-200">Publish Globally</span>
-                                            <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                                                When you're ready to share the benchmarks, select them in the table and click <span className="text-cyan-400 font-medium">Compare & Publish</span> in the action bar or bottom dock to submit them for review.
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-3.5">
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-200">Track Ingestion Status</span>
-                                            <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                                                Your run is listed as <span className="text-purple-400 font-semibold">Under Review</span>. Click this status step on the tracker timeline above to filter the catalog.
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-bold text-slate-200">Public Preview Validation</span>
-                                            <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
-                                                View how your submitted runs perform compared to existing baseline models right in the registry.
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Actions */}
-                        <div className={`flex ${postUploadType === 'staged' ? 'justify-between' : 'justify-end'} items-center gap-3 pt-2`}>
-                            {postUploadType === 'staged' && (
-                                <label className="flex items-center gap-2 text-[11px] text-slate-400 select-none cursor-pointer">
-                                    <input 
-                                        type="checkbox"
-                                        checked={dontShowAgain}
-                                        onChange={(e) => setDontShowAgain(e.target.checked)}
-                                        className="rounded text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 border-slate-800 bg-slate-950/40"
-                                    />
-                                    <span>Don't show again</span>
-                                </label>
-                            )}
-                            <button
-                                id="post-upload-dialog-dismiss-btn"
-                                onClick={handleCloseDialog}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                    postUploadType === 'staged'
-                                    ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-500/10'
-                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/10'
-                                }`}
-                            >
-                                {postUploadType === 'staged' ? "Got it, show staged runs" : "Got it"}
-                            </button>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                                {postUploadType === 'staged' ? 'LOCAL SESSION STAGING' : 'SUBMISSION QUEUED'}
+                            </span>
                         </div>
                     </div>
+                )}
+                footer={(
+                    <div className={cn(
+                        'flex w-full items-center gap-3',
+                        postUploadType === 'staged' ? 'justify-between' : 'justify-end'
+                    )}>
+                        {postUploadType === 'staged' && (
+                            <label className="flex items-center gap-2 text-[11px] text-slate-400 select-none cursor-pointer">
+                                <Checkbox
+                                    checked={dontShowAgain}
+                                    onChange={(e) => setDontShowAgain(e.target.checked)}
+                                    className="h-3.5 w-3.5"
+                                />
+                                <span>Don't show again</span>
+                            </label>
+                        )}
+                        <button
+                            id="post-upload-dialog-dismiss-btn"
+                            onClick={handleCloseDialog}
+                            className={cn(
+                                'px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-white shadow-md',
+                                postUploadType === 'staged'
+                                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/10'
+                                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/10'
+                            )}
+                        >
+                            {postUploadType === 'staged' ? "Got it, show staged runs" : "Got it"}
+                        </button>
+                    </div>
+                )}
+            >
+                <div className="space-y-4 text-left">
+                    {/* Header Glowing Accent */}
+                    <div className={cn(
+                        'absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r',
+                        postUploadType === 'staged'
+                            ? 'from-amber-500 via-orange-400 to-yellow-500'
+                            : 'from-emerald-500 via-cyan-400 to-blue-500'
+                    )} />
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                        {postUploadType === 'staged'
+                            ? "Your benchmark files have been validated and staged locally in your browser session. They are currently visible only to you and ready for analysis."
+                            : "Your runs have been successfully posted to the validation server and are currently in the maintainer review queue. A public preview is available in your catalog."
+                        }
+                    </p>
+
+                    {/* Steps / Guide */}
+                    <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 space-y-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 border-b border-slate-900 pb-1.5">
+                            Recommended Next Steps
+                        </div>
+                        
+                        {postUploadType === 'staged' ? (
+                            <div className="space-y-3.5">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200">Compare & Inspect</span>
+                                        <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                                            Select the staged run in the table (marked in <span className="text-amber-400 font-medium">amber</span>) along with public runs, and click <span className="text-cyan-400 font-medium">Compare & Inspect</span> to compare their performance curves.
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200">Add Metadata & Manifests</span>
+                                        <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                                            Expand the run row in the table, verify details, and upload manifests or evidence files to make your benchmark review-ready.
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200">Publish Globally</span>
+                                        <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                                            When you're ready to share the benchmarks, select them in the table and click <span className="text-cyan-400 font-medium">Compare & Publish</span> in the action bar or bottom dock to submit them for review.
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3.5">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200">Track Ingestion Status</span>
+                                        <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                                            Your run is listed as <span className="text-purple-400 font-semibold">Under Review</span>. Click this status step on the tracker timeline above to filter the catalog.
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200">Public Preview Validation</span>
+                                        <span className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                                            View how your submitted runs perform compared to existing baseline models right in the registry.
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                 </div>
-            )}
+            </Modal>
 
         </div>
     );

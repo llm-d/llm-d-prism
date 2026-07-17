@@ -17,6 +17,8 @@ import { createPortal } from 'react-dom';
 import { RotateCcw, ChevronDown, ChevronUp, Star, Pin, CheckSquare, Square, Check, Pencil, Trash2, Code2, Copy, X, Database, Eye, ShieldCheck, AlertCircle, TrendingUp, AlertTriangle, Search, FileText, FileClock, Sliders, Activity, Send, Play, Loader } from 'lucide-react';
 import { RunComparisonChart } from '../Dashboard/RunComparisonChart';
 import { ThroughputCostChart } from '../Dashboard/ThroughputCostChart';
+import { Button, Badge, StatusChip, Modal, Textarea } from '../ui';
+import { cn } from '../../utils/cn';
 import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
 import yaml from 'js-yaml';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
@@ -965,12 +967,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No production-ready runs found',
                     description: "No benchmarks currently meet the validation criteria. To publish to the Results store, ensure your runs comply with all validation rules.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'in_review':
@@ -982,12 +981,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No submissions in review',
                     description: "There are currently no benchmark submissions pending administrator compliance review.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'approved':
@@ -999,12 +995,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No approved runs found',
                     description: "No benchmark submissions have been approved for this profile yet. Once review administrators approve staged runs, they will display here.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'legacy':
@@ -1016,12 +1009,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No legacy runs found',
                     description: "No legacy format benchmark runs match your active filters. Standardize your workflow onto the current layout specification.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'action':
@@ -1033,12 +1023,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'All clear, no action required',
                     description: "None of your staged submissions currently require code adjustments, runs, or reviewer actions.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'pareto':
@@ -1050,12 +1037,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No Pareto frontier configurations found',
                     description: "No configurations match the cost-performance optimal frontier. Try clearing active filters or uploading multi-node sweeps.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             case 'regressions':
@@ -1067,12 +1051,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No active regressions found',
                     description: "No configurations show a performance or throughput drop of more than 5% relative to the pinned baseline configuration.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
             default:
@@ -1095,12 +1076,9 @@ export const UnifiedDataTable = (props) => {
                     title: 'No benchmarks match active filters',
                     description: "No records match your combination of text search and active filters. Adjust your search parameters or start fresh.",
                     action: (
-                        <button
-                            onClick={clearFilters}
-                            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl transition-all cursor-pointer mb-2"
-                        >
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={clearFilters}>
                             Clear filters
-                        </button>
+                        </Button>
                     )
                 };
         }
@@ -1122,7 +1100,8 @@ export const UnifiedDataTable = (props) => {
                                 {filteredStats.length} Matching Runs
                             </span>
                             {kpiFilter && (
-                                <span className={`text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border flex items-center gap-1.5 transition-all select-none ${
+                                <span className={cn(
+                                    'text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border flex items-center gap-1.5 transition-all select-none',
                                     kpiFilter === 'my-submissions' ? 'bg-cyan-550/10 text-cyan-400 border-cyan-550/20 shadow-[0_0_10px_rgba(6,182,212,0.15)]' :
                                     kpiFilter === 'verified' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' :
                                     kpiFilter === 'action' ? 'bg-red-500/10 text-red-400 border-red-500/25' :
@@ -1132,7 +1111,7 @@ export const UnifiedDataTable = (props) => {
                                     kpiFilter === 'legacy' ? 'bg-slate-800 border-slate-700 text-slate-400' :
                                     kpiFilter === 'pareto' ? 'bg-purple-500/10 text-purple-400 border-purple-500/25' :
                                     kpiFilter === 'regressions' ? 'bg-amber-500/10 text-amber-400 border-amber-500/25' : 'bg-slate-800/60 text-slate-400 border-slate-700'
-                                }`}>
+                                )}>
                                     <span>{getKpiFilterLabel(kpiFilter)}</span>
                                     {setKpiFilter && (
                                         <button 
@@ -1152,11 +1131,11 @@ export const UnifiedDataTable = (props) => {
                                 <div className="h-5 w-px bg-slate-300 dark:bg-slate-800" />
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Show selected only</span>
-                                    <button 
+                                    <button
                                         onClick={() => setShowSelectedOnly(!showSelectedOnly)}
-                                        className={`w-9 h-5 rounded-full relative transition-colors shadow-inner cursor-pointer ${showSelectedOnly ? 'bg-cyan-500' : 'bg-slate-950 border border-slate-800'}`}
+                                        className={cn('w-9 h-5 rounded-full relative transition-colors shadow-inner cursor-pointer', showSelectedOnly ? 'bg-cyan-500' : 'bg-slate-950 border border-slate-800')}
                                     >
-                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showSelectedOnly ? 'translate-x-4.5 left-0.5' : 'translate-x-0 left-0.5'}`} />
+                                        <div className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200', showSelectedOnly ? 'translate-x-4.5 left-0.5' : 'translate-x-0 left-0.5')} />
                                     </button>
                                 </div>
                             </>
@@ -1165,31 +1144,26 @@ export const UnifiedDataTable = (props) => {
                     
                     <div className="flex items-center gap-2">
                         {loadAllData && (
-                            <button
+                            <Button
+                                variant="secondary"
+                                size="sm"
                                 onClick={() => loadAllData(null, true)}
-                                disabled={loadingConnections}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-800 bg-[#070b13] hover:border-slate-700 hover:bg-[#101622] text-slate-300 cursor-pointer transition-all duration-200 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                isLoading={loadingConnections}
                                 title="Refetch all configured buckets and APIs"
                             >
-                                <RotateCcw size={12} className={loadingConnections ? 'animate-spin' : ''} />
+                                {!loadingConnections && <RotateCcw size={12} />}
                                 <span>Refetch Database</span>
-                            </button>
+                            </Button>
                         )}
                         {sortedStats.length > 0 && (
-                            <button
-                                onClick={selectAllVisible}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-800 bg-[#070b13] hover:border-slate-700 hover:bg-[#101622] text-slate-300 cursor-pointer transition-all duration-200"
-                            >
+                            <Button variant="secondary" size="sm" onClick={selectAllVisible}>
                                 Select All Visible
-                            </button>
+                            </Button>
                         )}
                         {isFiltered && (
-                            <button
-                                onClick={clearFilters}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-800 bg-[#070b13] hover:border-slate-700 hover:bg-[#101622] text-slate-300 cursor-pointer transition-all duration-200"
-                            >
+                            <Button variant="secondary" size="sm" onClick={clearFilters}>
                                 Clear Filters
-                            </button>
+                            </Button>
                         )}
                     </div>
                 </div>
@@ -1211,20 +1185,22 @@ export const UnifiedDataTable = (props) => {
                     <div className="flex items-center gap-2 flex-wrap">
                         {isAdmin && onlyPendingReviewSelected && (
                             <>
-                                <button
+                                <Button
+                                    variant="primary"
+                                    size="sm"
                                     onClick={() => handleActionClick(handleBulkApprove)}
                                     disabled={isLoadingSubmissions || isLocalActionPending}
-                                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-500 hover:bg-emerald-450 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-1.5 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:pointer-events-none cursor-pointer font-bold"
                                 >
                                     <Check className="w-3.5 h-3.5 stroke-[3]" /> Approve ({selectedBenchmarks.size})
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
                                     onClick={() => handleActionClick(handleBulkReject)}
                                     disabled={isLoadingSubmissions || isLocalActionPending}
-                                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-red-500 hover:bg-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] flex items-center gap-1.5 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:pointer-events-none cursor-pointer font-bold"
                                 >
                                     <X className="w-3.5 h-3.5" /> Reject ({selectedBenchmarks.size})
-                                </button>
+                                </Button>
                             </>
                         )}
 
@@ -1237,26 +1213,20 @@ export const UnifiedDataTable = (props) => {
                         </button>
 
                         {/* Invert Selected */}
-                        <button
-                            onClick={invertSelected}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-800 bg-[#070b13] hover:border-slate-700 hover:bg-[#101622] text-slate-300 cursor-pointer transition-all duration-200"
-                        >
+                        <Button variant="secondary" size="sm" onClick={invertSelected}>
                             Invert Selection
-                        </button>
+                        </Button>
 
                         {/* Delete Staged Runs */}
                         {hasAnyLocalRuns && (
-                            <button
+                            <Button
+                                variant="danger"
+                                size="sm"
                                 onClick={handleDeleteSelected}
                                 disabled={localSelectedCount === 0}
-                                className={
-                                    localSelectedCount === 0
-                                    ? "px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50"
-                                    : "px-3 py-1.5 text-xs font-semibold rounded-xl bg-red-650/95 hover:bg-red-500 text-white shadow-sm border border-transparent cursor-pointer transition-all duration-200"
-                                }
                             >
                                 Delete Staged ({localSelectedCount})
-                            </button>
+                            </Button>
                         )}
                     </div>
                 </div>
@@ -1281,8 +1251,8 @@ export const UnifiedDataTable = (props) => {
                             </div>
                         ) : (
                             <div className="w-full py-16 px-8 flex flex-col items-center justify-center text-center bg-slate-900/80 border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-xl mb-6">
-                                <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 ${emptyConfig.radialGlow} rounded-full blur-3xl pointer-events-none`} />
-                                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-5 ${emptyConfig.glowClass}`}>
+                                <div className={cn('absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96', emptyConfig.radialGlow, 'rounded-full blur-3xl pointer-events-none')} />
+                                <div className={cn('w-16 h-16 rounded-3xl flex items-center justify-center mb-5', emptyConfig.glowClass)}>
                                     {emptyConfig.icon}
                                 </div>
                                 <h3 className="text-2xl font-bold text-white mb-2 tracking-wide">
@@ -1361,9 +1331,10 @@ export const UnifiedDataTable = (props) => {
                                         }}
                                         className="w-5 h-5 flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors"
                                     >
-                                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${
+                                        <div className={cn(
+                                            'w-4 h-4 rounded-full flex items-center justify-center border transition-all',
                                             isAllSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600'
-                                        }`}>
+                                        )}>
                                             {isAllSelected && <Check size={10} strokeWidth={3} />}
                                         </div>
                                     </div>
@@ -1405,7 +1376,12 @@ export const UnifiedDataTable = (props) => {
                                     return (
                                         <div 
                                             key={stat.benchmarkKey || stat.model}
-                                            className={`flex flex-col bg-white dark:bg-slate-900 border rounded-lg overflow-hidden transition-all shadow-sm relative ${cardBorderClass} ${cardBgClass} ${isBaseline ? 'ring-2 ring-cyan-400/50' : ''}`}
+                                            className={cn(
+                                                'flex flex-col bg-white dark:bg-slate-900 border rounded-lg overflow-hidden transition-all shadow-sm relative',
+                                                cardBorderClass,
+                                                cardBgClass,
+                                                isBaseline && 'ring-2 ring-cyan-400/50'
+                                            )}
                                         >
                                             {statusAccent.accentBar}
                                             {/* Card Main Row (Header) */}
@@ -1413,19 +1389,20 @@ export const UnifiedDataTable = (props) => {
                                                 {/* Left Checkbox Area (Dedicated Click Target) */}
                                                 <div 
                                                     onPointerDown={(e) => handleCheckboxPointerDown(e, stat.benchmarkKey, isSelected)}
-                                                    className={`benchmark-checkbox-area w-12 flex-shrink-0 flex items-center justify-center cursor-pointer border-r transition-colors select-none ${
-                                                        statusAccent.accentBar ? 'pl-1.5' : ''
-                                                    } ${
-                                                        isSelected 
-                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' 
+                                                    className={cn(
+                                                        'benchmark-checkbox-area w-12 flex-shrink-0 flex items-center justify-center cursor-pointer border-r transition-colors select-none',
+                                                        statusAccent.accentBar && 'pl-1.5',
+                                                        isSelected
+                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
                                                             : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                                                    }`}
+                                                    )}
                                                     data-benchmark-key={stat.benchmarkKey}
                                                     style={{ touchAction: 'none' }}
                                                 >
-                                                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${
+                                                    <div className={cn(
+                                                        'w-5 h-5 rounded flex items-center justify-center border transition-all',
                                                         isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600'
-                                                    }`}>
+                                                    )}>
                                                         {isSelected && <Check size={14} strokeWidth={3} />}
                                                     </div>
                                                 </div>
@@ -1819,21 +1796,26 @@ export const UnifiedDataTable = (props) => {
                                                                                     {rejectingRunId === runId && (
                                                                                         <div onClick={e => e.stopPropagation()} className="p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-lg shadow-inner w-64 flex flex-col gap-2 mt-1 z-30">
                                                                                             <div className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider">Reason for Rejecting Run</div>
-                                                                                            <textarea
+                                                                                            <Textarea
                                                                                                 autoFocus
                                                                                                 value={rejectionFeedback}
                                                                                                 onChange={e => setRejectionFeedback(e.target.value)}
                                                                                                 placeholder="Reason details..."
-                                                                                                className="w-full text-xs p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-slate-800 dark:text-slate-200 focus:outline-none focus:border-red-500/50 resize-none h-12 font-sans"
+                                                                                                className="p-1.5 rounded h-12 resize-none font-sans focus:border-red-500/50 focus:ring-red-500/40"
                                                                                             />
                                                                                             <div className="flex justify-end gap-2 text-xs">
-                                                                                                <button
+                                                                                                <Button
+                                                                                                    variant="ghost"
+                                                                                                    size="xs"
+                                                                                                    className="uppercase font-bold"
                                                                                                     onClick={() => setRejectingRunId(null)}
-                                                                                                    className="px-2 py-0.5 text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-250 transition-colors uppercase font-bold"
                                                                                                 >
                                                                                                     Cancel
-                                                                                                </button>
-                                                                                                <button
+                                                                                                </Button>
+                                                                                                <Button
+                                                                                                    variant="danger"
+                                                                                                    size="xs"
+                                                                                                    className="uppercase font-bold"
                                                                                                     onClick={() => {
                                                                                                         handleActionClick(async () => {
                                                                                                             if (rejectionFeedback.trim() && updateSubmissionStatus) {
@@ -1843,10 +1825,9 @@ export const UnifiedDataTable = (props) => {
                                                                                                         });
                                                                                                     }}
                                                                                                     disabled={!rejectionFeedback.trim() || isLoadingSubmissions || isLocalActionPending}
-                                                                                                    className="px-2.5 py-0.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded font-bold uppercase transition-colors"
                                                                                                 >
                                                                                                     Submit
-                                                                                                </button>
+                                                                                                </Button>
                                                                                             </div>
                                                                                         </div>
                                                                                     )}
@@ -1859,16 +1840,16 @@ export const UnifiedDataTable = (props) => {
                                                                                 const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
                                                                                 if (isMine) {
                                                                                     return (
-                                                                                        <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                                                        <Badge tone="success" size="xs">
                                                                                             Yours
-                                                                                        </span>
+                                                                                        </Badge>
                                                                                     );
                                                                                 }
                                                                                 if (isResultsStore) {
                                                                                     return (
-                                                                                        <span className="text-[9px] font-bold uppercase tracking-wider bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                                                        <Badge tone="info" size="xs">
                                                                                             Community
-                                                                                        </span>
+                                                                                        </Badge>
                                                                                     );
                                                                                 }
                                                                                 return null;
@@ -1881,64 +1862,46 @@ export const UnifiedDataTable = (props) => {
                                                                                 if (isBrv02) {
                                                                                     const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
                                                                                     if (status === 'staged') {
-                                                                                        return (
-                                                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
-                                                                                                <FileClock className="w-3 h-3 text-amber-400" /> Staged
-                                                                                            </span>
-                                                                                        );
+                                                                                        return <StatusChip status="staged" />;
                                                                                     }
                                                                                     if (status === 'submitted_pending_processing') {
-                                                                                        return (
-                                                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded border border-yellow-500/20">
-                                                                                                <Activity className="w-3 h-3 text-yellow-400" /> Processing
-                                                                                            </span>
-                                                                                        );
+                                                                                        return <StatusChip status="processing" />;
                                                                                     }
                                                                                     if (status === 'submitted_pending_review' || status === 'in_review') {
-                                                                                        return (
-                                                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded border border-purple-500/20">
-                                                                                                <Eye className="w-3 h-3 text-purple-400" /> In Review
-                                                                                            </span>
-                                                                                        );
+                                                                                        return <StatusChip status="in_review" />;
                                                                                     }
                                                                                     if (status === 'public' || status === 'promoted' || status === 'approved') {
-                                                                                        return (
-                                                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
-                                                                                                <Check className="w-3 h-3 text-emerald-400 font-extrabold" /> Public
-                                                                                             </span>
-                                                                                        );
+                                                                                        return <StatusChip status="approved" label="Public" />;
                                                                                     }
                                                                                     if (status === 'rejected' || status === 'changes_requested') {
-                                                                                        return (
-                                                                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20">
-                                                                                                <AlertCircle className="w-3 h-3 text-red-400" /> Rejected
-                                                                                            </span>
-                                                                                        );
+                                                                                        return <StatusChip status="rejected" />;
                                                                                     }
                                                                                 } else {
                                                                                     return (
-                                                                                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/5 text-emerald-400/80 px-2 py-0.5 rounded border border-emerald-500/10">
+                                                                                        <Badge tone="success" size="xs">
                                                                                             Official
-                                                                                        </span>
+                                                                                        </Badge>
                                                                                     );
                                                                                 }
                                                                                 return null;
                                                                             })()}
 
 
-                                                                            <span 
+                                                                            <Badge
+                                                                                tone="neutral"
+                                                                                size="xs"
+                                                                                className="cursor-help"
                                                                                 title={getSourceTag(benchmarkData[0]) === 'llm-d' ? "Official llm-d benchmark results stored in shared Google Drive store" : `Source: ${getSourceTag(benchmarkData[0])}`}
-                                                                                className="text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/80 text-slate-500 dark:text-slate-400 whitespace-nowrap cursor-help"
                                                                             >
                                                                                 {getSourceTag(benchmarkData[0])}
-                                                                            </span>
+                                                                            </Badge>
 
                                                                             {(() => {
                                                                                 const type = getSourceType(benchmarkData[0]);
                                                                                 if (type === 'Cloud') return null;
                                                                                 const style = getSourceTypeStyle(type);
                                                                                 return (
-                                                                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap ${style.bg} ${style.text} ${style.border}`}>
+                                                                                    <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap', style.bg, style.text, style.border)}>
                                                                                         {type}
                                                                                     </span>
                                                                                 );
@@ -2027,7 +1990,7 @@ export const UnifiedDataTable = (props) => {
                                                                  {(() => {
                                                                      const details = getSubmissionStatusDetails(benchmarkData[0]?.source_info?.submission_state);
                                                                      return (
-                                                                         <span className={`px-1.5 py-0.5 rounded border text-[11px] font-bold ${details.bg} ${details.text} ${details.border}`}>
+                                                                         <span className={cn('px-1.5 py-0.5 rounded border text-[11px] font-bold', details.bg, details.text, details.border)}>
                                                                              {details.label}
                                                                          </span>
                                                                      );
@@ -2044,17 +2007,19 @@ export const UnifiedDataTable = (props) => {
                                                          <div className="flex-1" />
                                                      )}
 
-                                                     <button
+                                                     <Button
+                                                         variant="secondary"
+                                                         size="sm"
                                                          onClick={(e) => {
                                                              e.stopPropagation();
                                                              setViewingPayloadRun(stat);
                                                          }}
-                                                         className="flex-shrink-0 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#070b13] hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm whitespace-nowrap animate-in fade-in duration-200"
+                                                         className="flex-shrink-0 whitespace-nowrap animate-in fade-in duration-200"
                                                          title="Inspect Raw YAML / JSON Manifest"
                                                      >
                                                          <Code2 size={13} />
                                                          Inspect Raw Manifest
-                                                     </button>
+                                                     </Button>
                                                  </div>
 
                                                      <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
@@ -2121,11 +2086,12 @@ export const UnifiedDataTable = (props) => {
                                                                                           setRawYamlTitle(d.source_info?.file_identifier || d.filename || `Stage ${d.workload?.stage}`);
                                                                                       }}
                                                                                       title="Raw"
-                                                                                      className={`p-1 rounded transition-colors ${
-                                                                                          d.rawReport 
-                                                                                              ? 'text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 cursor-pointer' 
+                                                                                      className={cn(
+                                                                                          'p-1 rounded transition-colors',
+                                                                                          d.rawReport
+                                                                                              ? 'text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 cursor-pointer'
                                                                                               : 'text-slate-200 dark:text-slate-800 cursor-not-allowed opacity-50'
-                                                                                      }`}
+                                                                                      )}
                                                                                   >
                                                                                       <FileText size={14} />
                                                                                   </button>
@@ -2164,90 +2130,67 @@ export const UnifiedDataTable = (props) => {
                 />
             )}
             {rawYamlContent !== null && createPortal(
-                <div className="fixed inset-0 bg-black/60 z-[10000] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setRawYamlContent(null)}>
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-                            <h3 className="text-sm font-bold text-white truncate">Raw Report: {rawYamlTitle}</h3>
-                            <button 
-                                onClick={() => setRawYamlContent(null)}
-                                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="p-4 overflow-y-auto flex-1 font-mono text-xs text-slate-300 bg-slate-950 select-all whitespace-pre-wrap">
-                            {rawYamlContent}
-                        </div>
-                        <div className="p-3 border-t border-slate-800 bg-slate-900/50 flex justify-end">
-                            <button
-                                onClick={() => setRawYamlContent(null)}
-                                className="px-4 py-2 text-xs font-semibold rounded-md text-white bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700"
-                            >
-                                Close
-                            </button>
-                        </div>
+                <Modal
+                    isOpen
+                    onClose={() => setRawYamlContent(null)}
+                    title={`Raw Report: ${rawYamlTitle}`}
+                    className="max-w-3xl"
+                    footer={
+                        <Button variant="secondary" size="sm" onClick={() => setRawYamlContent(null)}>
+                            Close
+                        </Button>
+                    }
+                >
+                    <div className="font-mono text-xs select-all whitespace-pre-wrap">
+                        {rawYamlContent}
                     </div>
-                </div>,
+                </Modal>,
                 document.body
             )}
 
             {/* Raw Payload Manifest Modal */}
             {viewingPayloadRun && createPortal(
-                <div 
-                    className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300"
-                    onClick={() => setViewingPayloadRun(null)}
+                <Modal
+                    isOpen
+                    onClose={() => setViewingPayloadRun(null)}
+                    title={
+                        <span className="flex items-center gap-2">
+                            <Code2 className="w-5 h-5 text-cyan-400" />
+                            Raw Manifest Payload (YAML): {viewingPayloadRun.benchmarkKey || viewingPayloadRun.model || 'Configuration'}
+                        </span>
+                    }
+                    className="max-w-3xl"
+                    footer={
+                        <button
+                            onClick={() => {
+                                try {
+                                    const dataToDump = viewingPayloadRun.data?.[0] || viewingPayloadRun;
+                                    const yamlStr = yaml.dump(dataToDump, { noRefs: true });
+                                    navigator.clipboard.writeText(yamlStr);
+                                    alert('Manifest copied to clipboard');
+                                } catch (err) {
+                                    console.error("Failed to copy YAML:", err);
+                                    alert('Failed to copy manifest');
+                                }
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors cursor-pointer"
+                        >
+                            <Copy className="w-3.5 h-3.5" /> Copy YAML
+                        </button>
+                    }
                 >
-                    <div 
-                        className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between px-5 py-3.5 bg-slate-950 border-b border-slate-800">
-                            <div className="flex items-center gap-2">
-                                <Code2 className="w-5 h-5 text-cyan-400" />
-                                <span className="text-sm font-bold text-white tracking-wide">
-                                    Raw Manifest Payload (YAML): {viewingPayloadRun.benchmarkKey || viewingPayloadRun.model || 'Configuration'}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        try {
-                                            const dataToDump = viewingPayloadRun.data?.[0] || viewingPayloadRun;
-                                            const yamlStr = yaml.dump(dataToDump, { noRefs: true });
-                                            navigator.clipboard.writeText(yamlStr);
-                                            alert('Manifest copied to clipboard');
-                                        } catch (err) {
-                                            console.error("Failed to copy YAML:", err);
-                                            alert('Failed to copy manifest');
-                                        }
-                                    }}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors cursor-pointer"
-                                >
-                                    <Copy className="w-3.5 h-3.5" /> Copy YAML
-                                </button>
-                                <button
-                                    onClick={() => setViewingPayloadRun(null)}
-                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="p-4 overflow-y-auto font-mono text-xs text-cyan-300/90 leading-relaxed bg-slate-950/50 selection:bg-cyan-500 selection:text-black">
-                            <pre className="m-0">
-                                {(() => {
-                                    try {
-                                        const dataToDump = viewingPayloadRun.data?.[0] || viewingPayloadRun;
-                                        return yaml.dump(dataToDump, { noRefs: true });
-                                    } catch (err) {
-                                        console.error("Failed to dump to YAML:", err);
-                                        return "Error rendering YAML.";
-                                    }
-                                })()}
-                            </pre>
-                        </div>
-                    </div>
-                </div>,
+                    <pre className="m-0 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                        {(() => {
+                            try {
+                                const dataToDump = viewingPayloadRun.data?.[0] || viewingPayloadRun;
+                                return yaml.dump(dataToDump, { noRefs: true });
+                            } catch (err) {
+                                console.error("Failed to dump to YAML:", err);
+                                return "Error rendering YAML.";
+                            }
+                        })()}
+                    </pre>
+                </Modal>,
                 document.body
             )}
 
@@ -2261,7 +2204,10 @@ export const UnifiedDataTable = (props) => {
             )}
             
             {createPortal(
-                <div className={`fixed top-20 right-4 h-[calc(100vh-6rem)] w-full sm:w-[864px] xl:w-[1030px] bg-slate-950/95 border border-slate-900 shadow-2xl z-[99999] flex flex-col rounded-3xl overflow-hidden p-6 transform transition-transform duration-300 pointer-events-auto ${showComparisonDrawer ? 'translate-x-0' : 'translate-x-[calc(100%+2rem)]'}`}>
+                <div className={cn(
+                    'fixed top-20 right-4 h-[calc(100vh-6rem)] w-full sm:w-[864px] xl:w-[1030px] bg-slate-950/95 border border-slate-900 shadow-2xl z-[99999] flex flex-col rounded-3xl overflow-hidden p-6 transform transition-transform duration-300 pointer-events-auto',
+                    showComparisonDrawer ? 'translate-x-0' : 'translate-x-[calc(100%+2rem)]'
+                )}>
                         <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
                         
                         <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-805 flex-shrink-0">
@@ -2401,13 +2347,14 @@ export const UnifiedDataTable = (props) => {
                                                                     toggleBaseline(stat.benchmarkKey);
                                                                 }}
                                                                 title={stat.benchmarkKey === baselineBenchmarkKey ? 'Clear baseline' : 'Set as baseline'}
-                                                                className={`p-1.5 rounded-xl border transition-colors flex-shrink-0 cursor-pointer ${
+                                                                className={cn(
+                                                                    'p-1.5 rounded-xl border transition-colors flex-shrink-0 cursor-pointer',
                                                                     stat.benchmarkKey === baselineBenchmarkKey
                                                                         ? 'bg-cyan-500/10 border-cyan-500/35 text-cyan-400'
                                                                         : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-cyan-400 hover:border-cyan-500/20'
-                                                                }`}
+                                                                )}
                                                             >
-                                                                <Pin size={11} className={`transition-transform duration-300 ${stat.benchmarkKey === baselineBenchmarkKey ? 'rotate-[45deg]' : '-rotate-45 opacity-65'}`} fill={stat.benchmarkKey === baselineBenchmarkKey ? 'currentColor' : 'none'} />
+                                                                <Pin size={11} className={cn('transition-transform duration-300', stat.benchmarkKey === baselineBenchmarkKey ? 'rotate-[45deg]' : '-rotate-45 opacity-65')} fill={stat.benchmarkKey === baselineBenchmarkKey ? 'currentColor' : 'none'} />
                                                             </button>
                                                             <span className="text-sm font-semibold text-white tracking-tight truncate max-w-[280px]" title={stat.model}>
                                                                 {stat.model}
@@ -2417,30 +2364,28 @@ export const UnifiedDataTable = (props) => {
                                                                     {stat.hardware}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/35">
+                                                                <Badge tone="success" size="xs" className="normal-case tracking-normal">
                                                                     Production Results Store
-                                                                </span>
+                                                                </Badge>
                                                             )}
-                                                            
+
                                                             {/* Status Badge */}
                                                             {isBrv02 ? (
-                                                                <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded border ${
-                                                                    (status === 'public' || status === 'promoted' || status === 'approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                                                    status === 'submitted_pending_processing' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 animate-pulse' :
-                                                                    (status === 'submitted_pending_review' || status === 'in_review') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 animate-pulse' :
-                                                                    (status === 'rejected' || status === 'changes_requested') ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                                                    'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                                                }`}>
-                                                                    {(status === 'rejected' || status === 'changes_requested') ? 'Changes Requested' :
-                                                                     status === 'submitted_pending_processing' ? 'Verifying Format' :
-                                                                     (status === 'submitted_pending_review' || status === 'in_review') ? 'Pending Review' :
-                                                                     (status === 'public' || status === 'promoted' || status === 'approved') ? 'Public' :
-                                                                     status}
-                                                                </span>
+                                                                (status === 'rejected' || status === 'changes_requested') ? (
+                                                                    <StatusChip status="rejected" label="Changes Requested" />
+                                                                ) : status === 'submitted_pending_processing' ? (
+                                                                    <StatusChip status="processing" label="Verifying Format" className="animate-pulse" />
+                                                                ) : (status === 'submitted_pending_review' || status === 'in_review') ? (
+                                                                    <StatusChip status="in_review" label="Pending Review" className="animate-pulse" />
+                                                                ) : (status === 'public' || status === 'promoted' || status === 'approved') ? (
+                                                                    <StatusChip status="approved" label="Public" />
+                                                                ) : (
+                                                                    <StatusChip status={status} />
+                                                                )
                                                             ) : (
-                                                                <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/25 flex items-center gap-1">
-                                                                    <ShieldCheck className="w-3 h-3 text-emerald-450" /> Verified
-                                                                </span>
+                                                                <Badge tone="success">
+                                                                    <ShieldCheck className="w-3 h-3" /> Verified
+                                                                </Badge>
                                                             )}
                                                         </div>
                                                         <div className="text-xs text-slate-500 truncate" title={stat.configuration}>
@@ -2491,23 +2436,27 @@ export const UnifiedDataTable = (props) => {
                                                                 )}
                                                                 {isAdmin && (status === 'submitted_pending_review' || status === 'in_review') && (
                                                                     <div className="flex items-center gap-2">
-                                                                        <button
+                                                                        <Button
+                                                                            variant="primary"
+                                                                            size="sm"
+                                                                            className="uppercase tracking-wider"
                                                                             onClick={() => handleActionClick(async () => updateSubmissionStatus && await updateSubmissionStatus(runId, 'public', '', stat.model, stat.hardware))}
                                                                             disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                            className="flex items-center gap-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-450 text-slate-950 text-xs font-bold uppercase tracking-wider rounded-xl shadow transition-all hover:scale-[1.03] disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                                                                         >
                                                                             <Check className="w-3 h-3 stroke-[3]" /> Publish Run
-                                                                        </button>
-                                                                        <button
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="danger"
+                                                                            size="sm"
+                                                                            className="uppercase tracking-wider"
                                                                             onClick={() => {
                                                                                 setDrawerRejectingRunId(runId);
                                                                                 setDrawerRejectionFeedback('');
                                                                             }}
                                                                             disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                            className="flex items-center gap-1 px-2.5 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-xs font-bold uppercase tracking-wider rounded-xl transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                                                                         >
                                                                             <X className="w-3 h-3" /> Reject
-                                                                        </button>
+                                                                        </Button>
                                                                     </div>
                                                                 )}
                                                                 {canResubmit && (status === 'rejected' || status === 'changes_requested') && (
@@ -2536,20 +2485,25 @@ export const UnifiedDataTable = (props) => {
                                                                 <X className="w-4 h-4" />
                                                             </button>
                                                         </div>
-                                                        <textarea
+                                                        <Textarea
                                                             value={drawerRejectionFeedback}
                                                             onChange={(e) => setDrawerRejectionFeedback(e.target.value)}
                                                             placeholder="Explain why this run is rejected or what changes are required..."
-                                                            className="w-full p-3 bg-slate-900/80 border border-slate-800 text-slate-200 text-xs rounded-xl outline-none focus:border-red-500/40 min-h-[70px] resize-y placeholder:text-slate-600"
+                                                            className="p-3 rounded-xl min-h-[70px] resize-y font-sans focus:border-red-500/40 focus:ring-red-500/40"
                                                         />
                                                         <div className="flex justify-end gap-2 mt-1">
-                                                            <button
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                className="uppercase font-bold"
                                                                 onClick={() => setDrawerRejectingRunId(null)}
-                                                                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold uppercase rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
                                                             >
                                                                 Cancel
-                                                            </button>
-                                                            <button
+                                                            </Button>
+                                                            <Button
+                                                                variant="danger"
+                                                                size="sm"
+                                                                className="uppercase font-bold"
                                                                 onClick={() => {
                                                                     if (drawerRejectionFeedback.trim() && updateSubmissionStatus) {
                                                                         updateSubmissionStatus(runId, 'rejected', drawerRejectionFeedback, stat.model, stat.hardware);
@@ -2557,14 +2511,9 @@ export const UnifiedDataTable = (props) => {
                                                                     }
                                                                 }}
                                                                 disabled={!drawerRejectionFeedback.trim() || isLoadingSubmissions}
-                                                                className={`px-3 py-1.5 text-xs font-bold uppercase rounded-lg transition-all duration-200 ${
-                                                                    (drawerRejectionFeedback.trim() && !isLoadingSubmissions)
-                                                                    ? 'bg-red-500 hover:bg-red-400 text-slate-950 cursor-pointer hover:scale-105'
-                                                                    : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-                                                                }`}
                                                             >
                                                                 Confirm Rejection
-                                                            </button>
+                                                            </Button>
                                                         </div>
                                                     </div>
                                                 )}
@@ -2577,13 +2526,15 @@ export const UnifiedDataTable = (props) => {
 
                         {/* Fixed Footer */}
                         <div className="pt-4 mt-6 border-t border-slate-900 flex items-center justify-end gap-3 flex-shrink-0 select-none">
-                            <button
+                            <Button
                                 type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="uppercase tracking-wider"
                                 onClick={() => setShowComparisonDrawer(false)}
-                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-md"
                             >
                                 Close
-                            </button>
+                            </Button>
                         </div>
                 </div>,
                 document.body
@@ -2603,20 +2554,22 @@ export const UnifiedDataTable = (props) => {
                     </button>
                     {isAdmin && onlyPendingReviewSelected && (
                         <>
-                            <button
+                            <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={() => handleActionClick(handleBulkApprove)}
                                 disabled={isLoadingSubmissions || isLocalActionPending}
-                                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-450 text-slate-950 text-xs font-semibold rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer hover:scale-105 font-bold flex items-center gap-1.5"
                             >
                                 <Check className="w-3.5 h-3.5 stroke-[3]" /> Approve
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                variant="danger"
+                                size="sm"
                                 onClick={() => handleActionClick(handleBulkReject)}
                                 disabled={isLoadingSubmissions || isLocalActionPending}
-                                className="px-4 py-2 bg-[#ef4444] hover:bg-red-400 text-white text-xs font-semibold rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer hover:scale-105 font-bold flex items-center gap-1.5"
                             >
                                 <X className="w-3.5 h-3.5" /> Reject
-                            </button>
+                            </Button>
                         </>
                     )}
                     <button
