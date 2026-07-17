@@ -20,6 +20,7 @@
 
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import { createEntry, normalizeModelName, normalizeHardware } from './dataParser.js';
 
 // ---------------------------------------------------------------------------
@@ -45,9 +46,6 @@ const pct = (val) => {
     if (v === null) return null;
     return v <= 1 ? v * 100 : v;
 };
-
-
-
 
 const deriveRunLabel = (doc, filename) => {
     if (doc.run?.description) return doc.run.description;
@@ -76,6 +74,113 @@ const deriveRunLabel = (doc, filename) => {
 };
 
 // ---------------------------------------------------------------------------
+// Zod Schemas for Benchmark Report v0.2
+// ---------------------------------------------------------------------------
+
+const numericField = z.preprocess(safeNum, z.number().nullable());
+const percentField = z.preprocess(pct, z.number().nullable());
+const latencyField = z.preprocess(toMs, z.number().nullable());
+
+const MetricValuesSchema = z.object({
+    mean: numericField.optional(),
+    p50: numericField.optional(),
+    p99: numericField.optional(),
+}).optional().nullable();
+
+const PercentValuesSchema = z.object({
+    mean: percentField.optional(),
+    p50: percentField.optional(),
+    p99: percentField.optional(),
+}).optional().nullable();
+
+const LatencyValuesSchema = z.object({
+    mean: latencyField.optional(),
+    p50: latencyField.optional(),
+    p99: latencyField.optional(),
+}).optional().nullable();
+
+const ObservabilityMetricSchema = z.object({
+    aggregated: MetricValuesSchema,
+}).optional().nullable();
+
+const PercentObservabilityMetricSchema = z.object({
+    aggregated: PercentValuesSchema,
+}).optional().nullable();
+
+const PodStartupMetricSchema = z.object({
+    aggregate: MetricValuesSchema,
+}).optional().nullable();
+
+const ObservabilitySchema = z.object({
+    vllm_kv_cache_usage_perc: PercentObservabilityMetricSchema,
+    vllm_prefix_cache_hit_rate: PercentObservabilityMetricSchema,
+    epp_pool_avg_kv_cache_utilization: PercentObservabilityMetricSchema,
+    epp_pool_avg_queue_size: ObservabilityMetricSchema,
+    epp_pool_avg_running_requests: ObservabilityMetricSchema,
+    vllm_num_requests_running: ObservabilityMetricSchema,
+    vllm_num_requests_waiting: ObservabilityMetricSchema,
+    vllm_num_preemptions_total: ObservabilityMetricSchema,
+    pod_startup_times: PodStartupMetricSchema,
+}).passthrough().optional().nullable();
+
+const RawBRV02ReportSchema = z.object({
+    version: z.string(),
+    run: z.object({
+        uid: z.string().nullable().optional(),
+        eid: z.string().nullable().optional(),
+        cid: z.string().nullable().optional(),
+        pid: z.string().nullable().optional(),
+        time: z.object({
+            start: z.string().nullable().optional(),
+        }).nullable().optional(),
+        description: z.string().nullable().optional(),
+    }).nullable().optional(),
+    scenario: z.object({
+        stack: z.array(z.any()).nullable().optional(),
+        load: z.object({
+            standardized: z.object({
+                stage: numericField.optional(),
+                tool: z.string().nullable().optional(),
+                input_seq_len: z.object({ value: numericField }).nullable().optional(),
+                output_seq_len: z.object({ value: numericField }).nullable().optional(),
+                rate_qps: numericField.optional(),
+                concurrency: numericField.optional(),
+            }).nullable().optional(),
+            native: z.object({
+                config: z.object({
+                    server: z.object({
+                        model_name: z.string().nullable().optional(),
+                    }).nullable().optional(),
+                }).nullable().optional(),
+            }).nullable().optional(),
+            metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+        }).nullable().optional(),
+    }).nullable().optional(),
+    results: z.object({
+        request_performance: z.object({
+            aggregate: z.object({
+                throughput: z.object({
+                    output_token_rate: z.object({ mean: numericField }).nullable().optional(),
+                    input_token_rate: z.object({ mean: numericField }).nullable().optional(),
+                    request_rate: z.object({ mean: numericField }).nullable().optional(),
+                }).nullable().optional(),
+                latency: z.object({
+                    time_to_first_token: LatencyValuesSchema,
+                    time_per_output_token: LatencyValuesSchema,
+                    inter_token_latency: LatencyValuesSchema,
+                    request_latency: LatencyValuesSchema,
+                }).nullable().optional(),
+                requests: z.object({
+                    total: numericField.optional(),
+                    failures: numericField.optional(),
+                }).nullable().optional(),
+            }).nullable().optional(),
+        }).nullable().optional(),
+        observability: ObservabilitySchema,
+    }).nullable().optional(),
+}).passthrough();
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -83,49 +188,6 @@ const deriveRunLabel = (doc, filename) => {
  * Parse a single benchmark_report_v0.2 YAML file text.
  *
  * Returns a stage record or null if the content is not a valid v0.2 report.
- *
- * Stage record shape:
- * {
- *   runId: string,
- *   runLabel: string,
- *   filename: string,
- *   runUid: string | null,
- *   runEid: string | null,
- *   timestamp: string | null,
- *   stageIndex: number | null,
- *   scenario: {
- *     model: string,
- *     hardware: string,
- *     acceleratorCount: number | null,
- *     tp: number | null,
- *     role: string,
- *     harness: string,
- *     isl: number | null,
- *     osl: number | null,
- *     rateQps: number | null,
- *     concurrency: number | null,
- *   },
- *   performance: {
- *     outputTokenRate: number | null,   // tokens/s
- *     inputTokenRate: number | null,    // tokens/s
- *     requestRate: number | null,       // req/s
- *     ttftMean: number | null,          // ms
- *     ttftP99: number | null,           // ms
- *     tpotMean: number | null,          // ms/token
- *     itlMean: number | null,           // ms/token
- *     e2eMean: number | null,           // ms
- *     e2eP99: number | null,            // ms
- *     totalRequests: number | null,
- *     failures: number | null,
- *   },
- *   observability: {                    // null when not collected
- *     kvCacheUsage: number | null,      // %
- *     prefixCacheHitRate: number | null,// %
- *     eppKvUtilization: number | null,  // %
- *     eppQueueSize: number | null,      // count
- *     podStartupMeanS: number | null,   // s
- *   } | null,
- * }
  */
 const extractComponents = (stack) => {
     const components = [];
@@ -154,17 +216,23 @@ const extractComponents = (stack) => {
 };
 
 export function parseReportV02(yamlText, filename) {
-    let doc;
+    let rawDoc;
     if (typeof yamlText === 'object' && yamlText !== null) {
-        doc = yamlText;
+        rawDoc = yamlText;
     } else {
         try {
-            doc = yaml.load(yamlText);
+            rawDoc = yaml.load(yamlText);
         } catch {
             return null;
         }
     }
-    if (!doc || doc.version !== '0.2') return null;
+    if (!rawDoc) return null;
+
+    const parseResult = RawBRV02ReportSchema.safeParse(rawDoc);
+    if (!parseResult.success) return null;
+
+    const doc = parseResult.data;
+    if (doc.version !== '0.2') return null;
 
     // --- Scenario ---
     const stack = doc.scenario?.stack || [];
@@ -184,14 +252,14 @@ export function parseReportV02(yamlText, filename) {
     const scenario = {
         model: std.model?.name || doc.scenario?.load?.native?.config?.server?.model_name || 'Unknown',
         hardware: accel.model || 'Unknown',
-        acceleratorCount: safeNum(accel.count),
-        tp: safeNum(parallelism.tp),
+        acceleratorCount: accel.count ?? null,
+        tp: parallelism.tp ?? null,
         role: std.role || 'aggregate',
         harness: load.tool || 'unknown',
-        isl: safeNum(load.input_seq_len?.value),
-        osl: safeNum(load.output_seq_len?.value),
-        rateQps: safeNum(load.rate_qps),
-        concurrency: Number.isFinite(load.concurrency) ? safeNum(load.concurrency) : null,
+        isl: load.input_seq_len?.value ?? null,
+        osl: load.output_seq_len?.value ?? null,
+        rateQps: load.rate_qps ?? null,
+        concurrency: Number.isFinite(load.concurrency) ? load.concurrency : null,
     };
 
     // --- Performance ---
@@ -201,23 +269,23 @@ export function parseReportV02(yamlText, filename) {
     const reqs = agg.requests || {};
 
     const performance = {
-        outputTokenRate: safeNum(tput.output_token_rate?.mean),
-        inputTokenRate: safeNum(tput.input_token_rate?.mean),
-        requestRate: safeNum(tput.request_rate?.mean),
-        ttftMean: toMs(lat.time_to_first_token?.mean),
-        ttftP50: toMs(lat.time_to_first_token?.p50),
-        ttftP99: toMs(lat.time_to_first_token?.p99),
-        tpotMean: toMs(lat.time_per_output_token?.mean),
-        tpotP50: toMs(lat.time_per_output_token?.p50),
-        tpotP99: toMs(lat.time_per_output_token?.p99),
-        itlMean: toMs(lat.inter_token_latency?.mean),
-        itlP50: toMs(lat.inter_token_latency?.p50),
-        itlP99: toMs(lat.inter_token_latency?.p99),
-        e2eMean: toMs(lat.request_latency?.mean),
-        e2eP50: toMs(lat.request_latency?.p50),
-        e2eP99: toMs(lat.request_latency?.p99),
-        totalRequests: safeNum(reqs.total),
-        failures: safeNum(reqs.failures),
+        outputTokenRate: tput.output_token_rate?.mean ?? null,
+        inputTokenRate: tput.input_token_rate?.mean ?? null,
+        requestRate: tput.request_rate?.mean ?? null,
+        ttftMean: lat.time_to_first_token?.mean ?? null,
+        ttftP50: lat.time_to_first_token?.p50 ?? null,
+        ttftP99: lat.time_to_first_token?.p99 ?? null,
+        tpotMean: lat.time_per_output_token?.mean ?? null,
+        tpotP50: lat.time_per_output_token?.p50 ?? null,
+        tpotP99: lat.time_per_output_token?.p99 ?? null,
+        itlMean: lat.inter_token_latency?.mean ?? null,
+        itlP50: lat.inter_token_latency?.p50 ?? null,
+        itlP99: lat.inter_token_latency?.p99 ?? null,
+        e2eMean: lat.request_latency?.mean ?? null,
+        e2eP50: lat.request_latency?.p50 ?? null,
+        e2eP99: lat.request_latency?.p99 ?? null,
+        totalRequests: reqs.total ?? null,
+        failures: reqs.failures ?? null,
     };
 
     // --- Observability (optional) ---
@@ -236,25 +304,25 @@ export function parseReportV02(yamlText, filename) {
         const podStartup = obs.pod_startup_times?.aggregate || {};
 
         const obsValues = {
-            kvCacheUsageMean:    pct(kvAgg.mean),
-            kvCacheUsageP50:     pct(kvAgg.p50),
-            kvCacheUsageP99:     pct(kvAgg.p99),
-            prefixCacheHitMean:  pct(prefixAgg.mean),
-            prefixCacheHitP50:   pct(prefixAgg.p50),
-            prefixCacheHitP99:   pct(prefixAgg.p99),
-            eppKvMean:           pct(eppKvAgg.mean),
-            eppKvP50:            pct(eppKvAgg.p50),
-            eppKvP99:            pct(eppKvAgg.p99),
-            eppQueueMean:        safeNum(eppQAgg.mean),
-            eppQueueP50:         safeNum(eppQAgg.p50),
-            eppQueueP99:         safeNum(eppQAgg.p99),
-            eppRunningMean:      safeNum(eppRunAgg.mean),
-            numRequestsRunningMean: safeNum(numRunAgg.mean),
-            numRequestsWaitingMean: safeNum(numWaitAgg.mean),
-            numPreemptionsMean:  safeNum(preemptAgg.mean),
-            podStartupMeanS:     safeNum(podStartup.mean),
-            podStartupP50S:      safeNum(podStartup.p50),
-            podStartupP99S:      safeNum(podStartup.p99),
+            kvCacheUsageMean:    kvAgg.mean ?? null,
+            kvCacheUsageP50:     kvAgg.p50 ?? null,
+            kvCacheUsageP99:     kvAgg.p99 ?? null,
+            prefixCacheHitMean:  prefixAgg.mean ?? null,
+            prefixCacheHitP50:   prefixAgg.p50 ?? null,
+            prefixCacheHitP99:   prefixAgg.p99 ?? null,
+            eppKvMean:           eppKvAgg.mean ?? null,
+            eppKvP50:            eppKvAgg.p50 ?? null,
+            eppKvP99:            eppKvAgg.p99 ?? null,
+            eppQueueMean:        eppQAgg.mean ?? null,
+            eppQueueP50:         eppQAgg.p50 ?? null,
+            eppQueueP99:         eppQAgg.p99 ?? null,
+            eppRunningMean:      eppRunAgg.mean ?? null,
+            numRequestsRunningMean: numRunAgg.mean ?? null,
+            numRequestsWaitingMean: numWaitAgg.mean ?? null,
+            numPreemptionsMean:  preemptAgg.mean ?? null,
+            podStartupMeanS:     podStartup.mean ?? null,
+            podStartupP50S:      podStartup.p50 ?? null,
+            podStartupP99S:      podStartup.p99 ?? null,
         };
 
         const hasAny = Object.values(obsValues).some(v => v !== null);
@@ -269,7 +337,7 @@ export function parseReportV02(yamlText, filename) {
         runCid: doc.run?.cid || null,
         runPid: doc.run?.pid || null,
         timestamp: doc.run?.time?.start || null,
-        stageIndex: safeNum(load.stage),
+        stageIndex: load.stage ?? null,
         loadMetadata: doc.scenario?.load?.metadata || null,
         scenario,
         performance,
@@ -281,18 +349,7 @@ export function parseReportV02(yamlText, filename) {
 
 /**
  * Merge an array of stage records into grouped runs.
- *
- * Returns:
- * [
- *   {
- *     runId: string,
- *     runLabel: string,
- *     stages: [stageRecord, ...],   // sorted by stageIndex ascending
- *   },
- *   ...
- * ]
  */
-// Helper to deep sort object keys for canonical JSON comparison
 export const canonicalStringify = (obj) => {
     if (obj === null || obj === undefined) return '';
     if (typeof obj !== 'object') return JSON.stringify(obj);
@@ -372,11 +429,7 @@ export function groupStagesIntoRuns(stageRecords) {
 
 /**
  * Convert a parsed stage record into a Prism normalized entry suitable for
- * the main dashboard scatter chart. Uses the same createEntry schema as all
- * other data sources so filters, chart axes, and tooltips work automatically.
- *
- * The source key is `brv02:<runId>` so entries can be bulk-removed when the
- * user removes a run from the comparison panel.
+ * the main dashboard scatter chart.
  */
 export function stageToEntry(stage) {
     const { scenario, performance, runId, timestamp, components, model_name, hardware: rootHardware, config } = stage;
@@ -448,7 +501,6 @@ export function stageToEntry(stage) {
     };
 
     return createEntry({
-        // Top-level fields read directly by Dashboard / filter logic
         run_id: stage.runId,
         runLabel: stage.runLabel,
         github_author: stage.github_author,
@@ -478,7 +530,6 @@ export function stageToEntry(stage) {
             approved_at: stage.approved_at,
         },
 
-        // Also set under metadata for any code that reads metadata.*
         metadata: {
             model_name: modelName,
             backend: scenario.harness || 'Unknown',
@@ -519,8 +570,6 @@ export function stageToEntry(stage) {
             itl_p99: performance.itlP99 ?? null,
             e2e_latency: performance.e2eMean ?? null,
             error_count: performance.failures ?? 0,
-            // Observability metrics (only present for v0.2 reports that
-            // include the observability section).
             observability: stage.observability || null,
         },
 

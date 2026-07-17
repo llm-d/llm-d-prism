@@ -87,3 +87,13 @@ export function deepNullish(schema: z.ZodTypeAny): z.ZodTypeAny {
 ```
 
 By introducing this pattern, developers can declare the canonical structure of a benchmark report once, then output the loose ingestion schema dynamically, preserving clean types while reducing code redundancy.
+
+---
+
+## 5. UI Integration & Field-Specific Visual Feedback
+
+To improve the contributor user experience during the local staging and validation wizard, Zod validation errors and stage-level consistency checks are propagated as a structured mapping of field keys to their error status:
+
+- **Field Path Keying**: Errors parsed from `ZodError` issues are mapped to dot-separated path strings (e.g., `model_name`, `hardware.hardware_name`).
+- **Dynamic CSS Styling**: Input fields in the `SubmitValidationPage` form query `bundle.validation.fieldErrors[fieldKey]` to dynamically apply red/amber borders and text highlighting depending on whether the error severity is a blocking `'error'` or a non-blocking `'warning'`.
+- **Consistency Verification**: Verification checks—such as ensuring that individual stage entries match the top-level metadata inputs—also write to the same `fieldErrors` structure, giving uniform visual indicators across both schema violations and consistency mismatches.

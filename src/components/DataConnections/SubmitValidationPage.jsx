@@ -172,6 +172,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         accelerator_count: value !== '' ? parseInt(value, 10) : null 
                     };
                     updatedPayload.acceleratorCountInferred = false;
+                } else if (key === 'runLabel') {
+                    updatedPayload.runLabel = value;
+                    if (updatedPayload.entries) {
+                        updatedPayload.entries = updatedPayload.entries.map(entry => ({
+                            ...entry,
+                            run_description: value
+                        }));
+                    }
                 } else {
                     updatedPayload[key] = value;
                 }
@@ -180,9 +188,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     ...b.validation,
                     hasHardware: updatedPayload.hardware?.hardware_name && updatedPayload.hardware.hardware_name !== 'Unknown' && updatedPayload.hardware.hardware_name !== 'Unknown Hardware',
                     errors: uploadValidation.errors,
-                    warnings: uploadValidation.warnings
+                    warnings: uploadValidation.warnings,
+                    fieldErrors: uploadValidation.fieldErrors
                 };
-                return { ...b, payload: updatedPayload, validation: updatedValidation };
+                const returnObj = { ...b, payload: updatedPayload, validation: updatedValidation };
+                if (key === 'runLabel') {
+                    returnObj.name = value;
+                }
+                return returnObj;
             }
             return b;
         }));
@@ -309,6 +322,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     ...b.validation,
                     errors: uploadValidation.errors,
                     warnings: uploadValidation.warnings,
+                    fieldErrors: uploadValidation.fieldErrors,
                     hasHardware: resolvedHw && resolvedHw !== 'Unknown' && resolvedHw !== 'Unknown Hardware'
                 }
             };
@@ -456,7 +470,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         const runName = cloudPath.split('/').filter(Boolean).pop() || 'cloud-run';
         
         const payload = {
-            runId: cloudPath.replace(/^(gs:\/\/|s3:\/\/)/, ''),
+            runId: uuidv4(),
             runLabel: runName,
             model_name: "meta-llama/Llama-3-8B-Instruct",
             hardware: {
@@ -474,6 +488,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             entries: [
                 {
                     run_id: uuidv4(),
+                    run_description: runName,
                     run_uid: `cloud-${runName}-stage-1`,
                     filename: "benchmark_report_v0.2_stage_1.yaml",
                     raw_report: {
@@ -520,7 +535,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         };
 
         const cloudBundle = {
-            id: Math.random().toString(36).substring(7),
+            id: uuidv4(),
             dirKey: cloudPath.replace(/^(gs:\/\/|s3:\/\/)/, ''),
             name: runName,
             stageFiles: [],
@@ -569,7 +584,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 const dirKey = parts.join('/');
                 if (!groups[dirKey]) {
                     groups[dirKey] = {
-                        id: Math.random().toString(36).substring(7),
+                        id: uuidv4(),
                         dirKey,
                         name: dirKey.split('/').pop(),
                         files: []
@@ -631,7 +646,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             if (item.validation.format === 'brv02') {
                 const parsedStage = parseReportV02(item.content, item.file.name);
                 if (!parsedStage) {
-                    const tempId = Math.random().toString(36).substring(7);
+                    const tempId = uuidv4();
                     const baseName = item.file.name.replace(/\.(ya?ml|json)$/i, '');
                     brv02StandaloneGroups.push({
                         id: tempId,
@@ -661,7 +676,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     targetGroup.files.push(item.file);
                     targetGroup.parsedStages.push({ file: item.file, content: item.content, validation: item.validation });
                 } else {
-                    const tempId = Math.random().toString(36).substring(7);
+                    const tempId = uuidv4();
                     const baseName = item.file.name.replace(/\.(ya?ml|json)$/i, '');
                     brv02StandaloneGroups.push({
                         id: tempId,
@@ -675,7 +690,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 }
             } else {
                 // inference-perf standalone file
-                const tempId = Math.random().toString(36).substring(7);
+                const tempId = uuidv4();
                 const baseName = item.file.name.replace(/\.(ya?ml|json)$/i, '');
                 brv02StandaloneGroups.push({
                     id: tempId,
@@ -957,9 +972,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                 payloadEntries.push({
                     run_id: uuidv4(),
+                    run_description: group.name || 'Unnamed Run',
                     run_uid: runUid,
                     filename: sf.file.name,
-                    raw_report: rawReportObj,
+                    raw_report: rawReportObj || {},
                     prism_cloud: {
                         run: {
                             uid: `${group.dirKey}/${sf.file.name}`
@@ -1020,7 +1036,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
 
             const payload = {
-                runId: group.dirKey,
+                runId: group.id,
                 runLabel: group.name,
                 model_name: resolvedModel,
                 hardware: {
@@ -1031,7 +1047,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 manifests: {},
                 evidence: {},
                 format: "brv02",
-                run_metadata: runMetadata || null,
+                run_metadata: runMetadata || undefined,
                 entries: payloadEntries,
                 well_lit_path: null,
                 metadata: {},
@@ -1073,6 +1089,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 hasHardware,
                 errors: bundleErrors,
                 warnings: bundleWarnings,
+                fieldErrors: uploadValidation.fieldErrors,
                 entries
             };
 
@@ -1314,7 +1331,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         setIsSubmitting(true);
         try {
             // Stage files locally for immediate browser viewing
-            await onCommit(validBundles, true);
+            await onCommit(validBundles);
             
             // Post each run package to the production Results Store API `/api/results`
             for (const bundle of validBundles) {
@@ -1429,7 +1446,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
     const handleGithubLoginRedirect = () => {
         localStorage.setItem('prism_staged_upload_cache', JSON.stringify(stagedFiles));
-        login();
+        login({ showSubmitDialog: true });
     };
 
     const handleGithubDisconnect = () => {
@@ -2070,6 +2087,21 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                 {stagedFiles.filter(b => !b.isSkipped).map(bundle => {
                                     const rawReport = bundle.payload?.entries?.[0]?.raw_report;
                                     const stack = rawReport?.scenario?.stack || [];
+                                    const fieldErrors = bundle.validation?.fieldErrors || {};
+                                    const getFieldClassName = (fieldKey, isInferred) => {
+                                        const err = fieldErrors[fieldKey];
+                                        if (err) {
+                                            if (err.severity === 'error') {
+                                                return "border-red-500/50 hover:border-red-500/70 focus:border-red-500/80 focus:bg-red-950/10 text-red-200 focus:text-red-100";
+                                            }
+                                            if (err.severity === 'warning') {
+                                                return "border-amber-500/50 hover:border-amber-500/70 focus:border-amber-500/80 focus:bg-amber-950/10 text-amber-205 focus:text-amber-100";
+                                            }
+                                        }
+                                        return isInferred 
+                                            ? "border-amber-500/30 hover:border-amber-500/50 focus:border-amber-500/70 focus:bg-amber-950/10" 
+                                             : "border-slate-800/40 hover:border-slate-700/60 focus:border-cyan-500/35 focus:bg-slate-900/50";
+                                    };
                                     
                                     // Find inference engine
                                     const inferenceEngine = stack.find(c => 
@@ -2247,15 +2279,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                   <input 
                                                                                       type="text" 
                                                                                       value={bundle.name || bundle.payload?.runLabel || ''} 
-                                                                                      onChange={(e) => {
-                                                                                          const val = e.target.value;
-                                                                                          setStagedFiles(prev => prev.map(f => f.id === bundle.id ? { 
-                                                                                              ...f, 
-                                                                                              name: val,
-                                                                                              payload: { ...f.payload, runLabel: val }
-                                                                                          } : f));
-                                                                                      }}
-                                                                                      className="w-full bg-slate-900/20 border border-slate-800/40 hover:border-slate-700/60 focus:border-cyan-500/35 focus:bg-slate-900/50 rounded-lg pl-3 pr-8 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs"
+                                                                                      onChange={(e) => updateSingleField(bundle.id, 'runLabel', e.target.value)}
+                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-8 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs ${getFieldClassName('runLabel', false)}`}
                                                                                       placeholder="e.g. My custom run name"
                                                                                   />
                                                                                   <div className="absolute right-2.5 flex items-center gap-2 pointer-events-none select-none">
@@ -2278,11 +2303,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                       type="text" 
                                                                                       value={bundle.payload.model_name || ''} 
                                                                                       onChange={(e) => updateSingleField(bundle.id, 'model_name', e.target.value)}
-                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs ${
-                                                                                          bundle.payload.modelNameInferred 
-                                                                                              ? "border-amber-500/30 hover:border-amber-500/50 focus:border-amber-500/70 focus:bg-amber-950/10" 
-                                                                                              : "border-emerald-500/20 hover:border-emerald-500/35 focus:border-emerald-500/50 focus:bg-emerald-950/10"
-                                                                                      }`}
+                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs ${getFieldClassName('model_name', bundle.payload.modelNameInferred)}`}
                                                                                       placeholder="e.g. google/gemma-4-31b-it"
                                                                                   />
                                                                                   <div className="absolute right-2.5 flex items-center gap-2 pointer-events-none select-none">
@@ -2321,11 +2342,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                       type="text" 
                                                                                       value={bundle.payload.hardware?.hardware_name || ''} 
                                                                                       onChange={(e) => updateSingleField(bundle.id, 'hardware_name', e.target.value)}
-                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs ${
-                                                                                          bundle.payload.hardwareInferred 
-                                                                                              ? "border-amber-500/30 hover:border-amber-500/50 focus:border-amber-500/70 focus:bg-amber-950/10" 
-                                                                                              : "border-emerald-500/20 hover:border-emerald-500/35 focus:border-emerald-500/50 focus:bg-emerald-950/10"
-                                                                                      }`}
+                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none transition-all text-xs ${getFieldClassName('hardware.hardware_name', bundle.payload.hardwareInferred)}`}
                                                                                       placeholder="e.g. H100, TPU v6e"
                                                                                   />
                                                                                   <div className="absolute right-2.5 flex items-center gap-2 pointer-events-none select-none">
@@ -2364,11 +2381,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                       type="number" 
                                                                                       value={bundle.payload.hardware?.accelerator_count ?? ''} 
                                                                                       onChange={(e) => updateSingleField(bundle.id, 'accelerator_count', e.target.value)}
-                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-mono focus:ring-0 focus:outline-none transition-all text-xs ${
-                                                                                          bundle.payload.acceleratorCountInferred 
-                                                                                              ? "border-amber-500/30 hover:border-amber-500/50 focus:border-amber-500/70 focus:bg-amber-950/10" 
-                                                                                              : "border-emerald-500/20 hover:border-emerald-500/35 focus:border-emerald-500/50 focus:bg-emerald-950/10"
-                                                                                      }`}
+                                                                                      className={`w-full bg-slate-900/20 border rounded-lg pl-3 pr-28 py-1.5 text-slate-200 font-mono focus:ring-0 focus:outline-none transition-all text-xs ${getFieldClassName('hardware.accelerator_count', bundle.payload.acceleratorCountInferred)}`}
                                                                                       placeholder="e.g. 8"
                                                                                   />
                                                                                   <div className="absolute right-2.5 flex items-center gap-2 pointer-events-none select-none">
@@ -2410,14 +2423,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                      type="text" 
                                                                                      value={bundle.payload.inference_tool || ''} 
                                                                                      onChange={(e) => updateSingleField(bundle.id, 'inference_tool', e.target.value)}
-                                                                                     className="w-1/2 bg-slate-900/20 border border-slate-800/40 hover:border-slate-700/60 focus:border-cyan-500/35 focus:bg-slate-900/50 rounded-lg px-3 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none placeholder-slate-750 transition-all text-xs"
+                                                                                     className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none placeholder-slate-750 transition-all text-xs ${getFieldClassName('inference_tool', false)}`}
                                                                                      placeholder="Tool e.g. vLLM"
                                                                                  />
                                                                                  <input 
                                                                                      type="text" 
                                                                                      value={bundle.payload.inference_tool_version || ''} 
                                                                                      onChange={(e) => updateSingleField(bundle.id, 'inference_tool_version', e.target.value)}
-                                                                                     className="w-1/2 bg-slate-900/20 border border-slate-800/40 hover:border-slate-700/60 focus:border-cyan-500/35 focus:bg-slate-900/50 rounded-lg px-3 py-1.5 text-slate-400 focus:ring-0 focus:outline-none placeholder-slate-750 transition-all font-mono text-xs"
+                                                                                     className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-400 focus:ring-0 focus:outline-none placeholder-slate-750 transition-all font-mono text-xs ${getFieldClassName('inference_tool_version', false)}`}
                                                                                      placeholder="Version e.g. 0.4.2"
                                                                                  />
                                                                              </div>

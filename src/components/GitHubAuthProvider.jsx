@@ -236,9 +236,11 @@ export function GitHubAuthProvider({ children }) {
         checkConfigurationOnly();
     }, [accessToken]);
 
-    const login = useCallback(() => {
+    const login = useCallback((options) => {
         const state = Math.random().toString(36).substring(2, 15);
-        sessionStorage.setItem('prism_show_submit_dialog_after_login', 'true');
+        if (options && options.showSubmitDialog === true) {
+            sessionStorage.setItem('prism_show_submit_dialog_after_login', 'true');
+        }
         window.location.href = `/api/auth/github/login?state=${state}`;
     }, []);
 
