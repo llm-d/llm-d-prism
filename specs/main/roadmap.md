@@ -66,6 +66,12 @@ Focus is on stabilizing core features, publishing the Results Store UI, ensuring
     *   **Status**: Aspirational / Planning
     *   **Next Steps**: Target completion before llm-d 1.0 in October.
 
+9.  **On-Demand Dynamic Dashboards (Aspirational Stretch Goal)**
+    *   **Description**: Enable power users to build, configure, and share customized benchmark dashboards via Namespaced URLs without code redeployments.
+    *   **Status**: Product Spec
+    *   **Next Steps**: Review proposal, define final GCS folder schema, design UI builder blocks.
+    *   **Spec/Ref**: [on-demand-dashboards.md](../changes/on-demand-dashboards.md)
+
 ---
 
 ### 🔵 Q4 2026 (Milestone: llm-d 1.0 Release & Fine-Tuning)

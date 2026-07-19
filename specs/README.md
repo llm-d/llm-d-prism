@@ -5,7 +5,7 @@ This directory governs the evolution of the codebase. We follow a simplified ver
 ## 🏗 Directory Structure
 
 *   `main/`: The "Living Source of Truth." Contains the current architecture and functional specs of the production system.
-*   `changes/`: Active work-in-progress. Every feature, bug fix, or experiment gets its own subdirectory here.
+*   `changes/`: Active work-in-progress. Every feature, bug fix, or experiment gets its own markdown file (e.g. `[feature-name].md`).
 *   `archive/`: Completed or abandoned proposals. This serves as the "organizational memory" to prevent re-litigating past decisions.
 
 ---
@@ -14,25 +14,15 @@ This directory governs the evolution of the codebase. We follow a simplified ver
 
 All changes—whether drafted by a human or an agent—must follow this progression:
 
-### 1. Discovery & Exploration (`explore.md`)
-Before a formal proposal, use an `explore.md` file in a new `changes/` subdirectory to brainstorm. 
-*   **Goal:** Research TPU performance, benchmark vLLM configurations, or draft UI mockups.
-*   **Agent Role:** Agents should use this file to document technical constraints or library research.
+### 1. The Proposal & Design
+Create a single markdown file `/specs/changes/[short-feature-name].md` that outlines the proposal and technical design.
+*   **Must include:** Context/Intent, Proposed Solution, Technical Implementation Details, and Success Criteria.
+*   **Collaboration:** Open a GitHub Pull Request (PR) containing the new spec file. This allows for threaded discussions on the design and requirements before coding begins.
 
-### 2. The Proposal (`proposal.md`)
-Once an idea is ready for review, create a `proposal.md`.
-*   **Must include:** Context/Intent, Proposed Solution, and Success Criteria.
-*   **Collaboration:** Open a GitHub Pull Request (PR) for the specific change directory. This allows for threaded discussions on the *intent* before implementation begins.
-
-### 3. Specification & Design (`specs.md` & `design.md`)
-Define *what* it does and *how* it works.
-*   **Specs:** Functional requirements (e.g., "The system must parse vLLM logs with >99% accuracy").
-*   **Design:** Technical implementation details, schema changes, and API contracts.
-
-### 4. Implementation & Archiving
+### 2. Implementation & Archiving
 Once the code is merged:
 1.  **Update Main:** Any permanent changes to the system architecture must be reflected in `specs/main/`.
-2.  **Move to Archive:** The specific change directory is moved to `specs/archive/`. 
+2.  **Move to Archive:** The specific change file is moved to `specs/archive/[short-feature-name].md`. 
     *   *Note:* If a proposal is rejected, move it to archive with a `# Status: Rejected` header explaining why.
 
 ---
@@ -42,8 +32,8 @@ Once the code is merged:
 When tasked with a new feature or research item, you **must** adhere to the following:
 
 1.  **Check the Archive:** Search `specs/archive/` to ensure this hasn't been attempted or rejected previously.
-2.  **Initialize a Change:** Create `/specs/changes/[short-feature-name]/`.
-3.  **Draft the Artifacts:** Start with `proposal.md`. Do not begin writing application code until the proposal is reviewed by a human.
+2.  **Initialize a Change:** Create the file `/specs/changes/[short-feature-name].md`.
+3.  **Draft the Proposal:** Write the proposal and specification directly inside this file. Do not begin writing application code until the proposal is reviewed by a human.
 4.  **Stay Context-Aware:** Always reference `specs/main/` to understand the current state of the infrastructure (e.g., existing MLOps pipelines or React patterns).
 
 ---
