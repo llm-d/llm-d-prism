@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { CacheManager } from '../utils/cacheManager';
 import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
@@ -22,10 +22,20 @@ import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
 import { useAWS } from './useAWS';
+import { useGitHubAuth } from './useGitHubAuth';
+import { v4 as uuidv4 } from 'uuid';
 import { getBenchmarkKey } from '../utils/dashboardHelpers';
+
+const getPrefixForBucket = (bucketName) => {
+    if (bucketName === 'llm-d-benchmarks' || bucketName === 'llm-d-benchmarks-staging') {
+        return 'prism-results-store/';
+    }
+    return '';
+};
 
 export const useDashboardData = (initialState, dashboardState) => {
     const { selectedBenchmarks, setSelectedBenchmarks, xAxisMax, setXAxisMax } = dashboardState;
+    const { accessToken, user } = useGitHubAuth();
     const pendingRequests = useRef(new Map());
     const [data, setData] = useState([]);
     const dataRef = useRef(data);
@@ -34,6 +44,42 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [gcsLoading, setGcsLoading] = useState(false);
     const [gcsError, setGcsError] = useState(null);
     const [gcsSuccess, setGcsSuccess] = useState(null);
+    const [apiError, setApiError] = useState(null);
+    const [gcsProgress, setGcsProgress] = useState({});
+    const [loadingTasks, setLoadingTasks] = useState({});
+
+    const updateTaskProgress = useCallback((id, updates) => {
+        setLoadingTasks(prev => {
+            const existing = prev[id] || { id, name: id, loaded: 0, total: 0, status: 'pending', currentAction: '' };
+            return {
+                ...prev,
+                [id]: { ...existing, ...updates }
+            };
+        });
+    }, []);
+
+    const handleProgress = useCallback(({ loaded, total, bucketName }) => {
+        setGcsProgress(prev => ({
+            ...prev,
+            [bucketName]: { loaded, total }
+        }));
+        updateTaskProgress(`gcs:${bucketName}`, {
+            loaded,
+            total,
+            status: loaded === total ? 'completed' : 'loading',
+            currentAction: loaded === total ? 'Completed' : `Fetched ${loaded} of ${total} files`
+        });
+    }, [updateTaskProgress]);
+
+    const gcsProgressStats = useMemo(() => {
+        let loaded = 0;
+        let total = 0;
+        Object.values(gcsProgress).forEach(p => {
+            loaded += p.loaded;
+            total += p.total;
+        });
+        return { loaded, total };
+    }, [gcsProgress]);
     const [lpgLoading, setLpgLoading] = useState(false);
     const [lpgError, setLpgError] = useState(null);
     const [lpgPasteText, setLpgPasteText] = useState("");
@@ -146,18 +192,10 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [driveError, setDriveError] = useState(null);
     const [qualityMetrics, setQualityMetrics] = useState(null);
     const [availableSources, setAvailableSources] = useState(() => {
-        try {
-            const savedSourcesStr = localStorage.getItem('selectedSources');
-            if (savedSourcesStr) return new Set(JSON.parse(savedSourcesStr));
-        } catch { }
-        return new Set(['local']);
+        return new Set(['local', 'llm-d-results:google_drive', 'llmd_drive']);
     });
     const [selectedSources, setSelectedSources] = useState(() => {
-        try {
-            const savedSourcesStr = localStorage.getItem('selectedSources');
-            if (savedSourcesStr) return new Set(JSON.parse(savedSourcesStr));
-        } catch { }
-        return initialState?.sources || new Set(['local']);
+        return new Set(['local', 'llm-d-results:google_drive', 'llmd_drive']);
     });
     const [bucketConfigs, setBucketConfigs] = useState(() => {
         try {
@@ -182,13 +220,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         return [];
     });
     const [gcsProfiles, setGcsProfiles] = useState([]);
-    const [enableLLMDResults, setEnableLLMDResults] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem('prism_saved_sources') || '{}');
-            if (saved.llmdEnabled !== undefined) return saved.llmdEnabled;
-        } catch { }
-        return initialState?.enableLLMDResults ?? false;
-    });
+    const [enableLLMDResults, setEnableLLMDResults] = useState(true);
     const [toasts, setToasts] = useState([]);
     const [siteName, setSiteName] = useState("");
     const [contactUrl, setContactUrl] = useState("");
@@ -220,11 +252,6 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     useEffect(() => {
         if (!isRestored.current) return;
-        localStorage.setItem('enableLLMDResults', JSON.stringify(enableLLMDResults));
-    }, [enableLLMDResults]);
-
-    useEffect(() => {
-        if (!isRestored.current) return;
         localStorage.setItem('bucketConfigs', JSON.stringify(bucketConfigs));
     }, [bucketConfigs]);
 
@@ -234,21 +261,23 @@ export const useDashboardData = (initialState, dashboardState) => {
             buckets: bucketConfigs,
             awsBuckets: awsBucketConfigs,
             giqProjects: apiConfigs.map(c => typeof c === 'string' ? c : c.projectId),
-            qualityScoresEnabled: selectedSources.has('quality_scores'),
-            llmdEnabled: enableLLMDResults
+            qualityScoresEnabled: selectedSources.has('quality_scores')
         };
         localStorage.setItem('prism_saved_sources', JSON.stringify(toSave));
-    }, [bucketConfigs, awsBucketConfigs, apiConfigs, selectedSources, enableLLMDResults]);
+    }, [bucketConfigs, awsBucketConfigs, apiConfigs, selectedSources]);
 
-    const removeToast = (id) => {
+    const removeToast = useCallback((id) => {
         setToasts(prev => prev.filter(t => t.id !== id));
-    };
+    }, []);
 
-    const addToast = (message, type = 'info') => {
+    const addToast = useCallback((message, type = 'info') => {
         const id = Date.now() + Math.random();
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => {
+            const filtered = prev.filter(t => !(t.message === message && t.type === type));
+            return [...filtered, { id, message, type }];
+        });
         setTimeout(() => removeToast(id), 8000); // 8 Seconds
-    };
+    }, [removeToast]);
 
     // --- Extracted Block ---
     // Drive Sync Function
@@ -368,7 +397,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     // --- Extracted Block ---
     // [useGCS hook injected]
-    const { fetchBucketData } = useGCS({ pendingRequests, addToast });
+    const { fetchBucketData } = useGCS({ pendingRequests, addToast, accessToken });
 
     // --- Extracted Block ---
     // [useAWS hook injected]
@@ -407,10 +436,48 @@ export const useDashboardData = (initialState, dashboardState) => {
                 const restoredBuckets = saved.buckets || [];
                 const restoredAwsBuckets = saved.awsBuckets || [];
                 const restoredApis = saved.giqProjects || saved.apis || [];
-                const restoredLlmd = saved.llmdEnabled || false;
 
-                if (restoredBuckets.length === 0 && restoredAwsBuckets.length === 0 && restoredApis.length === 0 && !saved.qualityScoresEnabled && !restoredLlmd) return;
+                setGcsProgress({});
+                if (restoredBuckets.length === 0 && restoredAwsBuckets.length === 0 && restoredApis.length === 0 && !saved.qualityScoresEnabled) return;
 
+                const initialTasks = {};
+                restoredBuckets.forEach(b => {
+                    const bName = typeof b === 'string' ? b : b.bucket;
+                    initialTasks[`gcs:${bName}`] = {
+                        id: `gcs:${bName}`,
+                        name: `gs://${bName}`,
+                        type: 'gcs',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                restoredAwsBuckets.forEach(b => {
+                    const bName = typeof b === 'string' ? b : b.bucket;
+                    initialTasks[`aws:${bName}`] = {
+                        id: `aws:${bName}`,
+                        name: `aws://${bName}`,
+                        type: 'aws',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                restoredApis.forEach(pid => {
+                    initialTasks[`giq:${pid}`] = {
+                        id: `giq:${pid}`,
+                        name: `GIQ: ${pid}`,
+                        type: 'giq',
+                        loaded: 0,
+                        total: 0,
+                        status: 'pending',
+                        currentAction: 'Pending fetch'
+                    };
+                });
+                setLoadingTasks(initialTasks);
+                
                 // 1. Instant Feedback: Render Cards in Loading State
                 setBucketConfigs(prev => Array.from(new Set([...prev, ...restoredBuckets])));
                 setAwsBucketConfigs(prev => Array.from(new Set([...prev, ...restoredAwsBuckets])));
@@ -424,7 +491,6 @@ export const useDashboardData = (initialState, dashboardState) => {
                     });
                     return newConfigs;
                 });
-                setEnableLLMDResults(restoredLlmd);
 
                 setGcsProfiles(prev => {
                     const existingGcs = new Set(prev.filter(p => p.type === 'gcs').map(p => p.bucketName));
@@ -445,10 +511,12 @@ export const useDashboardData = (initialState, dashboardState) => {
                 for (const b of restoredBuckets) {
                     const bName = typeof b === 'string' ? b : b.bucket;
                     try {
-                        const res = await fetchBucketData(bName);
+                        const prefix = getPrefixForBucket(bName);
+                        const res = await fetchBucketData(bName, false, prefix, handleProgress);
                         if (!res.profile.error) {
                             allResults.push({ type: 'gcs', id: bName, ...res });
                         } else {
+                            updateTaskProgress(`gcs:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             // Update individual profile error
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === bName && p.type === 'gcs'
@@ -457,6 +525,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`gcs:${bName}`, { status: 'failed', currentAction: `Error: ${err.message || 'Failed to connect'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === bName && p.type === 'gcs'
                                 ? { ...p, loading: false, error: "Failed to connect" }
@@ -473,6 +542,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         if (!res.profile.error) {
                             allResults.push({ type: 'aws', id: bName, ...res });
                         } else {
+                            updateTaskProgress(`aws:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === bName && p.type === 'aws'
                                     ? { ...p, loading: false, error: res.profile.error }
@@ -480,6 +550,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`aws:${bName}`, { status: 'failed', currentAction: `Error: ${err.message || 'Failed to connect'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === bName && p.type === 'aws'
                                 ? { ...p, loading: false, error: "Failed to connect" }
@@ -492,12 +563,18 @@ export const useDashboardData = (initialState, dashboardState) => {
                 for (const pid of restoredApis) {
                     const token = localStorage.getItem(`giq_token_${pid}`) || '';
                     try {
-                        let res = await fetchGiqData(pid, token);
+                        const giqProgressCallback = (progressInfo) => {
+                            updateTaskProgress(`giq:${pid}`, {
+                                ...progressInfo,
+                                status: progressInfo.status || 'loading'
+                            });
+                        };
+                        let res = await fetchGiqData(pid, token, false, giqProgressCallback);
 
                         // Auto-Retry Logic: If User Token Expired (401/403), retry with ADC
                         if (res.profile.error && token && (res.profile.error.includes('401') || res.profile.error.includes('403'))) {
                             console.log(`[Persistence] Token expired for ${pid}. Retrying with ADC...`);
-                            const retryRes = await fetchGiqData(pid, '');
+                            const retryRes = await fetchGiqData(pid, '', false, giqProgressCallback);
                             if (!retryRes.profile.error) {
                                 res = retryRes; // Success! Use retry result
                             }
@@ -508,6 +585,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         if (!res.profile.error) {
                             allResults.push({ type: 'giq', id: pid, ...res });
                         } else {
+                            updateTaskProgress(`giq:${pid}`, { status: 'failed', currentAction: res.profile.error });
                             // If backend returns error (e.g. 401/403 despite ADC), show it
                             setGcsProfiles(prev => prev.map(p =>
                                 p.bucketName === pid && p.type === 'giq'
@@ -516,6 +594,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                             ));
                         }
                     } catch (err) {
+                        updateTaskProgress(`giq:${pid}`, { status: 'failed', currentAction: `Error: ${err.message || 'Connection Failed'}` });
                         setGcsProfiles(prev => prev.map(p =>
                             p.bucketName === pid && p.type === 'giq'
                                 ? { ...p, loading: false, error: "Connection Failed" }
@@ -661,8 +740,10 @@ export const useDashboardData = (initialState, dashboardState) => {
             return;
         }
 
+        setGcsProgress({});
         setGcsLoading(true);
-        const result = await fetchBucketData(cleanName);
+        const prefix = getPrefixForBucket(cleanName);
+        const result = await fetchBucketData(cleanName, false, prefix, handleProgress);
         setGcsLoading(false);
 
         if (result.profile.error) {
@@ -938,12 +1019,14 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     // --- Extracted Block ---
     async function fetchArchivedData() {
+        updateTaskProgress('archive:google_drive', { status: 'loading', loaded: 0, total: 2, currentAction: 'Fetching archived drive data...' });
         try {
             const files = [
                 '/data/archive/llmd_results/archived_drive_data.json',
                 '/data/archive/llmd_results/llm-d-benchmarks.json'
             ];
 
+            let loadedCount = 0;
             const results = await Promise.all(files.map(async (file) => {
                 try {
                     const res = await fetch(`${file}?t=${Date.now()}`);
@@ -956,8 +1039,12 @@ export const useDashboardData = (initialState, dashboardState) => {
                 } catch (e) {
                     console.warn(`Failed to load ${file}`, e);
                     return [];
+                } finally {
+                    loadedCount++;
+                    updateTaskProgress('archive:google_drive', { loaded: loadedCount, currentAction: `Loaded ${loadedCount} of ${files.length} archive files` });
                 }
             }));
+            updateTaskProgress('archive:google_drive', { status: 'completed', currentAction: 'Completed' });
 
             const allBenchmarks = results.flat();
             console.log(`Loaded ${allBenchmarks.length} unified archived benchmarks from ${files.length} files.`);
@@ -1112,15 +1199,67 @@ export const useDashboardData = (initialState, dashboardState) => {
             });
         } catch (e) {
             console.error("Failed to load archived data", e);
+            updateTaskProgress('archive:google_drive', { status: 'failed', currentAction: `Error: ${e.message}` });
             return [];
         }
     }
 
-    const loadAllData = async (fetchedConfig = null) => {
+    const loadAllData = async (fetchedConfig = null, forceRefresh = false) => {
         console.log("[useDashboardData] loadAllData START", { initialState });
+        setGcsProgress({});
         setLoading(true);
         setGcsLoading(true);
         setGcsError(null);
+
+        const apisToFetch = [...apiConfigs];
+        if (fetchedConfig && fetchedConfig.projects) {
+            fetchedConfig.projects.forEach(p => {
+                if (!apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === p)) {
+                    apisToFetch.push({ projectId: p, token: '' });
+                }
+            });
+        }
+        if (fetchedConfig && fetchedConfig.hostProject && !apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === fetchedConfig.hostProject)) {
+            apisToFetch.push({ projectId: fetchedConfig.hostProject, token: '' });
+        }
+
+        const initialTasks = {};
+        if (enableLLMDResults) {
+            initialTasks['archive:google_drive'] = {
+                id: 'archive:google_drive',
+                name: 'llm-d Google Drive',
+                type: 'archive',
+                loaded: 0,
+                total: 2,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        }
+        bucketConfigs.forEach(b => {
+            const bName = typeof b === 'string' ? b : b.bucket;
+            initialTasks[`gcs:${bName}`] = {
+                id: `gcs:${bName}`,
+                name: `gs://${bName}`,
+                type: 'gcs',
+                loaded: 0,
+                total: 0,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        });
+        apisToFetch.forEach(config => {
+            const projectId = typeof config === 'string' ? config : config.projectId;
+            initialTasks[`giq:${projectId}`] = {
+                id: `giq:${projectId}`,
+                name: `GIQ: ${projectId}`,
+                type: 'giq',
+                loaded: 0,
+                total: 0,
+                status: 'pending',
+                currentAction: 'Pending fetch'
+            };
+        });
+        setLoadingTasks(initialTasks);
 
         const failedSources = [];
 
@@ -1161,7 +1300,18 @@ export const useDashboardData = (initialState, dashboardState) => {
             // 2. Fetch All Configured Buckets
             const bucketResults = await Promise.all(bucketConfigs.map(b => {
                 const bName = typeof b === 'string' ? b : b.bucket;
-                return fetchBucketData(bName).then(res => ({ ...res, config: b }));
+                const prefix = getPrefixForBucket(bName);
+                return fetchBucketData(bName, forceRefresh, prefix, handleProgress)
+                    .then(res => ({ ...res, config: b }))
+                    .catch(err => {
+                        console.error(`Failed to fetch GCS bucket ${bName}:`, err);
+                        return {
+                            bucketName: bName,
+                            profile: { error: err.message || "Failed to connect", files: [], loadedAt: new Date().toISOString() },
+                            entries: [],
+                            config: b
+                        };
+                    });
             }));
 
             const newProfiles = [];
@@ -1203,19 +1353,6 @@ export const useDashboardData = (initialState, dashboardState) => {
             // 3. Fetch API Sources
             const apiProfiles = [];
 
-            // Build a list of APIs to fetch, combining apiConfigs and any discovered projects from fetchConfig
-            const apisToFetch = [...apiConfigs];
-            if (fetchedConfig && fetchedConfig.projects) {
-                fetchedConfig.projects.forEach(p => {
-                    if (!apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === p)) {
-                        apisToFetch.push({ projectId: p, token: '' });
-                    }
-                });
-            }
-            if (fetchedConfig && fetchedConfig.hostProject && !apisToFetch.some(c => (typeof c === 'string' ? c : c.projectId) === fetchedConfig.hostProject)) {
-                apisToFetch.push({ projectId: fetchedConfig.hostProject, token: '' });
-            }
-
             for (const config of apisToFetch) {
                 // Backward compatibility check
                 const projectId = typeof config === 'string' ? config : config.projectId;
@@ -1225,7 +1362,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                 // if (!token) ... check removed.
 
                 try {
-                    const apiData = await fetchGiqData(projectId, token);
+                    const giqProgressCallback = (progressInfo) => {
+                        updateTaskProgress(`giq:${projectId}`, {
+                            ...progressInfo,
+                            status: progressInfo.status || 'loading'
+                        });
+                    };
+                    const apiData = await fetchGiqData(projectId, token, forceRefresh, giqProgressCallback);
 
                     // Check for profile error from fetchGiqData
                     if (apiData.profile.error) {
@@ -1623,7 +1766,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             }
 
             if (trulyNewStages.length === 0) {
-                setBrv02Error('All selected files have already been uploaded.');
+                setBrv02Error('All selected files have already been submitted.');
                 if (isEvent && eventOrFiles.target) {
                     eventOrFiles.target.value = '';
                 }
@@ -1640,8 +1783,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                 eventOrFiles.target.value = '';
             }
         } catch (e) {
-            console.error("Failed to upload local report files:", e);
-            setBrv02Error("Failed to upload report files. Make sure they are valid YAML files.");
+            console.error("Failed to submit local report files:", e);
+            setBrv02Error("Failed to submit report files. Make sure they are valid YAML files.");
         } finally {
             setBrv02Loading(false);
         }
@@ -1726,73 +1869,504 @@ export const useDashboardData = (initialState, dashboardState) => {
         setEnableLLMDResults(false);
     };
 
-    const removeBrv02Run = (runId) => {
+    const removeBrv02Run = useCallback((runId) => {
         setBrv02Runs(prev => prev.filter(r => r.runId !== runId));
+    }, []);
+
+    const promoteStagedRunId = (oldRunId, newRunId) => {
+        // 1. Remove from local staged runs list
+        setBrv02Runs(prev => prev.filter(r => r.runId !== oldRunId));
+
+        // 2. Transfer custom label configurations
+        setBrv02CustomLabels(prev => {
+            if (!prev[oldRunId]) return prev;
+            const next = { ...prev };
+            next[newRunId] = next[oldRunId];
+            delete next[oldRunId];
+            return next;
+        });
+
+        // 3. Transfer stage selection configuration
+        setBrv02SelectedStages(prev => {
+            if (!prev[oldRunId]) return prev;
+            const next = { ...prev };
+            next[newRunId] = next[oldRunId];
+            delete next[oldRunId];
+            return next;
+        });
+
+        // 4. Transfer baseline selection
+        setBrv02BaselineRunId(prev => {
+            if (prev === oldRunId) return newRunId;
+            return prev;
+        });
     };
 
-    const handleValidatedUpload = async (validBundles) => {
+    const clearAllBrv02Runs = useCallback(() => {
+        setBrv02Runs([]);
+    }, []);
+
+    const handleValidatedUpload = async (validBundles, isSubmit = false) => {
         if (!validBundles || validBundles.length === 0) return;
         
         setBrv02Loading(true);
         setBrv02Error(null);
 
         try {
+            // Get all runIds of the bundles we are staging/updating
+            const stagedRunIds = new Set(validBundles.map(b => {
+                const baseId = b.payload.runId || b.dirKey;
+                return !isSubmit && baseId && !baseId.endsWith('-preview') ? `${baseId}-preview` : baseId;
+            }).filter(Boolean));
+
+            // Flatten and filter out old stages of the edited runs
+            const otherStages = brv02Runs.flatMap(run => run.stages).filter(stage => !stagedRunIds.has(stage.runId));
             const trulyNewStages = [];
             
             for (const bundle of validBundles) {
-                const metadata = bundle.metadataFiles.run_metadata ? bundle.metadataFiles.run_metadata.parsed : null;
                 const config = bundle.metadataFiles.config ? bundle.metadataFiles.config.parsed : null;
                 const summary = bundle.metadataFiles.summary ? bundle.metadataFiles.summary.parsed : null;
                 const bundleRunId = bundle.payload.runId;
                 const bundleRunLabel = bundle.payload.runLabel;
 
-                for (const sf of bundle.stageFiles) {
-                    const identifier = sf.file.webkitRelativePath || sf.file.name;
-                    const record = await parseReportV02(sf.validation?.parsedData || sf.content, identifier);
-                    if (record) {
-                        // Enrich stage record with bundle metadata and unique runId/runLabel
-                        record.runId = bundleRunId;
-                        record.runLabel = bundleRunLabel;
-                        record.run_metadata = metadata;
-                        record.config = config;
-                        record.summary = summary;
-                        
-                        const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename && s.runId === record.runId);
-                        const isDupInExisting = brv02Runs.some(run => 
-                            run.stages.some(existingStage => existingStage.filename === record.filename && existingStage.runId === record.runId)
-                        );
-                        if (!isDupInBatch && !isDupInExisting) {
-                            trulyNewStages.push(record);
+                // Resolved ID for the staged run
+                const resolvedRunId = !isSubmit && bundleRunId && !bundleRunId.endsWith('-preview') 
+                    ? `${bundleRunId}-preview` 
+                    : (bundleRunId || null);
+
+                if (bundle.stageFiles && bundle.stageFiles.length > 0) {
+                    for (const sf of bundle.stageFiles) {
+                        const identifier = sf.file.webkitRelativePath || sf.file.name;
+                        const record = await parseReportV02(sf.validation?.parsedData || sf.content, identifier);
+                        if (record) {
+                            if (!isSubmit) {
+                                record.runId = resolvedRunId || `${record.runId}-preview`;
+                            } else {
+                                record.runId = resolvedRunId || record.runId;
+                            }
+                            record.runLabel = bundleRunLabel || record.runLabel;
+                            const matchingEntry = bundle.payload?.entries?.find(e => e.filename === record.filename);
+                            record.run_id = matchingEntry?.run_id || uuidv4();
+                            // Enrich stage record with bundle metadata
+                            record.model_name = bundle.payload.model_name || null;
+                            record.hardware = bundle.payload.hardware || null;
+                            record.config = config;
+                            record.summary = summary;
+                            record.wellLitPath = bundle.payload?.well_lit_path || null;
+                            record.well_lit_path = bundle.payload?.well_lit_path || null;
+                            record.targetDashboards = bundle.targetDashboards;
+                            
+                            const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename && s.runId === record.runId);
+                            const isDupInExisting = otherStages.some(existingStage => existingStage.filename === record.filename && existingStage.runId === record.runId);
+                            
+                            if (!isDupInBatch && !isDupInExisting) {
+                                trulyNewStages.push(record);
+                            }
+                        }
+                    }
+                } else if (bundle.payload?.entries && bundle.payload.entries.length > 0) {
+                    for (const entry of bundle.payload.entries) {
+                        const record = await parseReportV02(entry.raw_report || entry.content, entry.filename);
+                        if (record) {
+                            if (!isSubmit) {
+                                record.runId = resolvedRunId || `${record.runId}-preview`;
+                            } else {
+                                record.runId = resolvedRunId || record.runId;
+                            }
+                            record.runLabel = bundleRunLabel || record.runLabel;
+                            record.run_id = entry.run_id || uuidv4();
+                            // Enrich stage record with bundle metadata
+                            record.model_name = bundle.payload.model_name || null;
+                            record.hardware = bundle.payload.hardware || null;
+                            record.config = config || bundle.payload.config || null;
+                            record.summary = summary || bundle.payload.summary || null;
+                            record.wellLitPath = bundle.payload.well_lit_path;
+                            record.well_lit_path = bundle.payload.well_lit_path;
+                            record.targetDashboards = bundle.targetDashboards;
+                            
+                            const isDupInBatch = trulyNewStages.some(s => s.filename === record.filename && s.runId === record.runId);
+                            const isDupInExisting = otherStages.some(existingStage => existingStage.filename === record.filename && existingStage.runId === record.runId);
+                            
+                            if (!isDupInBatch && !isDupInExisting) {
+                                trulyNewStages.push(record);
+                            }
                         }
                     }
                 }
             }
 
-            if (trulyNewStages.length === 0) {
-                setBrv02Error('All selected valid files have already been uploaded.');
-                return;
-            }
-
-            setBrv02Runs(prev => {
-                const allStages = [...prev.flatMap(run => run.stages), ...trulyNewStages];
+            setBrv02Runs(() => {
+                const allStages = [...otherStages, ...trulyNewStages];
                 return groupStagesIntoRuns(allStages);
             });
 
         } catch (e) {
-            console.error("Failed to upload validated files:", e);
-            setBrv02Error("Failed to upload validated report files.");
+            console.error("Failed to submit validated files:", e);
+            setBrv02Error("Failed to submit validated report files.");
         } finally {
             setBrv02Loading(false);
         }
     };
 
+    const fetchBucketDelta = async (bucket, currentProfile) => {
+        const cleanBucketName = bucket.replace(/^gs:\/\//, '');
+        const prefix = currentProfile?.prefix || '';
+        let usingProxy = false;
+
+        try {
+            const queryParams = new URLSearchParams();
+            if (prefix) {
+                queryParams.set('prefix', prefix);
+            }
+            const queryString = queryParams.toString();
+            const suffix = queryString ? `?${queryString}` : '';
+            let response = await fetch(`https://storage.googleapis.com/storage/v1/b/${cleanBucketName}/o${suffix}`);
+
+            // Fallback to Proxy
+            if (response.status === 401 || response.status === 403) {
+                response = await fetch(`/api/gcs/storage/v1/b/${cleanBucketName}/o${suffix}`);
+                if (response.ok) usingProxy = true;
+            }
+
+            if (!response.ok) throw new Error(`Failed to access bucket (${response.status}).`);
+
+            const json = await response.json();
+            if (!json.items) return { newEntries: [], newFiles: [] };
+
+            const filesToProcess = json.items.filter(item => !item.name.endsWith('/'));
+
+            // Find new files
+            const existingFiles = new Set((currentProfile?.files || []).map(f => f.name));
+            const newFilesToFetch = filesToProcess.filter(f => !existingFiles.has(f.name));
+
+            if (newFilesToFetch.length === 0) return { newEntries: [], newFiles: [] };
+
+            const newEntries = [];
+            const newFileMetadata = [];
+
+            await Promise.all(newFilesToFetch.map(async (file) => {
+                try {
+                    let fileUrl = file.mediaLink;
+                    if (usingProxy && fileUrl.startsWith('https://storage.googleapis.com/')) {
+                        const path = fileUrl.replace('https://storage.googleapis.com/', '');
+                        fileUrl = `/api/gcs/${path}`;
+                    }
+
+                    const fileRes = await fetch(fileUrl);
+                    if (!fileRes.ok) throw new Error(`Fetch failed: ${fileRes.status}`);
+
+                    const content = await fileRes.text();
+                    let entries = [];
+                    try {
+                        const jsonContent = JSON.parse(content);
+                        if (jsonContent.metrics || jsonContent.load_summary) {
+                            const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${cleanBucketName}` }, file.name);
+                            entries = [entry];
+                        }
+                    } catch {
+                        // Ignore JSON parse failures
+                    }
+
+                    if (entries.length === 0) entries = parseLogFile(content, file.name);
+
+                    if (entries.length > 0) {
+                        entries.forEach(e => {
+                            e.source = `gcs:${cleanBucketName}`;
+
+                            // Determine display type
+                            let type = 'storage';
+
+                            if (e.source_info) {
+                                e.source_info.origin = `gcs:${cleanBucketName}`;
+                                e.source_info.type = type;
+                            } else {
+                                e.source_info = {
+                                    type: type,
+                                    origin: `gcs:${cleanBucketName}`,
+                                    file_identifier: file.name,
+                                    raw_url: file.mediaLink
+                                };
+                            }
+                            e.raw_url = `https://storage.googleapis.com/${cleanBucketName}/${file.name}`;
+                            // Normalization Heuristics
+                            if (e.latency?.mean && e.latency.mean < 100) {
+                                e.latency.mean *= 1000;
+                                if (e.latency.p50) e.latency.p50 *= 1000;
+                                if (e.latency.p99) e.latency.p99 *= 1000;
+                            }
+                            if (e.ttft?.mean && e.ttft.mean < 100) {
+                                e.ttft.mean *= 1000;
+                                if (e.ttft.p50) e.ttft.p50 *= 1000;
+                            }
+                            newEntries.push(e);
+                        });
+                        newFileMetadata.push({ name: file.name, entryCount: entries.length });
+                    }
+                } catch (e) {
+                    console.warn(`Failed to process new file ${file.name}:`, e);
+                }
+            }));
+
+            return { newEntries, newFiles: newFileMetadata };
+
+        } catch (e) {
+            console.error("Delta fetch failed", e);
+            throw e;
+        }
+    };
+
+    const refreshSource = async (sourceType, id, mode = 'full') => {
+        setGcsLoading(true);
+        try {
+            if (sourceType === 'gcs') {
+                if (mode === 'delta') {
+                    const currentProfile = gcsProfiles.find(p => p.bucketName === id);
+                    if (!currentProfile) throw new Error("Profile not found for comparison");
+
+                    const { newEntries, newFiles } = await fetchBucketDelta(id, currentProfile);
+
+                    if (newEntries.length > 0) {
+                        updateSourceData(`gcs:${id}`, newEntries, {
+                            ...currentProfile,
+                            files: [...(currentProfile.files || []), ...newFiles],
+                            entryCount: (currentProfile.entryCount || 0) + newEntries.length,
+                            loadedAt: new Date().toISOString()
+                        }, 'append');
+                        setGcsSuccess(`Added ${newEntries.length} new benchmarks.`);
+                    } else {
+                        setGcsSuccess(`No new data found in ${id}.`);
+                    }
+                } else {
+                    // Full Refresh
+                    setGcsProgress({});
+                    const prefix = getPrefixForBucket(id);
+                    const result = await fetchBucketData(id, true, prefix, handleProgress);
+                    if (result.profile.error) {
+                        setGcsError(result.profile.error);
+                    } else {
+                        updateSourceData(`gcs:${id}`, result.entries, result.profile, 'replace');
+                        setGcsSuccess(`Refreshed bucket: ${id}`);
+                    }
+                }
+            } else if (sourceType === 'giq') {
+                let token = apiConfigs.find(c => c.projectId === id)?.token;
+                if (!token) token = localStorage.getItem(`giq_token_${id}`);
+
+                await CacheManager.remove('giq', id);
+
+                let result = await fetchGiqData(id, token, false);
+
+                if (result.profile.error && token && (result.profile.error.includes('401') || result.profile.error.includes('403'))) {
+                    console.log(`[Refresh] Token expired for ${id}. Retrying with ADC...`);
+                    const retryRes = await fetchGiqData(id, '', true);
+                    if (!retryRes.profile.error) {
+                        result = retryRes;
+                    }
+                }
+
+                if (result.profile.error) {
+                    setApiError(result.profile.error);
+                } else {
+                    updateSourceData(`giq:${id}`, result.entries, { ...result.profile, rawResponse: result.rawResponse }, mode === 'delta' ? 'merge' : 'replace');
+                    setGcsSuccess(`Refreshed GIQ: Found ${result.rawResponse?.list?.profile?.length || '?'} profiles, Loaded ${result.entries.length} benchmarks.`);
+                }
+            }
+            setTimeout(() => setGcsSuccess(null), 3000);
+        } catch (e) {
+            console.error("Refresh failed", e);
+            setGcsError(`Refresh failed: ${e.message}`);
+        }
+        setGcsLoading(false);
+    };
+
+    const [submissions, setSubmissions] = useState([]);
+    const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+
+    const mapStateToStatus = useCallback((state) => {
+        return state;
+    }, []);
+
+    const loadSubmissions = useCallback(async (isManual = false) => {
+        setIsLoadingSubmissions(true);
+        try {
+            const params = new URLSearchParams();
+            params.set('own', 'true');
+            params.set('limit', '50');
+
+            const headers = {};
+            if (accessToken) {
+                headers['X-Prism-Github-Token'] = accessToken;
+            }
+
+            const res = await fetch(`/api/results?${params.toString()}`, { headers });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const listData = await res.json();
+            
+            const serverSubmissions = (listData.items || []).map(item => ({
+                id: item.runId,
+                runId: item.runId,
+                model: item.model_name || "Custom Model",
+                hardware: item.hardware?.hardware_name || "Detected Hardware",
+                wellLitPath: item.well_lit_path || "none / custom",
+                submittedAt: item.submitted_at ? item.submitted_at.split('T')[0] : "Unknown",
+                status: mapStateToStatus(item.state),
+                feedback: item.feedback || ""
+            }));
+
+            const mergedList = [...serverSubmissions];
+            if (brv02Runs && brv02Runs.length > 0) {
+                brv02Runs.forEach(run => {
+                    if (!mergedList.some(s => s.runId === run.runId)) {
+                        const firstStage = run.stages?.[0];
+                        const resolvedModel = run.model_name || firstStage?.scenario?.model || "Custom Model";
+                        const resolvedHw = run.hardware?.hardware_name || firstStage?.scenario?.hardware || "Detected Hardware";
+                        const submittedAt = firstStage?.timestamp || new Date().toISOString();
+
+                        mergedList.push({
+                            id: `dyn-${run.runId}`,
+                            runId: run.runId,
+                            model: resolvedModel,
+                            hardware: resolvedHw,
+                            wellLitPath: run.wellLitPath || "none / custom",
+                            submittedAt: typeof submittedAt === 'string' ? submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
+                            status: "staged",
+                            feedback: ""
+                        });
+                    }
+                });
+            }
+
+            // Sort chronologically (latest submissions first)
+            mergedList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+            setSubmissions(mergedList);
+
+        } catch (error) {
+            console.error("Failed to load submissions", error);
+            if (addToast) {
+                addToast(`Failed to load submissions: ${error.message}`, 'error');
+            }
+        } finally {
+            setIsLoadingSubmissions(false);
+        }
+    }, [accessToken, brv02Runs, addToast, mapStateToStatus]);
+
+    const updateSubmissionStatus = useCallback(async (runId, status, feedback = '') => {
+        setIsLoadingSubmissions(true);
+        try {
+            const reviewer = user?.username || 'user'; // simple local fallback
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (accessToken) {
+                headers['X-Prism-Github-Token'] = accessToken;
+            }
+
+            const res = await fetch(`/api/results/${runId}/status`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    status,
+                    feedback,
+                    reviewer
+                })
+            });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const data = await res.json();
+            if (data.success) {
+                if (addToast) {
+                    const friendlyStatus = 
+                        status === 'submitted_pending_processing' ? 'submitted' :
+                        status === 'submitted_pending_review' ? 'submitted for review' :
+                        status === 'public' ? 'published' : status;
+                    addToast(`Run has been ${friendlyStatus} successfully.`, 'success');
+                }
+                await loadSubmissions();
+            }
+        } catch (err) {
+            console.error('[Status Update Error]', err);
+            if (addToast) {
+                addToast(`Failed to update status for run ${runId}: ${err.message}`, 'error');
+            }
+        } finally {
+            setIsLoadingSubmissions(false);
+        }
+    }, [loadSubmissions, addToast, user, accessToken]);
+
+    const bulkUpdateSubmissionStatus = useCallback(async (runIds, status, feedback = '') => {
+        if (!runIds || runIds.length === 0) return;
+        setIsLoadingSubmissions(true);
+        try {
+            const reviewer = user?.username || 'user';
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (accessToken) {
+                headers['X-Prism-Github-Token'] = accessToken;
+            }
+
+            // Perform all updates concurrently
+            const promises = runIds.map(async (runId) => {
+                const res = await fetch(`/api/results/${runId}/status`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        status,
+                        feedback,
+                        reviewer
+                    })
+                });
+                if (!res.ok) {
+                    throw new Error(`Failed to update status for run ${runId}: HTTP ${res.status}`);
+                }
+                return res.json();
+            });
+
+            await Promise.all(promises);
+
+            if (addToast) {
+                const friendlyStatus = 
+                    status === 'submitted_pending_processing' ? 'submitted' :
+                    status === 'submitted_pending_review' ? 'submitted for review' :
+                    status === 'public' ? 'published' : status;
+                addToast(`Successfully updated ${runIds.length} runs to ${friendlyStatus}.`, 'success');
+            }
+            
+            await loadSubmissions();
+        } catch (err) {
+            console.error('[Bulk Status Update Error]', err);
+            if (addToast) {
+                addToast(`Failed bulk update: ${err.message}`, 'error');
+            }
+        } finally {
+            setIsLoadingSubmissions(false);
+        }
+    }, [loadSubmissions, addToast, user, accessToken]);
+
+    const submissionsMap = useMemo(() => {
+        const map = {};
+        (submissions || []).forEach(sub => {
+            if (sub && sub.runId) {
+                map[sub.runId] = sub;
+            }
+        });
+        return map;
+    }, [submissions]);
+
+    useEffect(() => {
+        loadSubmissions();
+    }, [loadSubmissions]);
+
     return {
         data, setData,
         loading, setLoading,
         isRestoringConnections,
+        gcsProgressStats,
+        loadingTasks,
         gcsLoading, setGcsLoading,
         gcsError, setGcsError,
         gcsSuccess, setGcsSuccess,
+        apiError, setApiError,
+        refreshSource,
         lpgLoading, setLpgLoading,
         lpgError, setLpgError,
         lpgPasteText, setLpgPasteText,
@@ -1828,9 +2402,10 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
-        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run,
+        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs,
         brv02CustomLabels, setBrv02CustomLabels,
         brv02BaselineRunId, setBrv02BaselineRunId,
-        brv02SelectedStages, setBrv02SelectedStages
+        brv02SelectedStages, setBrv02SelectedStages,
+        submissions, isLoadingSubmissions, loadSubmissions, updateSubmissionStatus, bulkUpdateSubmissionStatus, submissionsMap
     };
 };

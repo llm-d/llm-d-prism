@@ -36,7 +36,8 @@ export const FilterPanel = ({
     toggleModelExpansion,
     baselineBenchmarkKey,
     setBaselineBenchmarkKey,
-    UnifiedDataTable
+    UnifiedDataTable,
+    brv02CustomLabels
 }) => {
     const [isFiltersExpanded, setIsFiltersExpanded] = useState(true);
 
@@ -240,6 +241,7 @@ export const FilterPanel = ({
                 toggleBenchmark={toggleBenchmark} toggleModelExpansion={toggleModelExpansion}
                 baselineBenchmarkKey={baselineBenchmarkKey}
                 setBaselineBenchmarkKey={setBaselineBenchmarkKey}
+                brv02CustomLabels={brv02CustomLabels}
             />
             </>
             )}

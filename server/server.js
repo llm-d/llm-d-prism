@@ -21,8 +21,9 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { oauthRouter } from './oauth.ts';
+import { oauthRouter, validateGitHubToken } from './oauth.ts';
 import { resultsRouter } from './results/index.ts';
+import { storage } from './results/gcs.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -32,6 +33,7 @@ const port = process.env.PORT || 3000;
 // Enable gzip compression
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(oauthRouter);
 app.use(resultsRouter);
 
@@ -364,11 +366,129 @@ app.get('/api/prefix-cache/data', async (req, res) => {
     }
 });
 
+app.post('/api/local/submit', async (req, res) => {
+    const fs = await import('fs');
+    const payload = req.body;
+    if (!payload.runId) {
+        return res.status(400).json({ error: 'Missing runId' });
+    }
+    
+    const baseDir = path.resolve(__dirname, '../private/benchmarks');
+    const runDir = path.join(baseDir, payload.runId);
+    
+    try {
+        if (!fs.existsSync(runDir)) {
+            fs.mkdirSync(runDir, { recursive: true });
+        }
+        
+        const filepath = path.join(runDir, 'prism_run_upload.json');
+        fs.writeFileSync(filepath, JSON.stringify(payload, null, 2), 'utf8');
+        console.log(`[Local API] Saved submission for run ${payload.runId} to ${filepath}`);
+        res.json({ success: true, path: filepath });
+    } catch (e) {
+        console.error("Failed to save submission:", e);
+        res.status(500).json({ error: 'Failed to write submission file', details: e.message });
+    }
+});
+
+
+function parseGcsPath(pathStr) {
+    const cleanPath = pathStr.replace(/^\//, '');
+
+    const apiMatch = cleanPath.match(/^(?:download\/)?storage\/v1\/b\/([^/]+)\/o(?:\/(.+))?$/);
+    if (apiMatch) {
+        return {
+            bucket: apiMatch[1],
+            object: apiMatch[2] ? decodeURIComponent(apiMatch[2]) : null,
+            isList: !apiMatch[2]
+        };
+    }
+
+    const parts = cleanPath.split('/');
+    if (parts.length >= 2) {
+        const bucket = parts[0];
+        const object = parts.slice(1).join('/');
+        return {
+            bucket,
+            object,
+            isList: false
+        };
+    }
+
+    return null;
+}
 // --- API: GCS Proxy ---
 // Proxies requests to Google Cloud Storage for private buckets.
 // Uses server's ADC for authentication.
 app.all('/api/gcs/*', async (req, res) => {
     try {
+        // 1. Resolve user token and permissions
+        const githubToken = req.headers['x-prism-github-token'];
+        let username = null;
+        let permission = 'none';
+
+        if (githubToken) {
+            try {
+                const authResult = await validateGitHubToken(githubToken);
+                username = authResult.username;
+                permission = authResult.permission;
+            } catch (e) {
+                console.warn('[GCS Proxy Auth] Invalid session token:', e.message);
+            }
+        }
+
+        const parsed = parseGcsPath(req.params[0]);
+        const rawBuckets = process.env.DEFAULT_BUCKETS || 'llm-d-benchmarks-staging,llm-d-benchmarks';
+        const resultsBuckets = rawBuckets.split(',').map(b => b.trim());
+        const isTargetBucket = parsed && resultsBuckets.includes(parsed.bucket);
+
+        let isResultsStore = false;
+        let isIam = false;
+
+        if (parsed && isTargetBucket) {
+            const prefix = (parsed.isList ? req.query.prefix : parsed.object) || '';
+            if (prefix.startsWith('prism-results-store/')) {
+                isResultsStore = true;
+            } else if (prefix.startsWith('prism-iam/')) {
+                isIam = true;
+            }
+        }
+
+        // Enforce IAM role check
+        if (isIam && permission !== 'admin') {
+            return res.status(403).json({ error: 'Access denied. Only administrators can access IAM allowlists.' });
+        }
+
+        // Restrict non-read methods to administrators only
+        const readMethods = ['GET', 'HEAD'];
+        if (!readMethods.includes(req.method) && permission !== 'admin') {
+            return res.status(403).json({ error: 'Access denied. Write and delete operations are restricted to administrators.' });
+        }
+
+        // Enforce results store read access check
+        if (isResultsStore && !parsed.isList && permission !== 'admin') {
+            try {
+                const file = storage.bucket(parsed.bucket).file(parsed.object);
+                const [metadata] = await file.getMetadata();
+                const customContexts = metadata.contexts?.custom || {};
+                const itemUser = String(customContexts.github_user?.value || '');
+                const itemState = String(customContexts.submission_state?.value || 'submitted_pending_processing');
+
+                const isApproved = itemState === 'public' || itemState === 'promoted';
+                const isOwn = !!(username && itemUser.toLowerCase() === username.toLowerCase());
+
+                if (!isApproved && !isOwn) {
+                    return res.status(403).json({ error: 'Access denied. You do not have permissions to view this result.' });
+                }
+            } catch (err) {
+                if (err.code === 404) {
+                    return res.status(404).json({ error: 'Result not found' });
+                }
+                console.error('[GCS Proxy Auth Error]', err);
+                return res.status(500).json({ error: 'Failed to authorize GCS access', details: err.message });
+            }
+        }
+
         let client;
         const adcPath = process.env.GOOGLE_APPLICATION_DEFAULT_CREDENTIALS;
         if (adcPath && fs.existsSync(adcPath)) {
@@ -424,6 +544,30 @@ app.all('/api/gcs/*', async (req, res) => {
              const errText = await response.text();
              console.error(`[GCS Proxy Error] ${response.status}: ${errText}`);
              return res.status(response.status).send(errText);
+        }
+
+        const shouldFilterList = isTargetBucket && parsed && parsed.isList && permission !== 'admin';
+
+        if (shouldFilterList) {
+             const data = await response.json();
+             if (data.items && Array.isArray(data.items)) {
+                 data.items = data.items.filter(item => {
+                     if (item.name.startsWith('prism-iam/')) {
+                         return false;
+                     }
+                     if (item.name.startsWith('prism-results-store/')) {
+                         const customContexts = item.contexts?.custom || {};
+                         const itemUser = String(customContexts.github_user?.value || '');
+                         const itemState = String(customContexts.submission_state?.value || 'submitted_pending_processing');
+                         
+                         const isApproved = itemState === 'public' || itemState === 'promoted';
+                         const isOwn = !!(username && itemUser.toLowerCase() === username.toLowerCase());
+                         return isApproved || isOwn;
+                     }
+                     return true;
+                 });
+             }
+             return res.json(data);
         }
 
         const contentType = response.headers.get('content-type');
@@ -795,6 +939,83 @@ app.get('/api/regressions', async (req, res) => {
     } catch (err) {
         console.error('[Regressions API Error]', err);
         res.status(500).json({ error: 'Failed to fetch regressions', details: err.message });
+    }
+});
+
+// --- GitHub OAuth Integration ---
+app.get('/api/auth/github', (req, res) => {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    if (!clientId) {
+        console.log('[Auth] GITHUB_CLIENT_ID not configured. Redirecting to mock login.');
+        const mockRedirect = `/api/auth/github/callback?code=mock_code_developer`;
+        return res.redirect(mockRedirect);
+    }
+    
+    const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=user:email&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    res.redirect(githubAuthUrl);
+});
+
+app.get('/api/auth/github/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) {
+        return res.redirect('/?view=results-store&auth_error=missing_code');
+    }
+
+    try {
+        let username = 'mock-developer';
+        let fullName = 'Mock Developer';
+        let email = 'developer@mock.github.com';
+
+        const clientId = process.env.GITHUB_CLIENT_ID;
+        const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+        if (clientId && code !== 'mock_code_developer') {
+            const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    code
+                })
+            });
+            const tokenData = await tokenRes.json();
+            if (!tokenData.access_token) {
+                throw new Error('Failed to exchange authorization code for token');
+            }
+
+            const accessToken = tokenData.access_token;
+
+            const userRes = await fetch('https://api.github.com/user', {
+                headers: {
+                    'Authorization': `token ${accessToken}`,
+                    'User-Agent': 'LLM-d-Prism'
+                }
+            });
+            const userData = await userRes.json();
+            username = userData.login || 'unknown';
+            fullName = userData.name || username;
+
+            const emailsRes = await fetch('https://api.github.com/user/emails', {
+                headers: {
+                    'Authorization': `token ${accessToken}`,
+                    'User-Agent': 'LLM-d-Prism'
+                }
+            });
+            const emailsData = await emailsRes.json();
+            const primaryEmailObj = Array.isArray(emailsData) ? emailsData.find(e => e.primary) : null;
+            email = primaryEmailObj ? primaryEmailObj.email : (userData.email || 'no-email@github.com');
+        }
+
+        res.redirect(`/?view=results-store&github_user=${encodeURIComponent(username)}&github_name=${encodeURIComponent(fullName)}&github_email=${encodeURIComponent(email)}&auth_success=true`);
+
+    } catch (err) {
+        console.error('[Auth Callback Error]', err);
+        res.redirect('/?view=results-store&auth_error=' + encodeURIComponent(err.message));
     }
 });
 

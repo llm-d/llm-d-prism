@@ -99,7 +99,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     );
 };
 
-const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogScale }) => {
+const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogScale, metadata }) => {
     const [zoomXAxis, setZoomXAxis] = useState(initialXAxis || 'tpot');
     const [zoomYAxis, setZoomYAxis] = useState(initialYAxis || 'output');
     const [zoomColorMode, setZoomColorMode] = useState('default');
@@ -108,6 +108,22 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
     const [visiblePercentiles, setVisiblePercentiles] = useState(['p50', 'p90', 'p99']);
     const [zoomXMax, setZoomXMax] = useState(Infinity);
     const [showFilters, setShowFilters] = useState(false);
+
+    const displayMetadata = metadata ? {
+        machineType: metadata.machineType || 'local-instance',
+        accelerator: metadata.accelerator || data?.[0]?.hardware || 'H100',
+        replicas: metadata.replicas ?? 1,
+        model: metadata.model || data?.[0]?.model_name || 'qwen3-32b',
+        precision: metadata.precision || 'BF16',
+        engine: metadata.engine || 'vllm'
+    } : {
+        machineType: 'a3-highgpu-8g',
+        accelerator: 'H100',
+        replicas: 8,
+        model: 'qwen3-32b',
+        precision: 'BF16',
+        engine: 'vllm'
+    };
 
     useEffect(() => {
         if (zoomXAxis === 'ntpot') {
@@ -267,18 +283,26 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                                     </svg>
-                                    <span>a3-highgpu-8g</span>
-                                    <span>H100</span>
-                                    <span className="text-slate-400">(8 replicas)</span>
+                                    <span>{displayMetadata.machineType}</span>
+                                    <span>{displayMetadata.accelerator}</span>
+                                    {displayMetadata.replicas !== undefined && (
+                                        <span className="text-slate-400">({displayMetadata.replicas} replicas)</span>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-slate-500 font-semibold">Model:</span>
                                 <div className="font-mono text-slate-200">
-                                    <span className="font-bold">qwen3-32b</span>
-                                    <span className="text-slate-400"> (BF16)</span>
-                                    <span className="mx-1">•</span>
-                                    <span className="font-bold">vllm</span>
+                                    <span className="font-bold">{displayMetadata.model?.split('/').pop()?.split('-Instruct')[0]}</span>
+                                    {displayMetadata.precision && (
+                                        <span className="text-slate-400"> ({displayMetadata.precision})</span>
+                                    )}
+                                    {displayMetadata.engine && (
+                                        <>
+                                            <span className="mx-1">•</span>
+                                            <span className="font-bold">{displayMetadata.engine}</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -398,7 +422,12 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                         }
 
                                         // Ensure points are in order of Stage
-                                        groups[k].sort((a, b) => a.stage - b.stage);
+                                        groups[k].sort((a, b) => {
+                                            if (a.stage !== undefined && b.stage !== undefined) {
+                                                return a.stage - b.stage;
+                                            }
+                                            return a.dynamic_x - b.dynamic_x;
+                                        });
 
                                         return (
                                             <Line 

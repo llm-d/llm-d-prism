@@ -48,6 +48,7 @@ const pct = (val) => {
 
 
 
+
 const deriveRunLabel = (doc, filename) => {
     if (doc.run?.description) return doc.run.description;
 
@@ -130,6 +131,7 @@ const extractComponents = (stack) => {
     const components = [];
     if (!Array.isArray(stack)) return components;
     for (const c of stack) {
+        if (!c) continue;
         const label = String(c.metadata?.label || '');
         const tool = String(c.standardized?.tool || '');
         const kind = String(c.standardized?.kind || '');
@@ -291,7 +293,7 @@ export function parseReportV02(yamlText, filename) {
  * ]
  */
 // Helper to deep sort object keys for canonical JSON comparison
-const canonicalStringify = (obj) => {
+export const canonicalStringify = (obj) => {
     if (obj === null || obj === undefined) return '';
     if (typeof obj !== 'object') return JSON.stringify(obj);
     if (Array.isArray(obj)) return '[' + obj.map(canonicalStringify).join(',') + ']';
@@ -324,9 +326,12 @@ export function groupStagesIntoRuns(stageRecords) {
                 runId: record.runId || uuidv4(),
                 runLabel: record.runLabel || record.runId || "Unknown Run",
                 stages: [],
-                run_metadata: record.run_metadata || null,
+                model_name: record.model_name || null,
+                hardware: record.hardware || null,
                 config: record.config || null,
-                summary: record.summary || null
+                summary: record.summary || null,
+                wellLitPath: record.wellLitPath || record.well_lit_path || null,
+                targetDashboards: record.targetDashboards || []
             };
             runsList.push(targetRun);
         }
@@ -335,9 +340,12 @@ export function groupStagesIntoRuns(stageRecords) {
         record.runId = targetRun.runId;
         targetRun.stages.push(record);
         
-        if (!targetRun.run_metadata && record.run_metadata) targetRun.run_metadata = record.run_metadata;
+        if (!targetRun.model_name && record.model_name) targetRun.model_name = record.model_name;
+        if (!targetRun.hardware && record.hardware) targetRun.hardware = record.hardware;
         if (!targetRun.config && record.config) targetRun.config = record.config;
         if (!targetRun.summary && record.summary) targetRun.summary = record.summary;
+        if (!targetRun.wellLitPath && (record.wellLitPath || record.well_lit_path)) targetRun.wellLitPath = record.wellLitPath || record.well_lit_path;
+        if (!targetRun.targetDashboards && record.targetDashboards) targetRun.targetDashboards = record.targetDashboards;
     }
     
     // Sort stages within each run by stageIndex
@@ -371,26 +379,17 @@ export function groupStagesIntoRuns(stageRecords) {
  * user removes a run from the comparison panel.
  */
 export function stageToEntry(stage) {
-    const { scenario, performance, runId, timestamp, components, run_metadata, config } = stage;
+    const { scenario, performance, runId, timestamp, components, model_name, hardware: rootHardware, config } = stage;
 
     let modelName = scenario.model;
-    if ((modelName === 'Unknown' || !modelName) && run_metadata) {
-        modelName = run_metadata.model || modelName;
+    if ((modelName === 'Unknown' || !modelName) && model_name) {
+        modelName = model_name;
     }
     modelName = normalizeModelName(modelName);
 
     let hardware = scenario.hardware;
-    if ((hardware === 'Unknown' || hardware === 'TPU' || hardware === 'GPU' || !hardware) && run_metadata) {
-        if (run_metadata.accelerator) {
-            hardware = run_metadata.accelerator;
-        } else if (run_metadata.namespace) {
-            const ns = String(run_metadata.namespace).toLowerCase();
-            if (ns.includes('tpu')) {
-                hardware = 'TPU';
-            } else if (ns.includes('gpu')) {
-                hardware = 'GPU';
-            }
-        }
+    if ((hardware === 'Unknown' || hardware === 'TPU' || hardware === 'GPU' || !hardware) && rootHardware?.hardware_name) {
+        hardware = rootHardware.hardware_name;
     }
     
     // Fallback to config if needed
@@ -429,6 +428,11 @@ export function stageToEntry(stage) {
         }
     }
 
+    let acceleratorCount = scenario.acceleratorCount || 1;
+    if (rootHardware && typeof rootHardware.accelerator_count === 'number') {
+        acceleratorCount = rootHardware.accelerator_count;
+    }
+
     hardware = normalizeHardware(hardware);
     const ts         = timestamp || new Date().toISOString();
     const throughput = performance.outputTokenRate ?? null;
@@ -447,6 +451,7 @@ export function stageToEntry(stage) {
         // Top-level fields read directly by Dashboard / filter logic
         run_id: stage.runId,
         runLabel: stage.runLabel,
+        github_author: stage.github_author,
         model: modelName,
         model_name: modelName,
         hardware: hardware,
@@ -459,6 +464,8 @@ export function stageToEntry(stage) {
         latency,
         ttft,
         components: components || [],
+        well_lit_path: stage.well_lit_path || stage.wellLitPath || null,
+        wellLitPath: stage.well_lit_path || stage.wellLitPath || null,
 
         source: `brv02:${runId}`,
         source_info: {
@@ -466,6 +473,9 @@ export function stageToEntry(stage) {
             origin: 'brv02:' + (stage.runLabel || runId || 'local-upload'),
             file_identifier: stage.filename,
             experiment_id: stage.runEid,
+            submission_state: stage.submission_state,
+            submitted_at: stage.submitted_at,
+            approved_at: stage.approved_at,
         },
 
         // Also set under metadata for any code that reads metadata.*
@@ -474,7 +484,7 @@ export function stageToEntry(stage) {
             backend: scenario.harness || 'Unknown',
             hardware: hardware,
             accelerator_type: hardware,
-            accelerator_count: scenario.acceleratorCount || 1,
+            accelerator_count: acceleratorCount,
             precision: 'Unknown',
             timestamp: ts,
             tp: scenario.tp || 1,

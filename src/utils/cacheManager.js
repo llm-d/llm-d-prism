@@ -22,7 +22,7 @@ const STORE_NAME = 'keyval';
 const DB_VERSION = 1;
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
 
-const CACHE_VERSION = 'v20'; // Bump this string to force-invalidate all client caches
+const CACHE_VERSION = 'v21'; // Bump this string to force-invalidate all client caches
 
 // Helper to open DB
 const openDB = () => {

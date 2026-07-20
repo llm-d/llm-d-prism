@@ -27,6 +27,8 @@ export interface PrismResultPayload {
     hardware: {
         /** Normalized name of the accelerator hardware. Example: "H100" or "TPU v6e" */
         hardware_name: string;
+        /** Total count of accelerator chips used. Example: 8 */
+        accelerator_count?: number | null;
     };
     /** Target upload and parsing schema format. Must be exactly "brv02". */
     format: "brv02";
@@ -50,9 +52,21 @@ export interface PrismResultPayload {
     /** Flat key-value record mapping verification run logs/evidence to their storage bucket URLs. Example: { "run_log": "gs://llm-d-benchmarks/regressions/gemma2_9b/run.log" } */
     evidence?: Record<string, string>;
     /** Raw parsed YAML content dictionary harvested from run_metadata.yaml if found. */
-    run_metadata?: Record<string, any>;
+    run_metadata?: Record<string, unknown>;
     /** User custom JSON metadata dictionary editable dynamically within the dashboard inline editor. */
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
+    /** Feedback reason for rejection or change requests, if any. */
+    feedback?: string | null;
+    /** Optional review metadata including reviewer and review status change history. */
+    review?: {
+        reviewer?: string;
+        reviewedAt?: string;
+        history?: Array<{
+            status: string;
+            changedAt: string;
+            by: string;
+        }>;
+    } | null;
     /** Collection of stage-level benchmark metric documents. Rejects empty lists. */
     entries: PrismStageEntry[];
 }
@@ -71,7 +85,7 @@ export interface PrismStageEntry {
      * The parsed content of the stage report. Note that this contains the target parsed/mapped representation used inside the Prism DB context.
      * Must conform to Benchmark Report v0.2 (treated as partial/optional).
      */
-    raw_report: Record<string, any>;
+    raw_report: Record<string, unknown>;
 }
 
 /**
@@ -89,10 +103,13 @@ export type PrismSubmissionState =
  * Describes the custom object contexts attached to a benchmark result file on Google Cloud Storage.
  */
 export interface PrismResultContext {
-    submission_state: { value: PrismSubmissionState };
+    submission_state: { value: string };
     github_user: { value: string };
     run_id: { value: string };
     hardware_name: { value: string };
     model_name: { value: string };
     run_label: { value: string };
+    feedback?: { value: string };
+    well_lit_path?: { value: string };
 }
+

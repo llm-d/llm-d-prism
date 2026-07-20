@@ -15,6 +15,7 @@ import {
     BarChart, Bar, Cell, CartesianGrid, ReferenceLine,
     ResponsiveContainer, LabelList, Tooltip,
 } from 'recharts';
+import { AlertTriangle } from 'lucide-react';
 import { ChartCard, CustomXAxis, CustomYAxis } from '../common';
 
 // One-bar-per-run comparison chart. Metrics are grouped into families
@@ -133,7 +134,7 @@ const BarTooltip = ({ active, payload, metric, activeStats, baselineSet }) => {
         <div className="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-2xl px-3 py-2 backdrop-blur-md text-slate-900 dark:text-slate-100 text-xs min-w-[220px]">
             <div className="flex items-center gap-2 mb-1.5">
                 <span className="font-semibold truncate">{d.fullLabel}</span>
-                {d.isBaseline && <span className="text-cyan-500 dark:text-cyan-400 text-[10px] shrink-0">★ baseline</span>}
+                {d.isBaseline && <span className="text-cyan-500 dark:text-cyan-400 text-[10px] shrink-0">📌 baseline</span>}
             </div>
             <div className="space-y-1 font-mono">
                 {activeStats.map(s => {
@@ -165,7 +166,7 @@ const BarTooltip = ({ active, payload, metric, activeStats, baselineSet }) => {
                     );
                 })}
                 {!baselineSet && (
-                    <div className="text-[10px] text-slate-400 pt-1">no baseline · select ★ on a run to compare</div>
+                    <div className="text-[10px] text-slate-400 pt-1">no baseline · select 📌 on a run to compare</div>
                 )}
             </div>
         </div>
@@ -246,11 +247,11 @@ export const RunComparisonChart = ({
             const row = {
                 key,
                 fullLabel,
-                // ★ on the x-axis tick marks the whole benchmark group as
+                // 📌 on the x-axis tick marks the whole benchmark group as
                 // baseline — each bar's %diff is computed vs the same-stat
                 // value of THIS benchmark, so the marker belongs to the
                 // group, not any single bar.
-                label: (isBaseline ? '★ ' : '') + truncateLabel(fullLabel, 22),
+                label: (isBaseline ? '📌 ' : '') + truncateLabel(fullLabel, 22),
                 isBaseline,
             };
             metric.stats.forEach(s => {
@@ -312,7 +313,7 @@ export const RunComparisonChart = ({
     const NEG_COLOR        = '#f87171';
 
     // LabelList content factory — bound to a specific stat so we know which
-    // value to render and which row metadata to pull for ★ baseline / %diff.
+    // value to render and which row metadata to pull for 📌 baseline / %diff.
     const makeLabelRenderer = (statId) => (props) => {
         const { x, y, width, index } = props;
         if (x == null || y == null || width == null) return null;
@@ -331,7 +332,7 @@ export const RunComparisonChart = ({
 
         if (view === 'diff') {
             const cy = isAbove ? y - 8 : y + 16;
-            // Baseline bar is the 0% reference — no label needed; ★ marker
+            // Baseline bar is the 0% reference — no label needed; 📌 marker
             // is on the x-axis tick.
             if (entry.isBaseline || diff === null) return null;
             const sign = diff > 0 ? '+' : '';
@@ -409,6 +410,14 @@ export const RunComparisonChart = ({
 
     return (
         <ChartCard title="Run Comparison">
+            {plotData.length > 20 && (
+                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-start gap-2.5 leading-relaxed font-sans">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold">Visual Density Warning:</span> Comparing {plotData.length} runs. Bar charts are optimized for comparing fewer than 20 runs. For larger datasets, we recommend using the <span className="font-semibold text-cyan-400">Scatter Trade-offs</span> view to identify Pareto-optimal configurations.
+                    </div>
+                </div>
+            )}
             {/* Toggle row */}
             <div className="flex items-center gap-3 flex-wrap mb-4">
                 <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50 flex-wrap">
@@ -463,7 +472,7 @@ export const RunComparisonChart = ({
                     <button
                         onClick={() => canDiff && setViewOverride('diff')}
                         disabled={!canDiff}
-                        title={canDiff ? '' : 'Set a baseline (★) on a row in the table to enable Δ% view'}
+                        title={canDiff ? '' : 'Set a baseline (📌) on a row in the table to enable Δ% view'}
                         className={`${baseTogglesClass} ${
                             !canDiff
                                 ? 'text-slate-600 cursor-not-allowed opacity-50'
@@ -477,77 +486,79 @@ export const RunComparisonChart = ({
                 </div>
             </div>
 
-            <div className="h-72">
+            <div className="h-72 overflow-x-auto overflow-y-hidden">
                 {hasPlotData ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                            // Recharts caches per-bar layout by registration order, so
-                            // toggling a stat on/off after others were registered can leave
-                            // the new bar appended at the right of every group regardless
-                            // of JSX order. Re-keying on the active stat set forces a clean
-                            // remount that always renders bars in metric.stats order.
-                            key={activeStats.map(s => s.id).join(',')}
-                            data={plotData}
-                            margin={{ top: 44, right: 20, left: 30, bottom: 60 }}
-                            barGap={2}
-                        >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.3} vertical={false} />
-                            <CustomXAxis
-                                dataKey="label"
-                                type="category"
-                                interval={0}
-                                height={60}
-                                angle={-15}
-                                textAnchor="end"
-                                theme={theme}
-                                label={null}
-                                // CustomXAxis defaults to a numeric tickFormatter, which turns
-                                // category strings into NaN. Override with identity.
-                                tickFormatter={(v) => v}
-                            />
-                            <CustomYAxis
-                                label={yLabel}
-                                theme={theme}
-                                width={68}
-                                tickFormatter={(v) => view === 'diff'
-                                    ? `${v > 0 ? '+' : ''}${v}%`
-                                    : (Math.abs(v) >= 1000
-                                        ? Number(v).toFixed(0)
-                                        : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }))}
-                            />
-                            <Tooltip
-                                cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-                                content={<BarTooltip metric={metric} activeStats={activeStats} baselineSet={canDiff} />}
-                            />
-                            {view === 'diff' && (
-                                <ReferenceLine
-                                    y={0}
-                                    stroke={theme === 'dark' ? '#22d3ee' : '#0891b2'}
-                                    strokeWidth={1.5}
-                                    strokeDasharray="4 4"
+                    <div style={{ minWidth: `${Math.max(680, plotData.length * 48)}px`, height: '100%' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                // Recharts caches per-bar layout by registration order, so
+                                // toggling a stat on/off after others were registered can leave
+                                // the new bar appended at the right of every group regardless
+                                // of JSX order. Re-keying on the active stat set forces a clean
+                                // remount that always renders bars in metric.stats order.
+                                key={activeStats.map(s => s.id).join(',')}
+                                data={plotData}
+                                margin={{ top: 44, right: 20, left: 30, bottom: 60 }}
+                                barGap={2}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.3} vertical={false} />
+                                <CustomXAxis
+                                    dataKey="label"
+                                    type="category"
+                                    interval={0}
+                                    height={60}
+                                    angle={-15}
+                                    textAnchor="end"
+                                    theme={theme}
+                                    label={null}
+                                    // CustomXAxis defaults to a numeric tickFormatter, which turns
+                                    // category strings into NaN. Override with identity.
+                                    tickFormatter={(v) => v}
                                 />
-                            )}
-                            {activeStats.map(s => (
-                                <Bar
-                                    key={s.id}
-                                    dataKey={barKey(s.id)}
-                                    fill={STAT_COLORS[s.id]}
-                                    radius={[4, 4, 0, 0]}
-                                    maxBarSize={72}
-                                >
-                                    {plotData.map((entry, i) => (
-                                        <Cell
-                                            key={i}
-                                            fill={STAT_COLORS[s.id]}
-                                            stroke={entry.isBaseline ? (theme === 'dark' ? '#67e8f9' : '#0e7490') : 'none'}
-                                            strokeWidth={entry.isBaseline ? 1.5 : 0}
-                                        />
-                                    ))}
-                                    <LabelList dataKey={barKey(s.id)} content={makeLabelRenderer(s.id)} />
-                                </Bar>
-                            ))}
-                        </BarChart>
-                    </ResponsiveContainer>
+                                <CustomYAxis
+                                    label={yLabel}
+                                    theme={theme}
+                                    width={68}
+                                    tickFormatter={(v) => view === 'diff'
+                                        ? `${v > 0 ? '+' : ''}${v}%`
+                                        : (Math.abs(v) >= 1000
+                                            ? Number(v).toFixed(0)
+                                            : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }))}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                                    content={<BarTooltip metric={metric} activeStats={activeStats} baselineSet={canDiff} />}
+                                />
+                                {view === 'diff' && (
+                                    <ReferenceLine
+                                        y={0}
+                                        stroke={theme === 'dark' ? '#22d3ee' : '#0891b2'}
+                                        strokeWidth={1.5}
+                                        strokeDasharray="4 4"
+                                    />
+                                )}
+                                {activeStats.map(s => (
+                                    <Bar
+                                        key={s.id}
+                                        dataKey={barKey(s.id)}
+                                        fill={STAT_COLORS[s.id]}
+                                        radius={[4, 4, 0, 0]}
+                                        maxBarSize={72}
+                                    >
+                                        {plotData.map((entry, i) => (
+                                            <Cell
+                                                key={i}
+                                                fill={STAT_COLORS[s.id]}
+                                                stroke={entry.isBaseline ? (theme === 'dark' ? '#67e8f9' : '#0e7490') : 'none'}
+                                                strokeWidth={entry.isBaseline ? 1.5 : 0}
+                                            />
+                                        ))}
+                                        <LabelList dataKey={barKey(s.id)} content={makeLabelRenderer(s.id)} />
+                                    </Bar>
+                                ))}
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 ) : (
                     <div className="h-full flex items-center justify-center text-center px-6">
                         <div className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
@@ -567,7 +578,7 @@ export const RunComparisonChart = ({
                 multi-point benchmarks aggregate to {metric.higher ? 'max' : 'min'} {metric.label.toLowerCase()}
                 {canDiff
                     ? ' · Δ% in green = improvement, red = regression'
-                    : ' · set a baseline (★) on a run to enable Δ% comparison'}
+                    : ' · set a baseline (📌) on a run to enable Δ% comparison'}
             </p>
         </ChartCard>
     );

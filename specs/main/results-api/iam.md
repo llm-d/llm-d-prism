@@ -11,18 +11,29 @@ Prism uses GitHub OAuth for user authentication. When a user logs in, they
 authorize the Prism GitHub App, which issues an access token.
 
 1. **Token Verification**:
-   - The client includes the token in the `X-Prism-Github-Token` header for
-     request authorization.
-   - The backend queries `GET https://api.github.com/user` to verify the token's
-     validity and retrieve the authenticated user's GitHub username.
+    - The client includes the token in the `X-Prism-Github-Token` header for
+      request authorization.
+    - The backend queries `GET https://api.github.com/user` to verify the
+      token's validity and retrieve the authenticated user's GitHub username.
 
 ### 1.1 Base URL & OAuth Redirect URI (`PUBLIC_URL`)
 
-When initiating the OAuth flow, the backend must construct the absolute `redirect_uri` pointing back to its callback handler (`/api/auth/github/callback`). The base URL of the deployment is resolved using the `PUBLIC_URL` environment variable:
+When initiating the OAuth flow, the backend must construct the absolute
+`redirect_uri` pointing back to its callback handler
+(`/api/auth/github/callback`). The base URL of the deployment is resolved using
+the `PUBLIC_URL` environment variable:
 
-- **What it does:** Sets the canonical external URL of the Prism deployment (e.g. `https://prism-dashboard.com` or `http://localhost:8081`).
-- **Why it's needed:** Behind reverse proxies, load balancers, or CDN endpoints, request headers (like `req.protocol` or `req.get('host')`) can be modified or stripped. Setting `PUBLIC_URL` explicitly guarantees the correct hostname and HTTPS protocol are utilized for building OAuth callback targets, preventing GitHub authorization redirect failures.
-- **Fallback Behavior:** If `PUBLIC_URL` is omitted (default: empty/undefined), the server dynamically detects the base URL from the incoming request headers, supporting the `X-Forwarded-Host` and `X-Forwarded-Proto` headers when running behind trusted proxies.
+- **What it does:** Sets the canonical external URL of the Prism deployment
+  (e.g. `https://prism-dashboard.com` or `http://localhost:8081`).
+- **Why it's needed:** Behind reverse proxies, load balancers, or CDN endpoints,
+  request headers (like `req.protocol` or `req.get('host')`) can be modified or
+  stripped. Setting `PUBLIC_URL` explicitly guarantees the correct hostname and
+  HTTPS protocol are utilized for building OAuth callback targets, preventing
+  GitHub authorization redirect failures.
+- **Fallback Behavior:** If `PUBLIC_URL` is omitted (default: empty/undefined),
+  the server dynamically detects the base URL from the incoming request headers,
+  supporting the `X-Forwarded-Host` and `X-Forwarded-Proto` headers when running
+  behind trusted proxies.
 
 ---
 
@@ -64,15 +75,15 @@ the following GCS paths:
 
 - **Local Development / Staging Mode** (when `llm-d-benchmarks-staging` is
   present in `DEFAULT_BUCKETS`):
-  - **User Allowlist**:
-    `gs://llm-d-benchmarks-staging/prism-iam/github-user-allowlist.txt`
-  - **Admin Allowlist**:
-    `gs://llm-d-benchmarks-staging/prism-iam/github-admin-allowlist.txt`
+    - **User Allowlist**:
+      `gs://llm-d-benchmarks-staging/prism-iam/github-user-allowlist.txt`
+    - **Admin Allowlist**:
+      `gs://llm-d-benchmarks-staging/prism-iam/github-admin-allowlist.txt`
 - **Production Mode**:
-  - **User Allowlist**:
-    `gs://llm-d-benchmarks/prism-iam/github-user-allowlist.txt`
-  - **Admin Allowlist**:
-    `gs://llm-d-benchmarks/prism-iam/github-admin-allowlist.txt`
+    - **User Allowlist**:
+      `gs://llm-d-benchmarks/prism-iam/github-user-allowlist.txt`
+    - **Admin Allowlist**:
+      `gs://llm-d-benchmarks/prism-iam/github-admin-allowlist.txt`
 
 ---
 

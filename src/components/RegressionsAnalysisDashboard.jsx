@@ -304,7 +304,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                 infraTag: infra,
                 methodTag: method,
                 sig: meta.sig,
-                desc: `Telemetry suite for benchmark scenario: ${s}`
+                desc: `Benchmark suite for benchmark scenario: ${s}`
             };
         });
     }, [runs]);
@@ -456,32 +456,32 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full font-sans">
             
             {/* Top Navigation Bar */}
-            <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
+            <header className="w-full h-16 border-b border-slate-900/65 flex justify-between items-center px-6 bg-slate-950/20 backdrop-blur-md fixed top-0 left-0 right-0 z-[49]">
                 <div className="flex items-center gap-4">
-                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden cursor-pointer">
+                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-slate-800/60 md:hidden">
                         <Menu className="h-6 w-6" />
                     </button>
 
                     {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+                        <button onClick={onNavigateBack} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-colors cursor-pointer border border-transparent hover:border-slate-800/60">
                             <ArrowLeft className="h-5 w-5" />
                         </button>
                     )}
 
-                    <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
+                    <div className="flex items-center gap-2.5 border-r border-slate-800 pr-4">
                         <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hidden sm:inline">
+                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hidden sm:inline select-none">
                             Prism
                         </span>
                     </div>
 
                     <div>
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate">Regressions & Analysis Suite</h1>
+                        <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">Regressions & Analysis Suite</h1>
                     </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
-                    <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative cursor-pointer">
+                    <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-355 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative cursor-pointer">
                         <Share2 className="w-3.5 h-3.5 mr-1.5" />
                         <span>Share link</span>
                         {shareToast && (
@@ -511,7 +511,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 <span>Defined Test Runs</span>
                             </h3>
                             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                                Select a nightly CI regression pipeline to load historical telemetry.
+                                Select a nightly CI regression pipeline to load historical benchmarks.
                             </p>
                         </div>
 
@@ -650,7 +650,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 <div className="flex items-center gap-2 shrink-0">
                                     <button 
                                         onClick={handleExportJson} 
-                                        title="Export Raw Telemetry JSON"
+                                        title="Export Raw Benchmark JSON"
                                         className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer"
                                     >
                                         <Download className="w-3.5 h-3.5" />

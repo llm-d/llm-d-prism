@@ -20,12 +20,11 @@ import {
     BarChart, Bar, ReferenceDot, Label
 } from 'recharts';
 
-import { Activity, Clock, Zap, AlertCircle, ChevronDown, ChevronUp, FileJson, ExternalLink, Cloud, Loader, Filter, X, Plus, RefreshCw, Database, Check, CheckCircle, RotateCcw, Sun, Moon, Eye, EyeOff, Trash2, Edit2, Share2, MessageCircle, Target, ArrowLeft } from 'lucide-react';
+import { Activity, Clock, Zap, AlertCircle, ChevronDown, ChevronUp, FileJson, ExternalLink, Cloud, Loader, Filter, X, Plus, RefreshCw, Database, Check, CheckCircle, RotateCcw, Sun, Moon, Eye, EyeOff, Trash2, Edit2, Share2, MessageCircle, Target, ArrowLeft, Upload, FileClock, BarChart2, ArrowRight } from 'lucide-react';
 import { parseJsonEntry, parseLogFile, parseGiqData, normalizeModelName, normalizeHardware, parseLpgLifecycleMetrics, parseLpgRequestLog } from '../utils/dataParser';
 import { listFolderRecursive, fetchFileContent, parseDriveMetadata, findFolderByName } from '../utils/googleDrive';
 import { defaultState } from '../config/defaultState';
 
-import DataConnectionsPanel from './DataConnectionsPanel';
 import { CacheManager } from '../utils/cacheManager';
 import { QualityParser, normalizeQualityModelName } from '../utils/qualityParser';
 
@@ -157,7 +156,7 @@ const MOCK_FALLBACK_DATA_LEGACY = [
     }
 ];
 
-const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dashboardData: propData }) => {
+const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardState: propState, dashboardData: propData }) => {
 
     const localState = useDashboardState();
     const dashboardState = propState || localState;
@@ -231,8 +230,15 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         API_KEY,
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, handleAddAWSBucket, removeAWSBucket,
-        brv02Runs, brv02CustomLabels, setBrv02CustomLabels,
+        brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+        apiError, setApiError, refreshSource,
+        handleValidatedUpload,
+        submissions, isLoadingSubmissions, loadSubmissions
     } = dashboardData;
+
+    const [activeDashboardTab, setActiveDashboardTab] = useState('charts');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [kpiFilter, setKpiFilter] = useState(null); // null | 'pareto' | 'verified' | 'staged'
 
     const data = useMemo(() => {
         if (!liveData || liveData.length === 0) return MOCK_FALLBACK_DATA_LEGACY.map((d, i) => ({ ...d, id: i }));
@@ -244,7 +250,6 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
 
 
     // ... existing state ...
-    const [apiError, setApiError] = useState(null);
     const [shareToast, setShareToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [hoveredDataPoint, setHoveredDataPoint] = useState(null);
@@ -297,9 +302,6 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         localStorage.setItem('bucketConfigs', JSON.stringify(bucketConfigs));
     }, [bucketConfigs]);
 
-    useEffect(() => {
-        localStorage.setItem('selectedSources', JSON.stringify([...selectedSources]));
-    }, [selectedSources]);
 
 
 
@@ -412,172 +414,9 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
         setSelectedBenchmarks(new Set());
     };
 
-    const fetchBucketDelta = async (bucket, currentProfile) => {
-        const cleanBucketName = bucket.replace(/^gs:\/\//, '');
-        let usingProxy = false;
 
-        try {
-            let response = await fetch(`https://storage.googleapis.com/storage/v1/b/${cleanBucketName}/o`);
 
-            // Fallback to Proxy
-            if (response.status === 401 || response.status === 403) {
-                response = await fetch(`/api/gcs/storage/v1/b/${cleanBucketName}/o`);
-                if (response.ok) usingProxy = true;
-            }
 
-            if (!response.ok) throw new Error(`Failed to access bucket (${response.status}).`);
-
-            const json = await response.json();
-            if (!json.items) return { newEntries: [], newFiles: [] };
-
-            const filesToProcess = json.items.filter(item => !item.name.endsWith('/'));
-
-            // Find new files
-            const existingFiles = new Set((currentProfile?.files || []).map(f => f.name));
-            const newFilesToFetch = filesToProcess.filter(f => !existingFiles.has(f.name));
-
-            if (newFilesToFetch.length === 0) return { newEntries: [], newFiles: [] };
-
-            const newEntries = [];
-            const newFileMetadata = [];
-
-            await Promise.all(newFilesToFetch.map(async (file) => {
-                try {
-                    let fileUrl = file.mediaLink;
-                    if (usingProxy && fileUrl.startsWith('https://storage.googleapis.com/')) {
-                        const path = fileUrl.replace('https://storage.googleapis.com/', '');
-                        fileUrl = `/api/gcs/${path}`;
-                    }
-
-                    const fileRes = await fetch(fileUrl);
-                    if (!fileRes.ok) throw new Error(`Fetch failed: ${fileRes.status}`);
-
-                    const content = await fileRes.text();
-                    let entries = [];
-                    try {
-                        const jsonContent = JSON.parse(content);
-                        if (jsonContent.metrics || jsonContent.load_summary) {
-                            const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${cleanBucketName}` }, file.name);
-                            entries = [entry];
-                        }
-                    } catch { } // Log parsing fail?
-
-                    if (entries.length === 0) entries = parseLogFile(content, file.name);
-
-                    if (entries.length > 0) {
-                        entries.forEach(e => {
-                            e.source = `gcs:${cleanBucketName}`;
-
-                            // Determine display type
-                            let type = 'storage';
-
-                            if (e.source_info) {
-                                e.source_info.origin = `gcs:${cleanBucketName}`;
-                                e.source_info.type = type;
-                            } else {
-                                e.source_info = {
-                                    type: type,
-                                    origin: `gcs:${cleanBucketName}`,
-                                    file_identifier: file.name,
-                                    raw_url: file.mediaLink
-                                };
-                            }
-                            e.raw_url = `https://storage.googleapis.com/${cleanBucketName}/${file.name}`;
-                            // Normalization Heuristics
-                            if (e.latency?.mean && e.latency.mean < 100) {
-                                e.latency.mean *= 1000;
-                                if (e.latency.p50) e.latency.p50 *= 1000;
-                                if (e.latency.p99) e.latency.p99 *= 1000;
-                            }
-                            if (e.ttft?.mean && e.ttft.mean < 100) {
-                                e.ttft.mean *= 1000;
-                                if (e.ttft.p50) e.ttft.p50 *= 1000;
-                            }
-                            newEntries.push(e);
-                        });
-                        newFileMetadata.push({ name: file.name, entryCount: entries.length });
-                    }
-                } catch (e) {
-                    console.warn(`Failed to process new file ${file.name}:`, e);
-                }
-            }));
-
-            return { newEntries, newFiles: newFileMetadata };
-
-        } catch (e) {
-            console.error("Delta fetch failed", e);
-            throw e;
-        }
-    };
-
-    const refreshSource = async (sourceType, id, mode = 'full') => {
-        setGcsLoading(true);
-        try {
-            if (sourceType === 'gcs') {
-                if (mode === 'delta') {
-                    const currentProfile = gcsProfiles.find(p => p.bucketName === id);
-                    if (!currentProfile) throw new Error("Profile not found for comparison");
-
-                    const { newEntries, newFiles } = await fetchBucketDelta(id, currentProfile);
-
-                    if (newEntries.length > 0) {
-                        updateSourceData(`gcs:${id}`, newEntries, {
-                            ...currentProfile,
-                            files: [...(currentProfile.files || []), ...newFiles],
-                            entryCount: (currentProfile.entryCount || 0) + newEntries.length,
-                            loadedAt: new Date().toISOString()
-                        }, 'append');
-                        setGcsSuccess(`Added ${newEntries.length} new benchmarks.`);
-                    } else {
-                        setGcsSuccess(`No new data found in ${id}.`);
-                    }
-                } else {
-                    // Full Refresh
-                    const result = await fetchBucketData(id, true);
-                    if (result.profile.error) {
-                        setGcsError(result.profile.error);
-                    } else {
-                        updateSourceData(`gcs:${id}`, result.entries, result.profile, 'replace');
-                        setGcsSuccess(`Refreshed bucket: ${id}`);
-                    }
-                }
-            } else if (sourceType === 'giq') {
-                let token = apiConfigs.find(c => c.projectId === id)?.token;
-                if (!token) token = localStorage.getItem(`giq_token_${id}`);
-
-                // If no token, proceed anyway (Backend will fallback to ADC)
-                // if (!token) { ... }
-
-                // User Request: Explicitly invalidate cache to trigger fresh fetch logic
-                await CacheManager.remove('giq', id);
-
-                let result = await fetchGiqData(id, token, false); // forceRefresh=false, relies on (now empty) cache check
-
-                // Auto-Retry Logic: If User Token Expired (401/403), retry with ADC (matches initial load logic)
-                if (result.profile.error && token && (result.profile.error.includes('401') || result.profile.error.includes('403'))) {
-                    console.log(`[Refresh] Token expired for ${id}. Retrying with ADC...`);
-                    const retryRes = await fetchGiqData(id, '', true);
-                    if (!retryRes.profile.error) {
-                        result = retryRes;
-                        // Optional: Clear invalid token? localStorage.removeItem(`giq_token_${id}`);
-                    }
-                }
-
-                if (result.profile.error) {
-                    setApiError(result.profile.error);
-                } else {
-                    // API Delta simply merges unique entries based on Timestamp/Model
-                    updateSourceData(`giq:${id}`, result.entries, { ...result.profile, rawResponse: result.rawResponse }, mode === 'delta' ? 'merge' : 'replace');
-                    setGcsSuccess(`Refreshed GIQ: Found ${result.rawResponse?.list?.profile?.length || '?'} profiles, Loaded ${result.entries.length} benchmarks.`);
-                }
-            }
-            setTimeout(() => setGcsSuccess(null), 3000);
-        } catch (e) {
-            console.error("Refresh failed", e);
-            setGcsError(`Refresh failed: ${e.message}`);
-        }
-        setGcsLoading(false);
-    };
 
     const updateSourceData = (sourceKey, newEntries, newProfile, mode = 'replace') => {
         let newData = [];
@@ -1758,7 +1597,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
     const hasLocalBenchmarks = Array.from(selectedSources || []).some(source => source === 'local' || source.startsWith('brv02:'));
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased relative overflow-x-hidden pt-16">
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased relative overflow-x-hidden pt-0">
             {/* Toast Stack */}
             <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
                 {toasts.map(t => (
@@ -1772,45 +1611,56 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                     </div>
                 ))}
             </div>
-            <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
+            <header className="w-full h-16 border-b border-slate-900/65 flex justify-between items-center px-6 bg-slate-950/20 backdrop-blur-md sticky top-0 z-[49]">
                 <div className="flex items-center gap-4">
                     {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                        <button onClick={onNavigateBack} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-colors cursor-pointer border border-transparent hover:border-slate-800/60">
                             <ArrowLeft className="h-5 w-5" />
                         </button>
                     )}
                     
                     {/* Compact Prism Logo & Name */}
-                    <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
+                    <div className="flex items-center gap-2.5 border-r border-slate-800 pr-4">
                         <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600">
+                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 select-none">
                             Prism{siteName ? ` - ${siteName}` : ''}
                         </span>
                     </div>
 
                     <div className="flex items-center">
-                        <h1 className="text-lg font-bold text-white tracking-wide">Benchmark browser</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                            Expert mode
+                        <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">
+                            {mode === 'manager' ? 'Results store' : 'Benchmark browser'}
+                        </h1>
+                        <span className="ml-3 px-2 py-0.5 rounded text-[10px] font-extrabold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase tracking-wider font-mono">
+                            {mode === 'manager' ? 'Results store' : 'Expert mode'}
                         </span>
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4">
-                    <button
-                        onClick={() => onNavigate && onNavigate('manage-benchmarks')}
-                        className="px-4 py-2 text-sm font-medium rounded-md border text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700 transition-colors flex items-center"
-                    >
-                        <Database className="w-4 h-4 mr-2" /> Manage
-                    </button>
+                <div className="flex items-center space-x-3">
+                    {mode === 'browser' ? (
+                        <button
+                            onClick={() => onNavigate && onNavigate('results-store')}
+                            className="px-3.5 py-2 text-xs font-semibold rounded-xl border text-slate-350 bg-slate-900/40 hover:bg-slate-900/80 border-slate-800 hover:border-slate-700 transition-all flex items-center cursor-pointer"
+                        >
+                            <Database className="w-4 h-4 mr-2 text-cyan-400" /> Results store
+                        </button>
+                    ) : (
+                            <button
+                                onClick={() => onNavigate && onNavigate('submit-benchmarks', { intent: 'submit-review' })}
+                                className="px-3.5 py-2 text-xs font-semibold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 transition-all flex items-center shadow-lg border border-emerald-500/20 cursor-pointer hover:shadow-emerald-500/20"
+                            >
+                                <Upload className="w-4 h-4 mr-2" /> Submit Benchmarks
+                            </button>
+                    )}
 
                     <a 
                         href={formatContactUrl(contactUrl)} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="px-4 py-2 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700"
+                        className="px-3.5 py-2 text-xs font-semibold rounded-xl text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 no-underline cursor-pointer"
                     >
-                        <MessageCircle className="w-4 h-4 mr-2" /> Contact us
+                        <MessageCircle className="w-4 h-4 mr-1.5" /> Contact us
                     </a>
 
                     <div className="relative group flex">
@@ -1828,7 +1678,7 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                                     setTimeout(() => setShareToast(false), 2000); 
                                 });
                             }} 
-                            className={`px-4 py-2 text-sm font-medium rounded-md flex items-center border relative transition-colors ${hasLocalBenchmarks ? 'text-slate-500 bg-slate-800 border-slate-700 cursor-not-allowed' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
+                            className={`px-3.5 py-2 text-xs font-medium rounded-xl flex items-center border relative transition-all cursor-pointer ${hasLocalBenchmarks ? 'text-slate-500 bg-slate-800 border-slate-700 cursor-not-allowed' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
                         >
                             <Share2 className="w-4 h-4 mr-2" /> Share view 
                             {shareToast && !hasLocalBenchmarks && (
@@ -1848,61 +1698,97 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
 
             <main className="w-full px-8 py-6 pl-28 flex flex-col transition-colors duration-200">
 
-            {/* Helper to generate config object */}
-            {(() => {
-                // Define copy config handler in render scope (or move to component body if preferred, but this works for inserting button code later)
-                // Actually, let's just use an inline function for the button below.
-            })()}
-
-            {/* Configuration Area */}
-            <div className="space-y-4 mb-4">
-
-                {/* Data Connections Section - Moved to Slide-over */}
+                {mode === 'browser' ? (
+                    <>
 
 
-                {/* Integrated Benchmark Explorer */}
-                <FilterPanel
-                    {...{
-                        showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
-                        selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
-                        selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
-                        toggleBenchmark, toggleModelExpansion,
-                        baselineBenchmarkKey, setBaselineBenchmarkKey,
-                        UnifiedDataTable
-                    }}
-                />
+                        {/* Integrated Benchmark Explorer & Staging List */}
+                        <div className="space-y-4 mb-6">
+                            <FilterPanel
+                                {...{
+                                    showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
+                                    selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
+                                    selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
+                                    toggleBenchmark, toggleModelExpansion,
+                                    baselineBenchmarkKey, setBaselineBenchmarkKey,
+                                    UnifiedDataTable,
+                                    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+                                    setShowDataPanel,
+                                    searchTerm, setSearchTerm, kpiFilter, setKpiFilter
+                                }}
+                            />
+                        </div>
 
+                        {selectedBenchmarks.size === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-12 bg-slate-900/40 border border-slate-800/80 rounded-2xl text-center space-y-4 backdrop-blur-sm mb-6">
+                                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-full">
+                                    <BarChart2 className="w-8 h-8" />
+                                </div>
+                                <div className="space-y-1.5 max-w-md">
+                                    <h3 className="text-sm font-bold text-white">No Benchmarks Selected</h3>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        Select benchmark runs in the explorer table above to begin plotting and comparing throughput, latency, and cost efficiency metrics.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4 mb-6">
+                                <ThroughputCostChart
+                                    {...{
+                                        tputType, setTputType, yQualityMode, setYQualityMode, chartMode, setChartMode,
+                                        xQualityMode, setXQualityMode, costMode, setCostMode, showPerChip, setShowPerChip,
+                                        showLabels, setShowLabels, showDataLabels, setShowDataLabels, showPareto, setShowPareto,
+                                        qualityMetrics, allModels, selectedModels, filteredData, getBenchmarkKey, theme,
+                                        isZoomEnabled, setIsZoomEnabled, zoomDomain, setZoomDomain, chartContainerRef,
+                                        isDragging, setIsDragging, lastMouseRef, chartColorMode, setChartColorMode,
+                                        metricAvailability, filteredBySource, xAxisMax, setXAxisMax, setDebugInfo,
+                                        isLogScaleX, setIsLogScaleX, setLatType, selectedBenchmarks,
+                                        baselineBenchmarkKey
+                                    }}
+                                />
 
+                                <RunComparisonChart
+                                    filteredBySource={filteredBySource}
+                                    selectedBenchmarks={selectedBenchmarks}
+                                    getBenchmarkKey={getBenchmarkKey}
+                                    baselineBenchmarkKey={baselineBenchmarkKey}
+                                    brv02CustomLabels={brv02CustomLabels}
+                                    theme={theme}
+                                />
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        {/* Section Header: Results Store */}
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                                Results Store & Data Connections
+                            </h3>
+                            <p className="text-[11px] text-slate-400 mt-1">
+                                Sync remote storage buckets, upload raw benchmark directories, and choose which runs to plot in the active comparison dashboards.
+                            </p>
+                        </div>
 
-
-
-
-
-
-
-
-                <ThroughputCostChart
-                    {...{
-                        tputType, setTputType, yQualityMode, setYQualityMode, chartMode, setChartMode,
-                        xQualityMode, setXQualityMode, costMode, setCostMode, showPerChip, setShowPerChip,
-                        showLabels, setShowLabels, showDataLabels, setShowDataLabels, showPareto, setShowPareto,
-                        qualityMetrics, allModels, selectedModels, filteredData, getBenchmarkKey, theme,
-                        isZoomEnabled, setIsZoomEnabled, zoomDomain, setZoomDomain, chartContainerRef,
-                        isDragging, setIsDragging, lastMouseRef, chartColorMode, setChartColorMode,
-                        metricAvailability, filteredBySource, xAxisMax, setXAxisMax, setDebugInfo,
-                        isLogScaleX, setIsLogScaleX, setLatType, selectedBenchmarks,
-                        baselineBenchmarkKey
-                    }}
-                />
-
-                <RunComparisonChart
-                    filteredBySource={filteredBySource}
-                    selectedBenchmarks={selectedBenchmarks}
-                    getBenchmarkKey={getBenchmarkKey}
-                    baselineBenchmarkKey={baselineBenchmarkKey}
-                    brv02CustomLabels={brv02CustomLabels}
-                    theme={theme}
-                />
+                        {/* Integrated Benchmark Explorer & Staging List */}
+                        <div className="space-y-4 mb-4">
+                            <FilterPanel
+                                {...{
+                                    showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
+                                    selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
+                                    selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
+                                    toggleBenchmark, toggleModelExpansion,
+                                    baselineBenchmarkKey, setBaselineBenchmarkKey,
+                                    UnifiedDataTable,
+                                    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+                                    setShowDataPanel,
+                                    submissions, isLoadingSubmissions, loadSubmissions,
+                                    searchTerm, setSearchTerm, kpiFilter, setKpiFilter
+                                }}
+                            />
+                        </div>
+                    </>
+                )}
 
 
 
@@ -1958,96 +1844,12 @@ const Dashboard = ({ onNavigateBack, onNavigate, dashboardState: propState, dash
                     onClose={() => setIsInspectorOpen(false)}
                 />
 
+
                 {/* Application Layer */}
 
-            </div>
             </main>
 
-            {/* Data Connections Panel — rendered outside <main> so flex/overflow
-                inside main cannot affect its fixed positioning or stacking context */}
-                {showDataPanel && (
-                    <div
-                        className="fixed inset-0 bg-black/50 z-[55] backdrop-blur-sm transition-opacity"
-                        onClick={() => setShowDataPanel(false)}
-                    />
-                )}
-                <DataConnectionsPanel
-                    {...dashboardData}
-                    addToast={addToast}
-                    showDataPanel={showDataPanel}
-                    setShowDataPanel={setShowDataPanel}
-                    INTEGRATIONS={INTEGRATIONS}
-                    availableSources={availableSources}
-                    showSampleData={showSampleData}
-                    enableLLMDResults={enableLLMDResults}
-                    setEnableLLMDResults={setEnableLLMDResults}
-                    expandedIntegration={expandedIntegration}
-                    setExpandedIntegration={setExpandedIntegration}
-                    setApiError={setApiError}
-                    setGcsError={setGcsError}
-                    setLpgError={setLpgError}
-                    removeSampleData={removeSampleData}
-                    removeLLMDData={removeLLMDData}
-                    restoreSampleData={restoreSampleData}
-                    driveLoading={driveLoading}
-                    driveStatus={driveStatus}
-                    driveProgress={driveProgress}
-                    driveError={driveError}
-                    refreshSource={refreshSource}
-                    setApiConfigs={setApiConfigs}
-                    setData={setData}
-                    setSelectedSources={setSelectedSources}
-                    setAvailableSources={setAvailableSources}
-                    newProjectId={newProjectId}
-                    setNewProjectId={setNewProjectId}
-                    newAuthToken={newAuthToken}
-                    setNewAuthToken={setNewAuthToken}
-                    handleAddApiSource={handleAddApiSource}
-                    gcsLoading={gcsLoading}
-                    gcsError={gcsError}
-                    apiError={apiError}
-                    lpgError={lpgError}
-                    handleLpgFileUpload={handleLpgFileUpload}
-                    handleLpgGcsScan={handleLpgGcsScan}
-                    handleLpgGcsLoad={handleLpgGcsLoad}
-                    lpgLoading={lpgLoading}
-                    lpgPasteText={lpgPasteText}
-                    setLpgPasteText={setLpgPasteText}
-                    setLpgLoading={setLpgLoading}
-                    parseLogFile={parseLogFile}
-                    gcsSuccess={gcsSuccess}
-                    setGcsSuccess={setGcsSuccess}
-                    connectionType={connectionType}
-                    setConnectionType={setConnectionType}
-                    gcsProfiles={gcsProfiles}
-                    selectedSources={selectedSources}
-                    removeBucket={removeBucket}
-                    newBucketAlias={newBucketAlias}
-                    setNewBucketAlias={setNewBucketAlias}
-                    newBucketName={newBucketName}
-                    setNewBucketName={setNewBucketName}
-                    handleAddBucket={handleAddBucket}
-                    chartMode={chartMode}
-                    tputType={tputType}
-                    costMode={costMode}
-                    latType={latType}
-                    selectedModels={selectedBenchmarks}
-                    activeFilters={activeFilters}
-                    xAxisMax={xAxisMax}
-                    showPerChip={showPerChip}
-                    showSelectedOnly={showSelectedOnly}
-                    showPareto={showPareto}
-                    showLabels={showLabels}
-                    showDataLabels={showDataLabels}
-                    setIsInspectorOpen={setIsInspectorOpen}
-                    qualityMetrics={qualityMetrics}
-                    setQualityInspectOpen={setQualityInspectOpen}
-                    fetchQualityData={fetchQualityData}
-                    state={dashboardState}
-                    awsBucketConfigs={awsBucketConfigs}
-                    handleAddAWSBucket={handleAddAWSBucket}
-                    removeAWSBucket={removeAWSBucket}
-                />
+
         </div>
 
     );

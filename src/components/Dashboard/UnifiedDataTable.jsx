@@ -13,16 +13,26 @@
 // limitations under the License.
 
 import React from 'react';
-import { RotateCcw, ChevronDown, ChevronUp, Star } from 'lucide-react';
-import { getEffectiveTp, getBucket, getSourceTag } from '../../utils/dashboardHelpers';
+import { RotateCcw, ChevronDown, ChevronUp, Star, Pin } from 'lucide-react';
+import { getEffectiveTp, getBucket, getSourceTag, getSubmissionStatusDetails } from '../../utils/dashboardHelpers';
+import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 
 export const UnifiedDataTable = (props) => {
+    const { user } = useGitHubAuth();
     const {
         modelStats, selectedModels, filteredBySource, showSelectedOnly, setShowSelectedOnly,
         selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
         toggleBenchmark, toggleModelExpansion,
         baselineBenchmarkKey, setBaselineBenchmarkKey,
+        brv02CustomLabels
     } = props;
+
+    const getRunIdFromKey = (key) => {
+        if (!key) return null;
+        if (key.startsWith('brv02:')) return key.substring(6);
+        if (key.startsWith('results-store:')) return key.substring(14);
+        return null;
+    };
 
     const toggleBaseline = (key) => {
         if (!setBaselineBenchmarkKey) return;
@@ -79,8 +89,8 @@ export const UnifiedDataTable = (props) => {
                                             }} />
                                        )}
                                    </th>
-                                   <th className="px-1 py-3 w-8 text-center" title="Baseline — click ★ on a row to compare other selected runs against it">
-                                       <Star size={11} className="mx-auto text-slate-400" />
+                                   <th className="px-1 py-3 w-8 text-center" title="Baseline — click 📌 on a row to compare other selected runs against it">
+                                       <Pin size={11} className="mx-auto text-slate-400" />
                                    </th>
                                    <th className="px-2 py-3">Model</th>
                                    <th className="px-2 py-3">Accelerator</th>
@@ -181,7 +191,7 @@ export const UnifiedDataTable = (props) => {
                                                                     : 'text-slate-300 dark:text-slate-600 hover:text-cyan-500 dark:hover:text-cyan-400'
                                                             }`}
                                                         >
-                                                            <Star size={12} fill={isBaseline ? 'currentColor' : 'none'} />
+                                                            <Pin size={11} className={`transition-transform duration-300 ${isBaseline ? 'rotate-[45deg]' : '-rotate-45 opacity-60'}`} fill={isBaseline ? 'currentColor' : 'none'} />
                                                         </button>
                                                     );
                                                 })()}
@@ -203,7 +213,11 @@ export const UnifiedDataTable = (props) => {
                                                           )}
                                                       </button>
                                                     <div>
-                                                        {benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name)}
+                                                        {(() => {
+                                                            const runId = getRunIdFromKey(stat.benchmarkKey);
+                                                            const customLabel = runId ? brv02CustomLabels?.[runId] : null;
+                                                            return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
+                                                        })()}
                                                     </div>
                                                 </div>
                                            </td>
@@ -267,33 +281,100 @@ export const UnifiedDataTable = (props) => {
                                                 {stat.minLat.toFixed(0)} <span className="text-[10px] text-slate-500">ms</span>
                                            </td>
                                             <td className="px-2 py-2 text-center">
-                                               <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 truncate max-w-[100px] inline-block font-semibold" title={benchmarkData[0]?.source_info?.origin || benchmarkData[0]?.source}>
-                                                   {getSourceTag(benchmarkData[0])}
-                                               </span>
-                                           </td>
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    {(() => {
+                                                        const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+                                                        const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
+                                                        if (isMine) {
+                                                            return (
+                                                                <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                    Yours
+                                                                </span>
+                                                            );
+                                                        }
+                                                        if (isResultsStore) {
+                                                            return (
+                                                                <span className="text-[10px] bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/50 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                    Community
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 truncate max-w-[100px] inline-block font-semibold" title={benchmarkData[0]?.source_info?.origin || benchmarkData[0]?.source}>
+                                                        {getSourceTag(benchmarkData[0])}
+                                                    </span>
+                                                </div>
+                                            </td>
                                        </tr>
                                        {isExpanded && (
                                               <tr>
                                                   <td colSpan="10" className="p-0">
                                                       <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 p-2">
                                                           {/* Run Metadata Header */}
-                                                          <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">
-
-                                                              {benchmarkData[0]?.timestamp && (
-                                                                  <span className="flex items-center gap-1">
-                                                                      <b className="text-slate-700 dark:text-slate-300">Date:</b> 
-                                                                      <span>{(() => {
-                                                                          const ts = benchmarkData[0].timestamp;
-                                                                          const d = new Date(ts);
-                                                                          if (!isNaN(d.getTime())) return d.toLocaleString();
-                                                                          const m = String(ts).match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
-                                                                          if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`).toLocaleString();
-                                                                          return ts;
-                                                                      })()}</span>
-                                                                  </span>
-                                                              )}
-
-                                                          </div>
+                                                          {benchmarkData[0]?.source_info?.type === 'benchmark_report_v02' ? (
+                                                              <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/80 font-sans flex flex-wrap gap-x-6 gap-y-2.5 text-xs text-slate-600 dark:text-slate-400">
+                                                                  <div className="flex items-center gap-1.5">
+                                                                      <span className="font-semibold text-slate-700 dark:text-slate-300">Run UUID:</span>
+                                                                      <span className="font-mono bg-slate-200 dark:bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] select-all">{benchmarkData[0]?.run_id}</span>
+                                                                  </div>
+                                                                  <div className="flex items-center gap-1.5">
+                                                                      <span className="font-semibold text-slate-700 dark:text-slate-300">Submitted:</span>
+                                                                      <span>{benchmarkData[0]?.source_info?.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown'}</span>
+                                                                      {benchmarkData[0]?.github_author?.username && (
+                                                                          <span className="flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded ml-1">
+                                                                              <img 
+                                                                                  src={`https://github.com/${benchmarkData[0].github_author.username}.png`} 
+                                                                                  alt={benchmarkData[0].github_author.username} 
+                                                                                  className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600"
+                                                                                  onError={(e) => { e.target.style.display = 'none'; }}
+                                                                              />
+                                                                              <a 
+                                                                                  href={`https://github.com/${benchmarkData[0].github_author.username}`} 
+                                                                                  target="_blank" 
+                                                                                  rel="noopener noreferrer" 
+                                                                                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                                                                              >
+                                                                                  {benchmarkData[0].github_author.username}
+                                                                              </a>
+                                                                          </span>
+                                                                      )}
+                                                                  </div>
+                                                                  <div className="flex items-center gap-1.5">
+                                                                      <span className="font-semibold text-slate-700 dark:text-slate-300">Status:</span>
+                                                                      {(() => {
+                                                                          const details = getSubmissionStatusDetails(benchmarkData[0]?.source_info?.submission_state);
+                                                                          return (
+                                                                              <span className={`px-1.5 py-0.5 rounded border text-[11px] font-bold ${details.bg} ${details.text} ${details.border}`}>
+                                                                                  {details.label}
+                                                                              </span>
+                                                                          );
+                                                                      })()}
+                                                                  </div>
+                                                                  {(benchmarkData[0]?.source_info?.submission_state === 'public' || benchmarkData[0]?.source_info?.submission_state === 'promoted' || benchmarkData[0]?.source_info?.approved_at) && (
+                                                                      <div className="flex items-center gap-1.5">
+                                                                          <span className="font-semibold text-slate-700 dark:text-slate-300">Approved:</span>
+                                                                          <span>{benchmarkData[0].source_info.approved_at ? new Date(benchmarkData[0].source_info.approved_at).toLocaleString() : (benchmarkData[0].source_info.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown')}</span>
+                                                                      </div>
+                                                                  )}
+                                                              </div>
+                                                          ) : (
+                                                              <div className="mb-2 px-2 text-[10px] sm:text-xs text-slate-500 font-mono flex flex-wrap gap-x-4 gap-y-1 items-center bg-slate-100 dark:bg-slate-800/50 py-1.5 rounded">
+                                                                  {benchmarkData[0]?.timestamp && (
+                                                                      <span className="flex items-center gap-1">
+                                                                          <b className="text-slate-700 dark:text-slate-300">Date:</b> 
+                                                                          <span>{(() => {
+                                                                              const ts = benchmarkData[0].timestamp;
+                                                                              const d = new Date(ts);
+                                                                              if (!isNaN(d.getTime())) return d.toLocaleString();
+                                                                              const m = String(ts).match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+                                                                              if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`).toLocaleString();
+                                                                              return ts;
+                                                                          })()}</span>
+                                                                      </span>
+                                                                  )}
+                                                              </div>
+                                                          )}
 
                                                           <div className="overflow-x-auto">
                                                             <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs shadow-inner rounded-sm overflow-hidden">

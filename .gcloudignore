@@ -6,3 +6,6 @@ dist/
 *.local
 .env.local
 .env
+.direnv/
+.direnv/
+.direnv/

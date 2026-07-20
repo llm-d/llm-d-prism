@@ -55,11 +55,15 @@ upstream repository:
   [Benchmark Report README](https://github.com/llm-d/llm-d-benchmark/blob/main/llmdbenchmark/analysis/benchmark_report/README.md)
 - **JSON Schema:**
   [br_v0_2_json_schema.json](https://github.com/llm-d/llm-d-benchmark/blob/main/llmdbenchmark/analysis/benchmark_report/br_v0_2_json_schema.json)
-  - _Note:_ The JSON schema is historically too strict for practical ingestion.
-    Prism treats all fields in this schema as optional/partial by default to
-    handle missing or incomplete metrics gracefully.
+    - _Note:_ The JSON schema is historically too strict for practical
+      ingestion. Prism treats all fields in this schema as optional/partial by
+      default to handle missing or incomplete metrics gracefully.
 - **Canonical Example:**
   [br_v0_2_example.yaml](https://github.com/llm-d/llm-d-benchmark/blob/main/llmdbenchmark/analysis/benchmark_report/br_v0_2_example.yaml)
+- **Prism Parsing & Data Model Spec:** For detailed specifications on how
+  individual BRV0.2 files are parsed, grouped into runs, normalized, and
+  enriched with fallback metadata, refer to the dedicated
+  [Parser & Data Model Specification](parser_and_data_model.md).
 
 ---
 
@@ -77,21 +81,21 @@ The shared isomorphic parser validates a complete bundle under the following
 criteria:
 
 1. **Root Fields Check:**
-   - `format` must be exactly `"brv02"`.
-   - `model_name` must be present and not `'Unknown'`.
-   - When uploading to the cloud (`isUpload: true`), `hardware.hardware_name`
-     must be present and not `'Unknown'` or `'Unknown Hardware'`.
+    - `format` must be exactly `"brv02"`.
+    - `model_name` must be present and not `'Unknown'`.
+    - When uploading to the cloud (`isUpload: true`), `hardware.hardware_name`
+      must be present and not `'Unknown'` or `'Unknown Hardware'`.
 2. **Stage Consistency Checks:**
-   - Every stage entry in the `entries` array is parsed and analyzed.
-   - **Model Consistency:** The model parsed from each stage report must exactly
-     match the root-level `model_name`.
-   - **Hardware Consistency:** The hardware parsed from each stage report must
-     exactly match the root-level `hardware.hardware_name`.
-   - **Run UID Integrity:** If specified, the stage's internal `run.uid` must
-     match `entry.run_uid`.
+    - Every stage entry in the `entries` array is parsed and analyzed.
+    - **Model Consistency:** The model parsed from each stage report must
+      exactly match the root-level `model_name`.
+    - **Hardware Consistency:** The hardware parsed from each stage report must
+      exactly match the root-level `hardware.hardware_name`.
+    - **Run UID Integrity:** If specified, the stage's internal `run.uid` must
+      match `entry.run_uid`.
 3. **Metric Integrity Validation:**
-   - Rejects any stage with zero or negative performance metrics (e.g.,
-     throughput <= 0, or E2E request latency <= 0).
+    - Rejects any stage with zero or negative performance metrics (e.g.,
+      throughput <= 0, or E2E request latency <= 0).
 
 ### 4.3 Fallback and Enrichment Flow
 
@@ -135,33 +139,39 @@ location of the benchmark files is instead determined by the deployment
 environment:
 
 - **`staged`** (Staged):
-  - **Benchmark is locally stored in the browser**, user has not submitted yet.
-  - Useful for previewing benchmarks before submitting.
-  - Useful if user doesn’t even want to upload, they just wanted to locally store it for themselves to view.
+    - **Benchmark is locally stored in the browser**, user has not submitted
+      yet.
+    - Useful for previewing benchmarks before submitting.
+    - Useful if user doesn’t even want to upload, they just wanted to locally
+      store it for themselves to view.
 - **`submitted_pending_processing`** (Submitted, Pending Processing):
-  - **Benchmark made it into Prism Cloud** (staging GCS bucket).
-  - Pending automated preliminary processing and filtering.
-    - NOW: includes basic sanity checks:
-      - Are any results zeroed?
-      - Are there too many request failures?
-      - Does it include attributions? Correct formatting (BRV02)?
-    - FUTURE: can include more checks as part of the *validation pipeline*.
-  - Can tack on more metadata or override them on server side.
-    - NOW: necessary for proper attribution enforcement.
-    - FUTURE: necessary for input sanitization in the future.
+    - **Benchmark made it into Prism Cloud** (staging GCS bucket).
+    - Pending automated preliminary processing and filtering.
+        - NOW: includes basic sanity checks:
+            - Are any results zeroed?
+            - Are there too many request failures?
+            - Does it include attributions? Correct formatting (BRV02)?
+        - FUTURE: can include more checks as part of the _validation pipeline_.
+    - Can tack on more metadata or override them on server side.
+        - NOW: necessary for proper attribution enforcement.
+        - FUTURE: necessary for input sanitization in the future.
 - **`submitted_pending_review`** (Submitted, Pending Final Review):
-  - User review, if necessary.
-    - Eventually this stage will be skipped straight to the next one once validation pipeline is robust enough.
-  - See [\[External\] llm-d Results Store Submission Policy](https://docs.google.com/document/u/0/d/1EZI-VYXdM9V3KnoWkFIXmihrgO2t7YZZhgeMuIlZDpI/edit?resourcekey=0-xQu9xYrRcroMn5yogcb_xg).
+    - User review, if necessary.
+        - Eventually this stage will be skipped straight to the next one once
+          validation pipeline is robust enough.
+    - See
+      [\[External\] llm-d Results Store Submission Policy](https://docs.google.com/document/u/0/d/1EZI-VYXdM9V3KnoWkFIXmihrgO2t7YZZhgeMuIlZDpI/edit?resourcekey=0-xQu9xYrRcroMn5yogcb_xg).
 - **`public`** (Public):
-  - All reviews done, benchmark now public in the sea of benchmarks.
-  - **UNCLEAR:** Clean way to show potentially thousands of benchmarks, Manage Benchmarks page **will not scale**.
+    - All reviews done, benchmark now public in the sea of benchmarks.
+    - **UNCLEAR:** Clean way to show potentially thousands of benchmarks, Manage
+      Benchmarks page **will not scale**.
 - **`promoted`** (Public, Promoted):
-  - If chosen during submission to be one of the well-lit paths, then benchmark results have been included in said well-lit path’s results.
-  - Implies additional visibility from just sea of benchmarks.
+    - If chosen during submission to be one of the well-lit paths, then
+      benchmark results have been included in said well-lit path’s results.
+    - Implies additional visibility from just sea of benchmarks.
 - **`rejected`** (Rejected):
-  - Failed any of the above checks (or include reason otherwise).
-  - Deleted off cloud.
+    - Failed any of the above checks (or include reason otherwise).
+    - Deleted off cloud.
 
 ### 6.2 State Transitions
 
@@ -177,10 +187,10 @@ stateDiagram-v2
 ```
 
 - Permissions & Authentication:
-  - `staged`: Open to all (no login required).
-  - `submitted_pending_processing`: Requires GitHub OAuth. Only allowlisted
-    users can submit.
-  - `submitted_pending_review` -> `public`: Requires Admin privileges.
+    - `staged`: Open to all (no login required).
+    - `submitted_pending_processing`: Requires GitHub OAuth. Only allowlisted
+      users can submit.
+    - `submitted_pending_review` -> `public`: Requires Admin privileges.
 
 ### 6.3 Synchronous vs. Asynchronous Validation
 
@@ -208,16 +218,16 @@ This section describes the storage backend using Google Cloud Storage (GCS).
 ### 7.1 Bucket Architecture
 
 - **Staging Bucket (`gs://llm-d-benchmarks-staging/prism-results-store/*`):**
-  - **Local Dev/Staging Environment:** Managed wholly inside this bucket. Stores
-    all benchmark uploads AND approvals (across all states).
-  - **Production Environment:** Never touched.
+    - **Local Dev/Staging Environment:** Managed wholly inside this bucket.
+      Stores all benchmark uploads AND approvals (across all states).
+    - **Production Environment:** Never touched.
 - **Production Bucket (`gs://llm-d-benchmarks/prism-results-store/*`):**
-  - **Local Dev/Staging Environment:** Read-only (never written to). Used for
-    reading data and configurations.
-  - **Production Environment:** Managed wholly inside this bucket. Stores all
-    benchmark uploads AND approvals (across all states).
+    - **Local Dev/Staging Environment:** Read-only (never written to). Used for
+      reading data and configurations.
+    - **Production Environment:** Managed wholly inside this bucket. Stores all
+      benchmark uploads AND approvals (across all states).
 - **IAM configuration files (`gs://llm-d-benchmarks/prism-iam/*`):**
-  - Dedicated bucket for access control files.
+    - Dedicated bucket for access control files.
 
 ### 7.2 File Pathing
 
@@ -244,17 +254,18 @@ to allow listing and filtering without reading the file contents.
 > not by the bucket in which the file resides.
 
 - **Maximum Contexts:** 50 keys per object.
-- **Required Metadata Contexts:**
-  - `submission_state`: The submission status (e.g.,
-    `submitted_pending_processing`, `submitted_pending_review`, `public`,
-    `promoted`). Maps to `PrismResultContext.submission_state`.
-  - `github_user`: The GitHub username of the contributor (for attribution).
-    Maps to `PrismResultContext.github_user`.
-  - `run_id`: The unique run identifier.
-- **Optional/Future Contexts:**
-  - `hardware_name`: Normalized accelerator name.
-  - `model_name`: Normalized model name.
-  - `run_label`: Human-friendly run description label.
+- **Custom Metadata Contexts:**
+
+| GCS Context Key    | Required | Base64url Encoded? (Prefix `e`) | Description                                                                    |
+| :----------------- | :------- | :------------------------------ | :----------------------------------------------------------------------------- |
+| `submission_state` | Yes      | **No**                          | The submission status (e.g. `public`, `rejected`, `submitted_pending_review`). |
+| `github_user`      | Yes      | **No**                          | The GitHub username of the contributor (for attribution).                      |
+| `run_id`           | Yes      | **No**                          | The unique run identifier (UUIDv4).                                            |
+| `hardware_name`    | No       | **Yes**                         | Normalized accelerator name (e.g. `TPU v6e`).                                  |
+| `model_name`       | No       | **Yes**                         | Normalized model name (e.g. `meta-llama/Llama-3-8B-Instruct`).                 |
+| `run_label`        | No       | **Yes**                         | Human-friendly run description label.                                          |
+| `feedback`         | No       | **Yes**                         | Feedback reason for rejection/changes requested.                               |
+| `well_lit_path`    | No       | **Yes**                         | Selected "Well-Lit Path" optimization classification.                          |
 
 ### 7.4 GCS Listing & Pagination Strategy (Logical Operator Workaround)
 
@@ -270,12 +281,12 @@ constraint while keeping GCS-side filtering fast and optimized:
 2. **Client-Side Split-Listing Strategy:** To display a unified dashboard with
    both the user's own benchmarks (staged/pending/processing/etc.) and public
    approved benchmarks:
-   - The frontend client fires two separate listing requests to the backend with
-     separate query params and pagination strings (e.g. one for `own=true` and
-     another for `status=public` / `status=promoted`).
-   - The frontend displays the user's own benchmarks on top. It lists the
-     current user's benchmarks until exhausted, then paginates/transitions to
-     listing the public ones.
+    - The frontend client fires two separate listing requests to the backend
+      with separate query params and pagination strings (e.g. one for `own=true`
+      and another for `status=public` / `status=promoted`).
+    - The frontend displays the user's own benchmarks on top. It lists the
+      current user's benchmarks until exhausted, then paginates/transitions to
+      listing the public ones.
 
 ---
 
@@ -311,9 +322,9 @@ To support scaling beyond GCS object context limits (50 keys max, pagination
 issues), a database migration (e.g., BigQuery or Spanner) is planned.
 
 - **Requirements:**
-  - Latency < 10 seconds for listing and filtering > 100k benchmarks.
-  - Full support for pagination.
-  - Support for batch processing raw data for well-lit path analysis.
+    - Latency < 10 seconds for listing and filtering > 100k benchmarks.
+    - Full support for pagination.
+    - Support for batch processing raw data for well-lit path analysis.
 
 ---
 

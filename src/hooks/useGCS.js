@@ -15,21 +15,65 @@
 import { useCallback } from 'react';
 import { CacheManager } from '../utils/cacheManager';
 import { parseJsonEntry, parseLogFile } from '../utils/dataParser';
+import { parseReportV02, stageToEntry } from '../utils/benchmarkReportV02Parser';
 
-export const useGCS = ({ pendingRequests, addToast }) => {
-    const fetchBucketData = useCallback(async (bucket, forceRefresh = false) => {
+const limitConcurrency = async (tasks, limit, onProgressUpdate) => {
+    let activeCount = 0;
+    let nextIndex = 0;
+    let loadedCount = 0;
+    const totalCount = tasks.length;
+
+    return new Promise((resolve) => {
+        if (totalCount === 0) {
+            resolve();
+            return;
+        }
+
+        const runNext = () => {
+            if (nextIndex >= totalCount && activeCount === 0) {
+                resolve();
+                return;
+            }
+
+            while (activeCount < limit && nextIndex < totalCount) {
+                const index = nextIndex++;
+                activeCount++;
+                const task = tasks[index];
+
+                (async () => {
+                    try {
+                        await task();
+                    } finally {
+                        activeCount--;
+                        loadedCount++;
+                        if (onProgressUpdate) {
+                            onProgressUpdate(loadedCount, totalCount);
+                        }
+                        runNext();
+                    }
+                })();
+            }
+        };
+
+        runNext();
+    });
+};
+
+export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
+    const fetchBucketData = useCallback(async (bucket, forceRefresh = false, prefix = '', onProgress = null) => {
         const cleanBucketName = bucket.replace(/^gs:\/\//, '');
+        const cacheKey = prefix ? `${cleanBucketName}:${prefix}` : cleanBucketName;
 
-        if (pendingRequests.current.has(`gcs:${cleanBucketName}`) && !forceRefresh) {
-             console.log(`[Dedupe] Already fetching ${cleanBucketName}, returning shared promise.`);
-             return pendingRequests.current.get(`gcs:${cleanBucketName}`);
+        if (pendingRequests.current.has(`gcs:${cacheKey}`) && !forceRefresh) {
+             console.log(`[Dedupe] Already fetching ${cacheKey}, returning shared promise.`);
+             return pendingRequests.current.get(`gcs:${cacheKey}`);
         }
 
         if (!forceRefresh) {
-            const cached = await CacheManager.get('gcs', cleanBucketName);
+            const cached = await CacheManager.get('gcs', cacheKey);
             if (cached) {
-                console.log(`[Cache Hit] Loading GCS bucket ${cleanBucketName} from cache.`);
-                addToast(`[Cache] Loaded ${cleanBucketName}`, 'success');
+                console.log(`[Cache Hit] Loading GCS bucket ${cacheKey} from cache.`);
+                addToast(`[Cache] Loaded ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'success');
                 return cached;
             }
         }
@@ -38,11 +82,25 @@ export const useGCS = ({ pendingRequests, addToast }) => {
         
         const fetchPromise = (async () => {
             try {
-                let response = await fetch(`https://storage.googleapis.com/storage/v1/b/${cleanBucketName}/o`);
+                const queryParams = new URLSearchParams();
+                if (prefix) {
+                    queryParams.set('prefix', prefix);
+                }
+                const queryString = queryParams.toString();
+                const suffix = queryString ? `?${queryString}` : '';
+                const fetchOpts = forceRefresh ? { cache: 'no-cache' } : {};
+                let response = await fetch(`https://storage.googleapis.com/storage/v1/b/${cleanBucketName}/o${suffix}`, fetchOpts);
                 
                 if (response.status === 401 || response.status === 403) {
                     console.log(`[Bucket] Public access denied for ${cleanBucketName}, trying proxy...`);
-                    response = await fetch(`/api/gcs/storage/v1/b/${cleanBucketName}/o`);
+                    const headers = {};
+                    if (accessToken) {
+                        headers['X-Prism-Github-Token'] = accessToken;
+                    }
+                    response = await fetch(`/api/gcs/storage/v1/b/${cleanBucketName}/o${suffix}`, {
+                        headers,
+                        ...fetchOpts
+                    });
                     if (response.ok) usingProxy = true;
                 }
 
@@ -59,7 +117,7 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                 const newEntries = [];
                 const fileMetadata = [];
 
-                await Promise.all(filesToProcess.map(async (file) => {
+                const tasks = filesToProcess.map((file) => async () => {
                     try {
                         let fileUrl = file.mediaLink;
                         if (usingProxy && fileUrl.startsWith('https://storage.googleapis.com/')) {
@@ -67,7 +125,14 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                             fileUrl = `/api/gcs/${path}`;
                         }
 
-                        const fileRes = await fetch(fileUrl);
+                        const fileHeaders = {};
+                        if (accessToken && fileUrl.startsWith('/api/gcs/')) {
+                            fileHeaders['X-Prism-Github-Token'] = accessToken;
+                        }
+                        const fileRes = await fetch(fileUrl, {
+                            headers: fileHeaders,
+                            ...fetchOpts
+                        });
                         if (!fileRes.ok) throw new Error(`Fetch failed: ${fileRes.status}`);
                         
                         const content = await fileRes.text();
@@ -78,9 +143,38 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                             if (jsonContent.metrics || jsonContent.load_summary) {
                                 const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${cleanBucketName}` }, file.name);
                                 entries = [entry];
+                            } else if (jsonContent.format === 'brv02' && Array.isArray(jsonContent.entries)) {
+                                for (const stageEntry of jsonContent.entries) {
+                                    if (stageEntry.raw_report) {
+                                        const parsedStage = parseReportV02(stageEntry.raw_report, file.name);
+                                        if (parsedStage) {
+                                            parsedStage.runId = jsonContent.runId;
+                                            parsedStage.runLabel = jsonContent.runLabel;
+                                            parsedStage.github_author = jsonContent.github_author;
+                                            
+                                            // Extract submission details from GCS contexts.custom
+                                            const customMeta = {};
+                                            if (file.contexts?.custom) {
+                                                Object.keys(file.contexts.custom).forEach(k => {
+                                                    customMeta[k] = file.contexts.custom[k]?.value;
+                                                });
+                                            }
+                                            parsedStage.submission_state = customMeta.submission_state || customMeta.state || 'submitted_pending_processing';
+                                            parsedStage.submitted_at = jsonContent.submitted_at || file.timeCreated || file.updated || null;
+                                            parsedStage.approved_at = customMeta.approved_at || null;
+
+                                            const resolvedWellLit = jsonContent.well_lit_path || customMeta.well_lit_path || null;
+                                            parsedStage.well_lit_path = resolvedWellLit;
+                                            parsedStage.wellLitPath = resolvedWellLit;
+                                            const entry = stageToEntry(parsedStage);
+                                            entries.push(entry);
+                                        }
+                                    }
+                                }
+                                console.log(`[useGCS] Successfully parsed results-store file ${file.name} with ${entries.length} stages.`);
                             }
-                        } catch {
-                            // Try parsing as log file
+                        } catch (err) {
+                            console.warn(`[useGCS] Failed to parse JSON for file ${file.name}:`, err);
                         }
                         
                         if (entries.length === 0) {
@@ -94,7 +188,9 @@ export const useGCS = ({ pendingRequests, addToast }) => {
 
                                 if (e.source_info) {
                                     e.source_info.origin = `gcs:${cleanBucketName}`;
-                                    e.source_info.type = type;
+                                    if (e.source_info.type !== 'benchmark_report_v02') {
+                                        e.source_info.type = type;
+                                    }
                                 } else {
                                     e.source_info = {
                                         type,
@@ -127,13 +223,24 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                         console.warn(`Failed to process ${file.name}:`, e);
                         fileMetadata.push({ name: file.name, entryCount: 0, error: e.message });
                     }
-                }));
+                });
+
+                if (onProgress) {
+                    onProgress({ loaded: 0, total: tasks.length, bucketName: cleanBucketName });
+                }
+
+                await limitConcurrency(tasks, 6, (loaded, total) => {
+                    if (onProgress) {
+                        onProgress({ loaded, total, bucketName: cleanBucketName });
+                    }
+                });
 
                 const result = {
                     bucketName: cleanBucketName,
                     entries: newEntries,
                     profile: {
                         bucketName: cleanBucketName,
+                        prefix: prefix || null,
                         files: fileMetadata,
                         entryCount: fileMetadata.filter(f => f.entryCount > 0).length, 
                         loadedAt: new Date().toISOString(),
@@ -141,11 +248,11 @@ export const useGCS = ({ pendingRequests, addToast }) => {
                     }
                 };
                 
-                const saved = await CacheManager.set('gcs', cleanBucketName, result);
+                const saved = await CacheManager.set('gcs', cacheKey, result);
                 if (!saved) {
-                    addToast(`[Error] Cache Full - Could not save ${cleanBucketName}`, 'error');
+                    addToast(`[Error] Cache Full - Could not save ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'error');
                 } else {
-                    addToast(`[Network] Fetched ${cleanBucketName}`, 'info');
+                    addToast(`[Network] Fetched ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'info');
                 }
                 return result;
 
@@ -165,14 +272,14 @@ export const useGCS = ({ pendingRequests, addToast }) => {
             }
         })();
 
-        if (!forceRefresh) pendingRequests.current.set(`gcs:${cleanBucketName}`, fetchPromise);
+        if (!forceRefresh) pendingRequests.current.set(`gcs:${cacheKey}`, fetchPromise);
         
         try {
             return await fetchPromise;
         } finally {
-            pendingRequests.current.delete(`gcs:${cleanBucketName}`);
+            pendingRequests.current.delete(`gcs:${cacheKey}`);
         }
-    }, [addToast, pendingRequests]);
+    }, [addToast, pendingRequests, accessToken]);
 
     return { fetchBucketData };
 };

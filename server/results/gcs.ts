@@ -15,6 +15,18 @@
 import type { PrismResultPayload, PrismSubmissionState, PrismResultContext } from './api.ts';
 import { Storage } from '@google-cloud/storage';
 
+export function encodeContextValue(val: string): string {
+    return 'e' + Buffer.from(val, 'utf8').toString('base64url');
+}
+
+export function decodeContextValue(val: string): string {
+    if (!val) return '';
+    if (val.startsWith('e')) {
+        return Buffer.from(val.substring(1), 'base64url').toString('utf8');
+    }
+    return val;
+}
+
 export const storage = new Storage(
     process.env.GOOGLE_APPLICATION_DEFAULT_CREDENTIALS
         ? { keyFilename: process.env.GOOGLE_APPLICATION_DEFAULT_CREDENTIALS }
@@ -58,7 +70,7 @@ function encodePageToken(tokenObj: { gcsToken: string; skipCount: number }): str
 function decodePageToken(tokenStr: string): { gcsToken: string; skipCount: number } {
     try {
         return JSON.parse(Buffer.from(tokenStr, 'base64').toString('utf-8'));
-    } catch (e) {
+    } catch {
         return { gcsToken: '', skipCount: 0 };
     }
 }
@@ -134,19 +146,20 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
 
             const metadata = file.metadata;
             const customContexts = metadata?.contexts?.custom || {};
-            const customMetadata = metadata?.metadata || {};
-            const itemUser = String(customContexts.github_user?.value || customMetadata.user || '');
-            const itemState = String(customContexts.submission_state?.value || customMetadata.state || 'submitted_pending_processing') as PrismSubmissionState;
+            const itemUser = String(customContexts.github_user?.value || '');
+            const itemState = (customContexts.submission_state?.value || 'submitted_pending_processing') as PrismSubmissionState;
 
             if (!matchesFilters(itemState, itemUser)) {
                 continue;
             }
 
             const runIdMatch = file.name.match(/prism-results-store\/([^/]+)\.v1\.json/);
-            const runId = runIdMatch ? runIdMatch[1] : String(customContexts.run_id?.value || customMetadata.run_id || '');
-            const runLabel = String(customContexts.run_label?.value || customMetadata.run_label || customMetadata.runLabel || runId);
-            const model_name = String(customContexts.model_name?.value || customMetadata.model_name || 'Unknown');
-            const hardware_name = String(customContexts.hardware_name?.value || customMetadata.hardware_name || 'Unknown');
+            const runId = runIdMatch ? runIdMatch[1] : String(customContexts.run_id?.value || '');
+            const runLabel = decodeContextValue(String(customContexts.run_label?.value || runId));
+            const model_name = decodeContextValue(String(customContexts.model_name?.value || 'Unknown'));
+            const hardware_name = decodeContextValue(String(customContexts.hardware_name?.value || 'Unknown'));
+            const feedback = decodeContextValue(String(customContexts.feedback?.value || ''));
+            const well_lit_path = decodeContextValue(String(customContexts.well_lit_path?.value || ''));
 
             matchedItems.push({
                 runId,
@@ -160,7 +173,9 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
                 github_author: {
                     username: itemUser || 'Unknown'
                 },
-                submitted_at: metadata?.timeCreated || metadata?.updated || null
+                submitted_at: metadata?.timeCreated || metadata?.updated || null,
+                feedback: feedback || undefined,
+                well_lit_path: well_lit_path || undefined
             });
         }
 
@@ -216,14 +231,14 @@ export async function readResultMetadata(runId: string): Promise<{ user: string;
     try {
         const [metadata] = await file.getMetadata();
         const customContexts = metadata.contexts?.custom || {};
-        const customMetadata = metadata.metadata || {};
         return {
-            user: String(customContexts.github_user?.value || customMetadata.user || ''),
-            state: String(customContexts.submission_state?.value || customMetadata.state || 'submitted_pending_processing') as PrismSubmissionState
+            user: String(customContexts.github_user?.value || ''),
+            state: (customContexts.submission_state?.value || 'submitted_pending_processing') as PrismSubmissionState
         };
-    } catch (e: any) {
-        if (e.code === 404) return null;
-        throw new Error(`Failed to fetch metadata from GCS: ${e.message}`);
+    } catch (e: unknown) {
+        if (e && typeof e === 'object' && 'code' in e && (e as { code?: number }).code === 404) return null;
+        const message = e instanceof Error ? e.message : String(e);
+        throw new Error(`Failed to fetch metadata from GCS: ${message}`);
     }
 }
 
@@ -237,14 +252,22 @@ export async function writeResult(
     const objectName = `prism-results-store/${runId}.v1.json`;
     const file = storage.bucket(bucketName).file(objectName);
 
-    const contextsCustom = {
+    const contextsCustom: PrismResultContext = {
         submission_state: { value: submissionState },
         github_user: { value: githubUser },
         run_id: { value: runId },
-        hardware_name: { value: payload.hardware?.hardware_name || 'Unknown' },
-        model_name: { value: payload.model_name || 'Unknown' },
-        run_label: { value: payload.runLabel || runId }
-    } satisfies PrismResultContext;
+        hardware_name: { value: encodeContextValue(payload.hardware?.hardware_name || 'Unknown') },
+        model_name: { value: encodeContextValue(payload.model_name || 'Unknown') },
+        run_label: { value: encodeContextValue(payload.runLabel || runId) }
+    };
+
+    if (payload.feedback) {
+        contextsCustom.feedback = { value: encodeContextValue(payload.feedback) };
+    }
+
+    if (payload.well_lit_path) {
+        contextsCustom.well_lit_path = { value: encodeContextValue(payload.well_lit_path) };
+    }
 
     try {
         await file.save(JSON.stringify(payload), {
@@ -255,7 +278,20 @@ export async function writeResult(
                 }
             }
         });
-    } catch (e: any) {
-        throw new Error(`GCS upload failed: ${e.message}`);
+    } catch (e: unknown) {
+        console.error('[Results GCS Error details]:', e);
+        let message = '';
+        if (e instanceof Error) {
+            message = e.message;
+        } else if (e && typeof e === 'object') {
+            try {
+                message = JSON.stringify(e);
+            } catch {
+                message = String(e);
+            }
+        } else {
+            message = String(e);
+        }
+        throw new Error(`GCS upload failed: ${message}`);
     }
 }
