@@ -1,5 +1,17 @@
-# TODO: Replace with your team's GitHub usernames or team names
-# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Code ownership enforces the approval gates documented in
+# specs/main/dashboard-pipeline.md. Requires the "Require review from
+# Code Owners" branch-protection rule to be active on main.
+# Later rules take precedence over earlier ones.
 
-# Default owners for everything in the repo
-# * @llm-d/your-team
+# Gate B — implementation approval (default for all code)
+* @jjk-g @diamondburned @seanhorgan
+
+# Gate A — design spec approval (OPSX change directories)
+/specs/changes/ @seanhorgan @diamondburned @jjk-g
+
+# The UI/style contract: skills/style.md and the ui/ library it governs
+/skills/style.md @seanhorgan @Raji14
+/src/components/ui/ @seanhorgan @Raji14
+
+# Roadmap
+/specs/main/roadmap.md @seanhorgan @jjk-g

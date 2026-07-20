@@ -16,6 +16,14 @@ file, a new dashboard needs zero visual review round-trips on basics.
 - Creating a new dashboard or page (see the recipe at the bottom).
 - Reviewing a PR that touches `src/components/` or `src/index.css`.
 
+## Changing this contract
+
+This file (and the `src/components/ui/` API it governs) changes only with
+approval from one of **@seanhorgan** or **@raji14**. Changes to
+`specs/main/roadmap.md` require one of **@seanhorgan** or **@jjk-g**. The full
+pipeline and its approval gates are documented in
+`specs/main/dashboard-pipeline.md`.
+
 ## The rules
 
 1. **Use the primitives.** Buttons, badges/status chips, modals, form fields,

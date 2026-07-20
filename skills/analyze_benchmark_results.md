@@ -73,4 +73,9 @@ components), and `results` (`request_performance.aggregate`).
    `specs/README.md`). Keep it short: scenario summary, metrics table, the
    design per §5, data flow per §6, open questions. Include the implementation
    checklist from `skills/style.md` (scaffold → register view → enable nav).
-8. **Stop for review.** Do not implement until the spec is approved.
+8. **Stop for review.** Do not implement until the spec is approved by one of
+   **@seanhorgan**, **@diamondburned**, or **@jjk-g** (Gate A in
+   `specs/main/dashboard-pipeline.md`). Absence of approval is a "no";
+   defaults proposed in the spec are not self-approving. The implementation
+   that follows has its own gate: approval by one of **@jjk-g**,
+   **@diamondburned**, or **@seanhorgan**.
