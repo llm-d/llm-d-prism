@@ -1906,7 +1906,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         setBrv02Runs([]);
     }, []);
 
-    const handleValidatedUpload = async (validBundles, isSubmit = false) => {
+    const handleValidatedUpload = async (validBundles) => {
         if (!validBundles || validBundles.length === 0) return;
         
         setBrv02Loading(true);
@@ -1914,10 +1914,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
         try {
             // Get all runIds of the bundles we are staging/updating
-            const stagedRunIds = new Set(validBundles.map(b => {
-                const baseId = b.payload.runId || b.dirKey;
-                return !isSubmit && baseId && !baseId.endsWith('-preview') ? `${baseId}-preview` : baseId;
-            }).filter(Boolean));
+            const stagedRunIds = new Set(validBundles.map(b => b.payload.runId || b.dirKey).filter(Boolean));
 
             // Flatten and filter out old stages of the edited runs
             const otherStages = brv02Runs.flatMap(run => run.stages).filter(stage => !stagedRunIds.has(stage.runId));
@@ -1930,20 +1927,14 @@ export const useDashboardData = (initialState, dashboardState) => {
                 const bundleRunLabel = bundle.payload.runLabel;
 
                 // Resolved ID for the staged run
-                const resolvedRunId = !isSubmit && bundleRunId && !bundleRunId.endsWith('-preview') 
-                    ? `${bundleRunId}-preview` 
-                    : (bundleRunId || null);
+                const resolvedRunId = bundleRunId || null;
 
                 if (bundle.stageFiles && bundle.stageFiles.length > 0) {
                     for (const sf of bundle.stageFiles) {
                         const identifier = sf.file.webkitRelativePath || sf.file.name;
                         const record = await parseReportV02(sf.validation?.parsedData || sf.content, identifier);
                         if (record) {
-                            if (!isSubmit) {
-                                record.runId = resolvedRunId || `${record.runId}-preview`;
-                            } else {
-                                record.runId = resolvedRunId || record.runId;
-                            }
+                            record.runId = resolvedRunId || record.runId;
                             record.runLabel = bundleRunLabel || record.runLabel;
                             const matchingEntry = bundle.payload?.entries?.find(e => e.filename === record.filename);
                             record.run_id = matchingEntry?.run_id || uuidv4();
@@ -1968,11 +1959,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                     for (const entry of bundle.payload.entries) {
                         const record = await parseReportV02(entry.raw_report || entry.content, entry.filename);
                         if (record) {
-                            if (!isSubmit) {
-                                record.runId = resolvedRunId || `${record.runId}-preview`;
-                            } else {
-                                record.runId = resolvedRunId || record.runId;
-                            }
+                            record.runId = resolvedRunId || record.runId;
                             record.runLabel = bundleRunLabel || record.runLabel;
                             record.run_id = entry.run_id || uuidv4();
                             // Enrich stage record with bundle metadata
