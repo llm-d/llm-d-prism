@@ -103,7 +103,8 @@ export const FilterPanel = ({
     onOpenSubmitDialog,
     loadAllData,
     loadingConnections,
-    dashboardState
+    dashboardState,
+    defaultSources
 }) => {
     const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
     const { user } = useGitHubAuth();
@@ -545,6 +546,56 @@ export const FilterPanel = ({
         });
         return count;
     }, [activeFilters]);
+
+    const memoizedTable = React.useMemo(() => {
+        if (!UnifiedDataTable) return null;
+        return (
+            <UnifiedDataTable
+                groupBy={groupBy}
+                sortByField={sortByField}
+                sortDirection={sortDirection}
+                visibleSpecs={visibleSpecs}
+                defaultSources={defaultSources}
+                modelStats={modelStats} selectedModels={selectedModels} filteredBySource={filteredBySource}
+                showSelectedOnly={showSelectedOnly} setShowSelectedOnly={setShowSelectedOnly}
+                selectedBenchmarks={selectedBenchmarks} setSelectedBenchmarks={setSelectedBenchmarks}
+                setActiveFilters={setActiveFilters} expandedModels={expandedModels}
+                toggleBenchmark={toggleBenchmark} toggleModelExpansion={toggleModelExpansion}
+                baselineBenchmarkKey={baselineBenchmarkKey}
+                setBaselineBenchmarkKey={setBaselineBenchmarkKey}
+                hideShowSelectedOnly={hideShowSelectedOnly}
+                renameClearToUnselectAll={renameClearToUnselectAll}
+                brv02Runs={brv02Runs}
+                brv02CustomLabels={brv02CustomLabels}
+                setBrv02CustomLabels={setBrv02CustomLabels}
+                removeBrv02Run={removeBrv02Run}
+                setShowDataPanel={setShowDataPanel}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                kpiFilter={kpiFilter}
+                setKpiFilter={setKpiFilter}
+                paretoKeys={paretoKeys}
+                submissionsMap={submissionsMap}
+                isLoadingSubmissions={isLoadingSubmissions}
+                updateSubmissionStatus={updateSubmissionStatus}
+                bulkUpdateSubmissionStatus={bulkUpdateSubmissionStatus}
+                onOpenSubmitDialog={onOpenSubmitDialog}
+                isFiltered={hasFiltersToSave}
+                loadAllData={loadAllData}
+                loadingConnections={loadingConnections}
+                dashboardState={dashboardState}
+            />
+        );
+    }, [
+        UnifiedDataTable, groupBy, sortByField, sortDirection, visibleSpecs, modelStats, selectedModels,
+        filteredBySource, showSelectedOnly, setShowSelectedOnly, selectedBenchmarks, setSelectedBenchmarks,
+        setActiveFilters, expandedModels, toggleBenchmark, toggleModelExpansion, baselineBenchmarkKey,
+        setBaselineBenchmarkKey, hideShowSelectedOnly, renameClearToUnselectAll, brv02Runs, brv02CustomLabels,
+        setBrv02CustomLabels, removeBrv02Run, setShowDataPanel, searchTerm, setSearchTerm, kpiFilter,
+        setKpiFilter, paretoKeys, submissionsMap, isLoadingSubmissions, updateSubmissionStatus,
+        bulkUpdateSubmissionStatus, onOpenSubmitDialog, hasFiltersToSave, loadAllData, loadingConnections,
+        dashboardState, defaultSources
+    ]);
 
     if (!showFilterPanel) return null;
 
@@ -1565,40 +1616,7 @@ export const FilterPanel = ({
 
 
             <div id="manage-tour-table" className="relative flex flex-col gap-4">
-                <UnifiedDataTable
-                    groupBy={groupBy}
-                    sortByField={sortByField}
-                    sortDirection={sortDirection}
-                    visibleSpecs={visibleSpecs}
-                    modelStats={modelStats} selectedModels={selectedModels} filteredBySource={filteredBySource}
-                    showSelectedOnly={showSelectedOnly} setShowSelectedOnly={setShowSelectedOnly}
-                    selectedBenchmarks={selectedBenchmarks} setSelectedBenchmarks={setSelectedBenchmarks}
-                    setActiveFilters={setActiveFilters} expandedModels={expandedModels}
-                    toggleBenchmark={toggleBenchmark} toggleModelExpansion={toggleModelExpansion}
-                    baselineBenchmarkKey={baselineBenchmarkKey}
-                    setBaselineBenchmarkKey={setBaselineBenchmarkKey}
-                    hideShowSelectedOnly={hideShowSelectedOnly}
-                    renameClearToUnselectAll={renameClearToUnselectAll}
-                    brv02Runs={brv02Runs}
-                    brv02CustomLabels={brv02CustomLabels}
-                    setBrv02CustomLabels={setBrv02CustomLabels}
-                    removeBrv02Run={removeBrv02Run}
-                    setShowDataPanel={setShowDataPanel}
-                    searchTerm={searchTerm}
-                    setSearchTerm={setSearchTerm}
-                    kpiFilter={kpiFilter}
-                    setKpiFilter={setKpiFilter}
-                    paretoKeys={paretoKeys}
-                    submissionsMap={submissionsMap}
-                    isLoadingSubmissions={isLoadingSubmissions}
-                    updateSubmissionStatus={updateSubmissionStatus}
-                    bulkUpdateSubmissionStatus={bulkUpdateSubmissionStatus}
-                    onOpenSubmitDialog={onOpenSubmitDialog}
-                    isFiltered={hasFiltersToSave}
-                    loadAllData={loadAllData}
-                    loadingConnections={loadingConnections}
-                    dashboardState={dashboardState}
-                />
+                {memoizedTable}
             </div>
         </div>
     </div>

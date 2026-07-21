@@ -696,6 +696,12 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     const updateSourceData = (sourceKey, newEntries, profile) => {
         const normalized = newEntries.map(e => ({ ...e, source: sourceKey }));
+        const [type, bucketName] = sourceKey.split(':');
+        const finalProfile = {
+            bucketName,
+            type,
+            ...profile
+        };
 
         setData(prev => {
             // Remove existing entries for this source
@@ -707,7 +713,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
         setGcsProfiles(prev => {
             const existing = prev.filter(p => `${p.type}:${p.bucketName}` !== sourceKey);
-            return [...existing, profile];
+            return [...existing, finalProfile];
         });
 
         setAvailableSources(prev => new Set([...prev, sourceKey]));
@@ -1223,6 +1229,16 @@ export const useDashboardData = (initialState, dashboardState) => {
             apisToFetch.push({ projectId: fetchedConfig.hostProject, token: '' });
         }
 
+        const bucketsToFetch = [...bucketConfigs];
+        if (fetchedConfig && fetchedConfig.buckets) {
+            fetchedConfig.buckets.forEach(b => {
+                const bName = typeof b === 'string' ? b : b.bucket;
+                if (!bucketsToFetch.some(c => (typeof c === 'string' ? c : c.bucket) === bName)) {
+                    bucketsToFetch.push(b);
+                }
+            });
+        }
+
         const initialTasks = {};
         if (enableLLMDResults) {
             initialTasks['archive:google_drive'] = {
@@ -1235,7 +1251,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                 currentAction: 'Pending fetch'
             };
         }
-        bucketConfigs.forEach(b => {
+        bucketsToFetch.forEach(b => {
             const bName = typeof b === 'string' ? b : b.bucket;
             initialTasks[`gcs:${bName}`] = {
                 id: `gcs:${bName}`,
@@ -1298,7 +1314,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
 
             // 2. Fetch All Configured Buckets
-            const bucketResults = await Promise.all(bucketConfigs.map(b => {
+            const bucketResults = await Promise.all(bucketsToFetch.map(b => {
                 const bName = typeof b === 'string' ? b : b.bucket;
                 const prefix = getPrefixForBucket(bName);
                 return fetchBucketData(bName, forceRefresh, prefix, handleProgress)
@@ -2389,6 +2405,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
+        handleAddGCSBucket, removeGCSBucket,
         brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs,
         brv02CustomLabels, setBrv02CustomLabels,
         brv02BaselineRunId, setBrv02BaselineRunId,
