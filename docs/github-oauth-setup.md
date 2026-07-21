@@ -5,6 +5,10 @@ GitHub authentication (OAuth) for Prism, specifically for validating
 organization membership and role-based permissions (admin vs. standard user)
 under the `llm-d` organization.
 
+> [!NOTE]
+> Setting up a GitHub App is optional. Prism will still work without it, but all
+> login and submission functionality on the Results Store page will be disabled.
+
 ---
 
 ## 1. Using a GitHub App
@@ -42,3 +46,23 @@ When creating your GitHub App on GitHub:
 
 For details on how the backend uses this authentication to verify user roles,
 permissions, and GCS allowlists, see the [Prism IAM documentation](iam.md).
+
+---
+
+## 2. Deployment Secrets Configuration
+
+To run the authentication backend in production (Cloud Run), the GitHub Client
+ID and Client Secret must be configured as environment variables.
+
+1. Set these values as repository secrets in your GitHub repository:
+   - `GITHUB_CLIENT_ID`: The Client ID of your GitHub App.
+   - `GITHUB_CLIENT_SECRET`: The Client Secret of your GitHub App.
+
+   For instructions on setting up repository secrets, see the [GitHub
+   documentation on creating secrets for a
+   repository](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-a-repository).
+
+2. The deployment workflow at
+   [deploy-cloud-run.yaml](../.github/workflows/deploy-cloud-run.yaml) will
+   automatically inject these repository secrets as environment variables, which
+   are then propagated to the Cloud Run service.

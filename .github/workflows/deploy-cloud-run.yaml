@@ -34,6 +34,8 @@ jobs:
           ./deploy.sh --config deploy/prod.env
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
 
       - name: Verify deployment
         run: |
