@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useCallback } from 'react';
-import { Database, Eye, ArrowLeft, ArrowRight, MessageCircle, X, HelpCircle, Upload, UploadCloud, CheckCircle, Send, AlertCircle, Github, Shield, LogOut, ChevronDown } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Database, Eye, EyeOff, ArrowLeft, ArrowRight, MessageCircle, X, HelpCircle, Upload, UploadCloud, CheckCircle, Send, AlertCircle, Github, Shield, LogOut, ChevronDown, Trash2, Plus } from 'lucide-react';
 import { FilterPanel } from './ManageBenchmarks/FilterPanel';
 import { UnifiedDataTable } from './ManageBenchmarks/UnifiedDataTable';
 import { INTEGRATIONS, getSourceTag, getBenchmarkKey, getBucket, getRatioType, getAcceleratorCount, getEffectiveTp, sortBuckets } from '../utils/dashboardHelpers';
 import { useGitHubAuth } from '../hooks/useGitHubAuth.js';
-import { Button, Modal, Spinner, Checkbox } from './ui';
+import { Button, Modal, Spinner, Checkbox, Input } from './ui';
 import { cn } from '../utils/cn';
 
 
+
+const DEFAULT_SOURCES = new Set(['llm-d-benchmarks', 'llm-d-benchmarks-staging']);
 
 const getCleanModelName = (name) => {
     if (!name) return '';
@@ -48,23 +50,43 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
     const { isAuthenticated, user, login, logout, isConfigured, isLoading: authLoading } = useGitHubAuth();
     const [showUserDropdown, setShowUserDropdown] = React.useState(false);
     const userDropdownRef = React.useRef(null);
+    const [showSourcesPopover, setShowSourcesPopover] = React.useState(false);
+    const sourcesPopoverRef = React.useRef(null);
 
     React.useEffect(() => {
         const handleClickOutside = (event) => {
             if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
                 setShowUserDropdown(false);
             }
+            if (sourcesPopoverRef.current && !sourcesPopoverRef.current.contains(event.target)) {
+                setShowSourcesPopover(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    React.useEffect(() => {
+        if (showDataPanel) {
+            setShowSourcesPopover(true);
+            setShowDataPanel(false);
+        }
+    }, [showDataPanel, setShowDataPanel]);
+
     const {
         data,
         selectedSources,
+        setSelectedSources,
+        gcsProfiles,
+        gcsLoading,
+        gcsError,
+        gcsSuccess,
+        handleAddGCSBucket,
+        removeGCSBucket,
+        handleAddAWSBucket,
+        removeAWSBucket,
         toasts,
         removeToast,
-        addToast,
         brv02Runs,
         brv02CustomLabels,
         setBrv02CustomLabels,
@@ -80,6 +102,9 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         updateSubmissionStatus,
         bulkUpdateSubmissionStatus,
         submissionsMap,
+        newBucketName, setNewBucketName,
+        newBucketAlias, setNewBucketAlias,
+        connectionType, setConnectionType,
         loadAllData
     } = dashboardData;
 
@@ -213,9 +238,10 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
 
 
-// Filtered by source
     const filteredBySource = useMemo(() => {
         const res = data.filter(d => {
+            const source = d.source || 'local';
+            if (selectedSources && !selectedSources.has(source)) return false;
 
             // Apply Connection/Source filter
             if (activeFilters.connectionNames && activeFilters.connectionNames.size > 0) {
@@ -327,7 +353,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             return true;
         });
         return res;
-    }, [data, activeFilters]);
+    }, [data, activeFilters, selectedSources]);
 
     // Local copy of modelStats computation
     const modelStats = useMemo(() => {
@@ -357,6 +383,31 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             const timestamps = groupingData.map(x => x.timestamp ? new Date(x.timestamp).getTime() : 0).filter(t => t > 0);
             const latestTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : 0;
 
+            const meta = groupingData[0].metadata || {};
+            const tp = getEffectiveTp(groupingData[0]) || '-';
+            let nodesAndParallelismText = '';
+            if (meta.prefill_node_count > 0 || meta.decode_node_count > 0) {
+                const totalNodes = (meta.prefill_node_count || 0) + (meta.decode_node_count || 0);
+                const config = meta.configuration || '';
+                const pTpMatch = config.match(/(\d+)P-TP(\d+)/i);
+                const dTpMatch = config.match(/(\d+)D-TP(\d+)/i);
+                const pTp = pTpMatch ? pTpMatch[2] : '?';
+                const dTp = dTpMatch ? dTpMatch[2] : '?';
+                nodesAndParallelismText = `${totalNodes} nodes (P:${meta.prefill_node_count}-TP${pTp} | D:${meta.decode_node_count}-TP${dTp})`;
+            } else {
+                const totalNodes = node_count || accelerator_count || 1;
+                const displayTp = tp !== '-' ? tp : (getEffectiveTp(groupingData[0]) || '');
+                nodesAndParallelismText = `${totalNodes} node${totalNodes > 1 ? 's' : ''}${displayTp && displayTp !== '-' ? ` (${displayTp})` : ''}`;
+            }
+
+            const uniqueIsl = [...new Set(groupingData.map(d => getBucket(d.isl || d.workload?.input_tokens)))];
+            const uniqueOsl = [...new Set(groupingData.map(d => getBucket(d.osl || d.workload?.output_tokens)))];
+            const peakRun = groupingData.reduce((prev, curr) => {
+                const prevVal = prev?.metrics?.output_tput || prev?.throughput || 0;
+                const currVal = curr?.metrics?.output_tput || curr?.throughput || 0;
+                return currVal > prevVal ? curr : prev;
+            }, groupingData[0] || {});
+
             stats.push({
                 benchmarkKey,
                 model,
@@ -370,7 +421,11 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                 node_count,
                 tp: tensor_parallelism,
                 timestamp: latestTimestamp,
-                data: groupingData
+                data: groupingData,
+                uniqueIsl,
+                uniqueOsl,
+                peakRun,
+                nodesAndParallelismText
             });
         });
 
@@ -673,7 +728,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         return finalCounts;
     }, [data, activeFilters, filterOptions]);
 
-    const toggleFilter = (category, value) => {
+    const toggleFilter = React.useCallback((category, value) => {
         setActiveFilters(prev => {
             const newSet = new Set(prev[category]);
             if (value === '' || value === undefined) {
@@ -684,17 +739,19 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             }
             return { ...prev, [category]: newSet };
         });
-    };
+    }, [setActiveFilters]);
 
-    const toggleBenchmark = (key) => {
-        const newSelected = new Set(selectedBenchmarks);
-        if (newSelected.has(key)) {
-            newSelected.delete(key);
-        } else {
-            newSelected.add(key);
-        }
-        setSelectedBenchmarks(newSelected);
-    };
+    const toggleBenchmark = React.useCallback((key) => {
+        setSelectedBenchmarks(prev => {
+            const newSelected = new Set(prev);
+            if (newSelected.has(key)) {
+                newSelected.delete(key);
+            } else {
+                newSelected.add(key);
+            }
+            return newSelected;
+        });
+    }, [setSelectedBenchmarks]);
 
     const selectedModels = useMemo(() => {
         const models = new Set();
@@ -711,7 +768,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         return models;
     }, [selectedBenchmarks, filteredBySource]);
 
-    const toggleModelExpansion = (key) => {
+    const toggleModelExpansion = React.useCallback((key) => {
         setExpandedModels(prev => {
             const newExpanded = new Set(prev);
             if (newExpanded.has(key)) {
@@ -721,8 +778,61 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             }
             return newExpanded;
         });
-    };
+    }, [setExpandedModels]);
 
+    const mainContent = React.useMemo(() => {
+        return (
+            <main className="w-full px-8 py-6 pl-28 flex flex-col space-y-8 z-10 relative">
+                <FilterPanel
+                    {...{
+                        showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
+                        selectedModels: selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
+                        selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
+                        toggleBenchmark, toggleModelExpansion,
+                        baselineBenchmarkKey, setBaselineBenchmarkKey,
+                        UnifiedDataTable,
+                        defaultSources: DEFAULT_SOURCES,
+                        hideShowSelectedOnly: true,
+                        renameClearToUnselectAll: true,
+                        brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+                        searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
+                        submissionsMap,
+                        isLoadingSubmissions,
+                        updateSubmissionStatus,
+                        bulkUpdateSubmissionStatus,
+                        qualityMetrics,
+                        gcsProfiles: gcsProfiles,
+                        loadingConnections: gcsProfiles?.some(p => p.loading) || gcsLoading,
+                        onOpenSubmitDialog: (intent) => onNavigate('submit-benchmarks', { intent }),
+                        showDataPanel,
+                        setShowDataPanel,
+                        loadAllData,
+                        dashboardState
+                    }}
+                />
+            </main>
+        );
+    }, [
+        showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
+        selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
+        selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
+        toggleBenchmark, toggleModelExpansion,
+        baselineBenchmarkKey, setBaselineBenchmarkKey,
+        brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+        searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
+        submissionsMap,
+        isLoadingSubmissions,
+        updateSubmissionStatus,
+        bulkUpdateSubmissionStatus,
+        qualityMetrics,
+        gcsProfiles,
+        gcsLoading,
+        onNavigate,
+        showDataPanel,
+        setShowDataPanel,
+        loadAllData,
+        dashboardState
+    ]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased relative overflow-x-hidden pt-0 bg-[radial-gradient(#334155_1.2px,transparent_1.2px)] bg-[size:24px_24px] bg-repeat tabular-nums">
@@ -803,7 +913,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                                className="gap-2 select-none"
+                                className="gap-2 select-none py-1.5 font-semibold rounded-xl"
                             >
                                 {user?.avatarUrl ? (
                                     <img 
@@ -860,6 +970,205 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                         </div>
                     )}
 
+                    {/* External Sources Popover */}
+                    <div className="relative" ref={sourcesPopoverRef}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setShowSourcesPopover(!showSourcesPopover)}
+                            className={cn(
+                                "gap-2 select-none py-2 font-semibold rounded-xl",
+                                showSourcesPopover && "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
+                            )}
+                        >
+                            <Database size={14} />
+                            External Sources
+                        </Button>
+                        {showSourcesPopover && (
+                            <div className="absolute right-0 mt-2 w-96 bg-slate-950/95 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-[100] animate-in fade-in slide-in-from-top-2 duration-150 space-y-4 text-left">
+                                <div className="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
+                                    <h3 className="text-[10px] font-black uppercase tracking-wider text-cyan-400 select-none">External Sources</h3>
+                                    <button 
+                                        onClick={() => setShowSourcesPopover(false)} 
+                                        className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-900 transition-all cursor-pointer"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+
+                                {gcsError && (
+                                    <div className="text-[10px] leading-relaxed text-red-400 bg-red-950/30 p-2 rounded-xl border border-red-900/30 flex items-start gap-1.5 font-medium animate-in fade-in duration-200">
+                                        <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                                        <span>{gcsError}</span>
+                                    </div>
+                                )}
+                                {gcsSuccess && (
+                                    <div className="text-[10px] leading-relaxed text-emerald-400 bg-emerald-950/30 p-2 rounded-xl border border-emerald-900/30 flex items-start gap-1.5 font-medium animate-in fade-in duration-200">
+                                        <CheckCircle size={12} className="shrink-0 mt-0.5" />
+                                        <span>{gcsSuccess}</span>
+                                    </div>
+                                )}
+
+                                {/* Buckets List */}
+                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                    {[...gcsProfiles].filter(p => p.type === 'gcs' || p.type === 'aws').length === 0 ? (
+                                        <p className="text-[11px] text-slate-500 text-center py-4 select-none">No custom buckets configured.</p>
+                                    ) : (
+                                        [...gcsProfiles].filter(p => p.type === 'gcs' || p.type === 'aws').map(profile => {
+                                            const sourceKey = `${profile.type}:${profile.bucketName}`;
+                                            const isSelected = selectedSources.has(sourceKey);
+                                            return (
+                                                <div key={sourceKey} className="flex items-center justify-between p-2 rounded-xl bg-slate-900/20 border border-slate-900/60 hover:border-slate-800 transition-all duration-250">
+                                                     <div className="flex flex-col min-w-0 pr-2">
+                                                         <span className="text-xs font-bold text-slate-200 truncate">
+                                                             {profile.alias || profile.bucketName}
+                                                         </span>
+                                                         <span className="text-[9px] text-slate-500 font-mono truncate mt-0.5">
+                                                             {profile.type === 'gcs' ? 'gs://' : 's3://'}{profile.bucketName}
+                                                         </span>
+                                                     </div>
+                                                     <div className="flex items-center gap-2.5 flex-shrink-0">
+                                                         {/* Badges/Tags */}
+                                                         <div className="flex items-center gap-1.5">
+                                                             {DEFAULT_SOURCES.has(profile.bucketName) && (
+                                                                 <div className="relative group/community-tooltip inline-flex items-center">
+                                                                     <span className="text-[9px] px-1.5 py-0.5 rounded border border-cyan-500/25 bg-cyan-500/10 text-cyan-400 font-bold uppercase select-none cursor-help leading-none">
+                                                                         Community
+                                                                     </span>
+                                                                     <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-350 font-medium rounded-lg opacity-0 invisible group-hover/community-tooltip:opacity-100 group-hover/community-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                         Contains community-submitted benchmarks stored in the official Prism Cloud bucket.
+                                                                     </div>
+                                                                 </div>
+                                                             )}
+                                                             <span className={cn(
+                                                                 "text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase leading-none inline-flex items-center",
+                                                                 profile.type === 'gcs' 
+                                                                     ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                                                     : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                                                             )}>
+                                                                 {profile.type}
+                                                             </span>
+                                                         </div>
+                                                         
+                                                         {/* Action Buttons */}
+                                                         <div className="flex items-center gap-1.5">
+                                                        {profile.loading ? (
+                                                            <Spinner size="xs" className="text-slate-500" />
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const newSet = new Set(selectedSources);
+                                                                        if (newSet.has(sourceKey)) {
+                                                                            newSet.delete(sourceKey);
+                                                                        } else {
+                                                                            newSet.add(sourceKey);
+                                                                        }
+                                                                        setSelectedSources(newSet);
+                                                                    }}
+                                                                    className="p-1 rounded hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                                                                    title={isSelected ? "Hide results" : "Show results"}
+                                                                >
+                                                                    {isSelected ? <Eye size={12} /> : <EyeOff size={12} />}
+                                                                </button>
+                                                                 {!DEFAULT_SOURCES.has(profile.bucketName) && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (profile.type === 'gcs') {
+                                                                                removeGCSBucket(profile.bucketName);
+                                                                            } else {
+                                                                                removeAWSBucket(profile.bucketName);
+                                                                            }
+                                                                        }}
+                                                                        className="p-1 rounded hover:bg-red-950/40 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                                                                        title="Disconnect"
+                                                                    >
+                                                                        <Trash2 size={12} />
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    </div>
+                                                </div>);
+                                        })
+                                    )}
+                                </div>
+
+                                {/* Add Source Section */}
+                                <div className="border-t border-slate-900/60 pt-3.5 space-y-3">
+                                    <div className="flex items-center justify-between select-none">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-cyan-400">Add Source</span>
+                                        <div className="flex bg-slate-950/40 border border-slate-900/60 rounded-lg p-0.5">
+                                            <button
+                                                onClick={() => setConnectionType('gcs')}
+                                                className={cn(
+                                                    "px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md transition-all cursor-pointer",
+                                                    connectionType === 'gcs' ? "bg-slate-900 text-cyan-400 shadow-sm border border-slate-800" : "text-slate-500 hover:text-slate-300"
+                                                )}
+                                            >
+                                                GCS
+                                            </button>
+                                            <button
+                                                onClick={() => setConnectionType('aws')}
+                                                className={cn(
+                                                    "px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md transition-all cursor-pointer",
+                                                    connectionType === 'aws' ? "bg-slate-900 text-cyan-400 shadow-sm border border-slate-800" : "text-slate-500 hover:text-slate-300"
+                                                )}
+                                            >
+                                                AWS
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Input
+                                            type="text"
+                                            placeholder="Alias / Friendly Name (Optional)"
+                                            value={newBucketAlias}
+                                            onChange={(e) => setNewBucketAlias(e.target.value)}
+                                            className="h-7 text-xs bg-slate-900/60 border-slate-850 focus:border-cyan-500/50 text-slate-200 placeholder:text-slate-500"
+                                        />
+                                        <Input
+                                            type="text"
+                                            placeholder={connectionType === 'gcs' ? "gs://bucket-name" : "s3-bucket-name"}
+                                            value={newBucketName}
+                                            onChange={(e) => setNewBucketName(e.target.value)}
+                                            className="h-7 text-xs bg-slate-900/60 border-slate-850 focus:border-cyan-500/50 text-slate-200 placeholder:text-slate-500"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && newBucketName) {
+                                                    if (connectionType === 'gcs') {
+                                                        handleAddGCSBucket(newBucketAlias);
+                                                    } else {
+                                                        handleAddAWSBucket(newBucketAlias);
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                    </div>
+
+                                    <Button
+                                        variant="primary"
+                                        size="xs"
+                                        className="w-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-none shadow-md py-1.5 h-7 rounded-lg shrink-0"
+                                        onClick={() => {
+                                            if (connectionType === 'gcs') {
+                                                handleAddGCSBucket(newBucketAlias);
+                                            } else {
+                                                handleAddAWSBucket(newBucketAlias);
+                                            }
+                                        }}
+                                        disabled={gcsLoading || !newBucketName}
+                                        isLoading={gcsLoading}
+                                    >
+                                        {!gcsLoading && <Plus size={10} className="mr-1" />}
+                                        Connect Bucket
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <a 
                         href="https://llm-d.ai/community" 
                         target="_blank" 
@@ -871,34 +1180,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                 </div>
             </header>
 
-            <main className="w-full px-8 py-6 pl-28 flex flex-col space-y-8 z-10 relative">
-                <FilterPanel
-                    {...{
-                        showFilterPanel, filterOptions, activeFilters, facetCounts, toggleFilter,
-                        selectedModels: selectedModels, modelStats, filteredBySource, showSelectedOnly, setShowSelectedOnly,
-                        selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
-                        toggleBenchmark, toggleModelExpansion,
-                        baselineBenchmarkKey, setBaselineBenchmarkKey,
-                        UnifiedDataTable,
-                        hideShowSelectedOnly: true,
-                        renameClearToUnselectAll: true,
-                        brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
-                        searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
-                        submissionsMap,
-                        isLoadingSubmissions,
-                        updateSubmissionStatus,
-                        bulkUpdateSubmissionStatus,
-                        qualityMetrics,
-                        gcsProfiles: dashboardData.gcsProfiles,
-                        loadingConnections: dashboardData.gcsProfiles?.some(p => p.loading) || dashboardData.loading,
-                        onOpenSubmitDialog: (intent) => onNavigate('submit-benchmarks', { intent }),
-                        showDataPanel,
-                        setShowDataPanel,
-                        loadAllData,
-                        dashboardState
-                    }}
-                />
-            </main>
+            {mainContent}
+
 
             {/* Post-Upload Guided Action Dialog */}
             <Modal

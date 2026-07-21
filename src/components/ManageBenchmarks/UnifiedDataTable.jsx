@@ -19,7 +19,7 @@ import { RunComparisonChart } from '../Dashboard/RunComparisonChart';
 import { ThroughputCostChart } from '../Dashboard/ThroughputCostChart';
 import { Button, Badge, StatusChip, Modal, Textarea } from '../ui';
 import { cn } from '../../utils/cn';
-import { getEffectiveTp, getBucket, getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
+import { getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
 import yaml from 'js-yaml';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { validateBenchmark } from '../../utils/benchmarkValidator';
@@ -196,7 +196,7 @@ export const UnifiedDataTable = (props) => {
     const actionPendingRef = React.useRef(false);
     const [isLocalActionPending, setIsLocalActionPending] = React.useState(false);
 
-    const handleActionClick = async (actionFn) => {
+    const handleActionClick = React.useCallback(async (actionFn) => {
         if (actionPendingRef.current) return;
         actionPendingRef.current = true;
         setIsLocalActionPending(true);
@@ -206,7 +206,7 @@ export const UnifiedDataTable = (props) => {
             actionPendingRef.current = false;
             setIsLocalActionPending(false);
         }
-    };
+    }, []);
 
 
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
@@ -217,6 +217,7 @@ export const UnifiedDataTable = (props) => {
     const initialSelection = React.useRef(new Set());
 
     const {
+        defaultSources = new Set(['llm-d-benchmarks', 'llm-d-benchmarks-staging']),
         modelStats, selectedModels, filteredBySource, showSelectedOnly: propShowSelectedOnly, setShowSelectedOnly,
         selectedBenchmarks, setSelectedBenchmarks, setActiveFilters, expandedModels,
         toggleBenchmark, toggleModelExpansion,
@@ -277,7 +278,7 @@ export const UnifiedDataTable = (props) => {
         return stagedList;
     }, [brv02Runs, selectedBenchmarks]);
 
-    const buildBundleForRun = (run) => {
+    const buildBundleForRun = React.useCallback((run) => {
         const stageFiles = run.stages.map(stage => {
             const content = typeof stage.rawReport === 'object' 
                 ? JSON.stringify(stage.rawReport) 
@@ -344,7 +345,7 @@ export const UnifiedDataTable = (props) => {
             isSkipped: false,
             targetDashboards: run.targetDashboards || ['performance-browser']
         };
-    };
+    }, []);
 
     const handlePublishSelected = () => {
         if (selectedStagedRuns.length === 0) return;
@@ -362,7 +363,7 @@ export const UnifiedDataTable = (props) => {
         onOpenSubmitDialog && onOpenSubmitDialog('submit-review');
     };
 
-    const handleEditStagedRun = (run) => {
+    const handleEditStagedRun = React.useCallback((run) => {
         const bundle = buildBundleForRun(run);
 
         try {
@@ -374,9 +375,9 @@ export const UnifiedDataTable = (props) => {
         }
 
         onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
-    };
+    }, [buildBundleForRun, onOpenSubmitDialog]);
 
-    const handleSubmitStagedRunForReview = (run) => {
+    const handleSubmitStagedRunForReview = React.useCallback((run) => {
         const bundle = buildBundleForRun(run);
 
         try {
@@ -388,7 +389,7 @@ export const UnifiedDataTable = (props) => {
         }
 
         onOpenSubmitDialog && onOpenSubmitDialog('submit-review');
-    };
+    }, [buildBundleForRun, onOpenSubmitDialog]);
 
 
     const drawerMetricAvailability = React.useMemo(() => {
@@ -1347,763 +1348,36 @@ export const UnifiedDataTable = (props) => {
                                     const isSelected = selectedBenchmarks.has(stat.benchmarkKey);
                                     const isExpanded = expandedModels.has(stat.benchmarkKey || stat.model);
                                     const isBaseline = stat.benchmarkKey === baselineBenchmarkKey;
-                                    
-                                    const benchmarkData = stat.data || [];
-                                    const meta = benchmarkData[0]?.metadata || {};
-                                    const sourceStr = benchmarkData[0]?.source || '';
-                                    const isBrv02 = sourceStr.startsWith('brv02:') || benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
-                                    const runId = isBrv02 ? (sourceStr.startsWith('brv02:') ? sourceStr.replace('brv02:', '') : benchmarkData[0]?.run_id) : null;
-                                    const runSub = runId && submissionsMap ? submissionsMap[runId] : null;
-                                    const runStatus = runSub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
-                                    const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
-                                    const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
-                                    const isLocal = sourceStr.startsWith('brv02:');
-                                    const canResubmit = isLocal || isMine || isAdmin;
-                                    const tp = getEffectiveTp(benchmarkData[0]) || '-';
-                                    
-                                    const uniqueIsl = [...new Set(benchmarkData.map(d => getBucket(d.isl || d.workload?.input_tokens)))];
-                                    const uniqueOsl = [...new Set(benchmarkData.map(d => getBucket(d.osl || d.workload?.output_tokens)))];
-                                    
-                                    const isl = uniqueIsl.length === 1 ? uniqueIsl[0] : (uniqueIsl.length > 1 ? 'Var' : '-');
-                                    const osl = uniqueOsl.length === 1 ? uniqueOsl[0] : (uniqueOsl.length > 1 ? 'Var' : '-');
-
-                                    const statusAccent = getCardStatusAccent(isBrv02, runId, submissionsMap, benchmarkData[0]?.source_info?.submission_state);
-                                    const cardBorderClass = isSelected 
-                                        ? 'border-blue-400 dark:border-blue-600 ring-1 ring-blue-400 dark:ring-blue-600/50' 
-                                        : statusAccent.borderClass;
-                                    const cardBgClass = isSelected ? '' : (statusAccent.bgClass || '');
-
                                     return (
-                                        <div 
+                                        <BenchmarkRow
                                             key={stat.benchmarkKey || stat.model}
-                                            className={cn(
-                                                'flex flex-col bg-white dark:bg-slate-900 border rounded-lg overflow-hidden transition-all shadow-sm relative',
-                                                cardBorderClass,
-                                                cardBgClass,
-                                                isBaseline && 'ring-2 ring-cyan-400/50'
-                                            )}
-                                        >
-                                            {statusAccent.accentBar}
-                                            {/* Card Main Row (Header) */}
-                                            <div className="flex items-stretch min-h-[60px]">
-                                                {/* Left Checkbox Area (Dedicated Click Target) */}
-                                                <div 
-                                                    onPointerDown={(e) => handleCheckboxPointerDown(e, stat.benchmarkKey, isSelected)}
-                                                    className={cn(
-                                                        'benchmark-checkbox-area w-12 flex-shrink-0 flex items-center justify-center cursor-pointer border-r transition-colors select-none',
-                                                        statusAccent.accentBar && 'pl-1.5',
-                                                        isSelected
-                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                                                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                                                    )}
-                                                    data-benchmark-key={stat.benchmarkKey}
-                                                    style={{ touchAction: 'none' }}
-                                                >
-                                                    <div className={cn(
-                                                        'w-5 h-5 rounded flex items-center justify-center border transition-all',
-                                                        isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600'
-                                                    )}>
-                                                        {isSelected && <Check size={14} strokeWidth={3} />}
-                                                    </div>
-                                                </div>
-
-                                                {/* Card Content Area (Expand Toggle) */}
-                                                <div 
-                                                    onClick={() => toggleModelExpansion(stat.benchmarkKey || stat.model)}
-                                                    className="flex-1 flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-3"
-                                                >
-                                                    {/* Left side info block */}
-                                                    <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-4 min-w-0">
-                                                        {/* Specs list container */}
-                                                        {(() => {
-                                                            let nodesAndParallelismText = '';
-                                                            if (meta.prefill_node_count > 0 || meta.decode_node_count > 0) {
-                                                                const totalNodes = (meta.prefill_node_count || 0) + (meta.decode_node_count || 0);
-                                                                const config = meta.configuration || '';
-                                                                const pTpMatch = config.match(/(\d+)P-TP(\d+)/i);
-                                                                const dTpMatch = config.match(/(\d+)D-TP(\d+)/i);
-                                                                const pTp = pTpMatch ? pTpMatch[2] : '?';
-                                                                const dTp = dTpMatch ? dTpMatch[2] : '?';
-                                                                nodesAndParallelismText = `${totalNodes} nodes (P:${meta.prefill_node_count}-TP${pTp} | D:${meta.decode_node_count}-TP${dTp})`;
-                                                            } else {
-                                                                const totalNodes = stat.node_count || stat.accelerator_count || 1;
-                                                                const displayTp = tp !== '-' ? tp : (getEffectiveTp(stat) || '');
-                                                                nodesAndParallelismText = `${totalNodes} node${totalNodes > 1 ? 's' : ''}${displayTp && displayTp !== '-' ? ` (${displayTp})` : ''}`;
-                                                            }
-
-                                                            const peakRun = benchmarkData.reduce((prev, curr) => {
-                                                                const prevVal = prev?.metrics?.output_tput || prev?.throughput || 0;
-                                                                const currVal = curr?.metrics?.output_tput || curr?.throughput || 0;
-                                                                return currVal > prevVal ? curr : prev;
-                                                            }, benchmarkData[0] || {});
-
-                                                             const specs = [];
-
-                                                             if (visibleSpecs.timestamp) {
-                                                                 const timestampVal = benchmarkData[0]?.timestamp;
-                                                                 if (timestampVal) {
-                                                                     const d = new Date(timestampVal);
-                                                                     if (!isNaN(d.getTime())) {
-                                                                         specs.push(
-                                                                             <span key="timestamp" className="inline-flex items-center gap-1">
-                                                                                 <span className="text-slate-400 dark:text-slate-500 font-normal">Date:</span>
-                                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                                                                     {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                                                 </span>
-                                                                             </span>
-                                                                         );
-                                                                     }
-                                                                 }
-                                                             }
-
-                                                             if (visibleSpecs.stage) {
-                                                                 const isBrv02Run = benchmarkData[0]?.source?.startsWith('brv02:') || benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
-                                                                 if (isBrv02Run) {
-                                                                     const stageCount = benchmarkData.length;
-                                                                     specs.push(
-                                                                         <span key="stage" className="inline-flex items-center gap-1">
-                                                                             <span className="text-slate-400 dark:text-slate-500 font-normal">Stages:</span>
-                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stage{stageCount === 1 ? '' : 's'}</span>
-                                                                         </span>
-                                                                     );
-                                                                 } else {
-                                                                     const stageVal = benchmarkData[0]?.workload?.stage;
-                                                                     if (stageVal !== undefined && stageVal !== null && stageVal !== '') {
-                                                                         specs.push(
-                                                                             <span key="stage" className="inline-flex items-center gap-1">
-                                                                                 <span className="text-slate-400 dark:text-slate-500 font-normal">Stage:</span>
-                                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">{stageVal}</span>
-                                                                             </span>
-                                                                         );
-                                                                     }
-                                                                 }
-                                                             }
-
-                                                             if (visibleSpecs.hardware) {
-                                                                specs.push(
-                                                                    <span key="hardware" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Hardware:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{stat.accelerator_count}x {stat.hardware}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.nodes) {
-                                                                specs.push(
-                                                                    <span key="nodes" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Nodes:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{nodesAndParallelismText}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.islOsl) {
-                                                                specs.push(
-                                                                    <span key="islOsl" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">I/O Load:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{isl}/{osl}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.maxTput) {
-                                                                specs.push(
-                                                                    <span key="maxTput" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Max Tput:</span>
-                                                                        <span className="font-bold text-green-600 dark:text-green-400">{stat.maxTput.toFixed(0)} <span className="text-[10px] font-normal opacity-70">tok/s</span></span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.minLat) {
-                                                                specs.push(
-                                                                    <span key="minLat" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Min Lat:</span>
-                                                                        <span className="font-semibold text-amber-600 dark:text-amber-400">{stat.minLat ? `${stat.minLat.toFixed(0)} ms` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.qps) {
-                                                                const qpsVal = peakRun.metrics?.request_rate || peakRun.qps;
-                                                                specs.push(
-                                                                    <span key="qps" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">QPS:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{qpsVal != null ? qpsVal.toFixed(2) : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.inputTput) {
-                                                                const inVal = peakRun.metrics?.input_tput;
-                                                                specs.push(
-                                                                    <span key="inputTput" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Input Tput:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{inVal != null ? `${inVal.toFixed(0)} tok/s` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.outputTput) {
-                                                                const outVal = peakRun.metrics?.output_tput || peakRun.throughput;
-                                                                specs.push(
-                                                                    <span key="outputTput" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Output Tput:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{outVal != null ? `${outVal.toFixed(0)} tok/s` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.totalTput) {
-                                                                const totVal = peakRun.metrics?.total_tput;
-                                                                specs.push(
-                                                                    <span key="totalTput" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Total Tput:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{totVal != null ? `${totVal.toFixed(0)} tok/s` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.ntpot) {
-                                                                const ntpotVal = peakRun.metrics?.ntpot || peakRun.ntpot;
-                                                                specs.push(
-                                                                    <span key="ntpot" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">NTPOT:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{ntpotVal != null ? `${ntpotVal.toFixed(2)} ms` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.tpot) {
-                                                                const tpotVal = peakRun.metrics?.tpot || peakRun.time_per_output_token;
-                                                                specs.push(
-                                                                    <span key="tpot" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">TPOT:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{tpotVal != null ? `${tpotVal.toFixed(2)} ms` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.itl) {
-                                                                const itlVal = peakRun.metrics?.itl || peakRun.itl;
-                                                                specs.push(
-                                                                    <span key="itl" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">ITL:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{itlVal != null ? `${itlVal.toFixed(2)} ms` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.ttft) {
-                                                                const ttftVal = peakRun.metrics?.ttft?.mean || peakRun.ttft?.mean;
-                                                                specs.push(
-                                                                    <span key="ttft" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">TTFT:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{ttftVal != null ? `${ttftVal.toFixed(2)} ms` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.e2e) {
-                                                                const e2eVal = (peakRun.metrics?.e2e_latency || peakRun.latency?.mean);
-                                                                specs.push(
-                                                                    <span key="e2e" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">E2E Latency:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{e2eVal != null ? `${(e2eVal / 1000).toFixed(2)} s` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.costIn) {
-                                                                const costInVal = peakRun.metrics?.cost?.explicit_input;
-                                                                specs.push(
-                                                                    <span key="costIn" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Cost/1M In:</span>
-                                                                        <span className="font-semibold text-slate-500">{costInVal > 0 ? `$${costInVal.toFixed(4)}` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.costOut) {
-                                                                const costOutVal = peakRun.metrics?.cost?.explicit_output;
-                                                                specs.push(
-                                                                    <span key="costOut" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Cost/1M Out:</span>
-                                                                        <span className="font-semibold text-slate-500">{costOutVal > 0 ? `$${costOutVal.toFixed(4)}` : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.inputLen) {
-                                                                const inLenVal = peakRun.isl || peakRun.workload?.input_tokens;
-                                                                specs.push(
-                                                                    <span key="inputLen" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Input Len:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{inLenVal != null ? inLenVal.toFixed(0) : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                            if (visibleSpecs.outputLen) {
-                                                                const outLenVal = peakRun.osl || peakRun.workload?.output_tokens;
-                                                                specs.push(
-                                                                    <span key="outputLen" className="inline-flex items-center gap-1">
-                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Output Len:</span>
-                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{outLenVal != null ? outLenVal.toFixed(0) : '-'}</span>
-                                                                    </span>
-                                                                );
-                                                            }
-
-                                                             return (
-                                                                 <div className="flex-1 flex flex-col min-w-0">
-                                                                     {/* Line 1: Model Title on left, Source Tag & Date on right */}
-                                                                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 w-full">
-                                                                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                                                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                                                                         <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
-                                                                                             {isBrv02 
-                                                                                                 ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
-                                                                                                 : (stat.model_name || stat.model || meta.model_name)}
-                                                                                         </span>
-                                                                                         {isBrv02 && runStatus === 'staged' && (
-                                                                                             <button
-                                                                                                 onClick={(e) => {
-                                                                                                     e.stopPropagation();
-                                                                                                     const run = brv02Runs.find(r => r.runId === runId);
-                                                                                                     if (run) {
-                                                                                                         handleEditStagedRun(run);
-                                                                                                     }
-                                                                                                 }}
-                                                                                                 title="Edit staged benchmark metadata"
-                                                                                                 className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0 cursor-pointer"
-                                                                                             >
-                                                                                                 <Pencil size={12} />
-                                                                                             </button>
-                                                                                         )}
-                                                                                     </div>
-
-                                                                            {isBrv02 && (
-                                                                                <div className="flex flex-col items-end gap-1.5 relative">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        {(() => {
-                                                                                            const sub = submissionsMap ? submissionsMap[runId] : null;
-                                                                                            const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
-                                                                                            
-                                                                                            if (canResubmit && status === 'staged') {
-                                                                                                return user?.permission === 'none' ? (
-                                                                                                    <div className="relative group/tooltip inline-block">
-                                                                                                        <button
-                                                                                                            disabled
-                                                                                                            className="px-2.5 py-1 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-500 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-not-allowed select-none flex items-center gap-1 opacity-60"
-                                                                                                        >
-                                                                                                            <Send className="w-2.5 h-2.5" /> Submit for Review
-                                                                                                        </button>
-                                                                                                        <div className="absolute right-0 bottom-full mb-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-350 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
-                                                                                                            You are not in the Results Store closed-beta. Check back later once the feature is released.
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <button
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation();
-                                                                                                            const run = brv02Runs.find(r => r.runId === runId);
-                                                                                                            if (run) {
-                                                                                                                handleSubmitStagedRunForReview(run);
-                                                                                                            }
-                                                                                                        }}
-                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                                                        title="Submit this benchmark to staging GCS bucket for automated format checks"
-                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
-                                                                                                    >
-                                                                                                        <Send className="w-2.5 h-2.5" /> Submit for Review
-                                                                                                    </button>
-                                                                                                );
-                                                                                            }
-                                                                                            if (canResubmit && status === 'submitted_pending_processing') {
-                                                                                                return (
-                                                                                                    <button
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation();
-                                                                                                            handleActionClick(async () => {
-                                                                                                                if (updateSubmissionStatus) {
-                                                                                                                    await updateSubmissionStatus(runId, 'submitted_pending_review', '', stat.model, stat.hardware);
-                                                                                                                }
-                                                                                                            });
-                                                                                                        }}
-                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                                                        title="Promote benchmark to the admin review queue"
-                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
-                                                                                                    >
-                                                                                                        <Play className="w-2.5 h-2.5 fill-current" /> Promote to Review
-                                                                                                    </button>
-                                                                                                );
-                                                                                            }
-                                                                                            if (isAdmin && (status === 'submitted_pending_review' || status === 'in_review')) {
-                                                                                                return (
-                                                                                                    <>
-                                                                                                        <button
-                                                                                                            onClick={(e) => {
-                                                                                                                e.stopPropagation();
-                                                                                                                handleActionClick(async () => {
-                                                                                                                    if (updateSubmissionStatus) {
-                                                                                                                        await updateSubmissionStatus(runId, 'public', '', stat.model, stat.hardware);
-                                                                                                                    }
-                                                                                                                });
-                                                                                                            }}
-                                                                                                            disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                                                            title="Approve this run and publish it to the global Results store"
-                                                                                                            className="px-2.5 py-1 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-455 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
-                                                                                                        >
-                                                                                                            <Check className="w-2.5 h-2.5 stroke-[3]" /> Approve
-                                                                                                        </button>
-                                                                                                        <button
-                                                                                                            onClick={(e) => {
-                                                                                                                e.stopPropagation();
-                                                                                                                setRejectingRunId(runId);
-                                                                                                                setRejectionFeedback('');
-                                                                                                            }}
-                                                                                                            disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                                                            title="Reject compliance or request changes with custom feedback"
-                                                                                                            className="px-2.5 py-1 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
-                                                                                                        >
-                                                                                                            <X className="w-2.5 h-2.5" /> Reject
-                                                                                                        </button>
-                                                                                                    </>
-                                                                                                );
-                                                                                            }
-                                                                                            if (canResubmit && (status === 'rejected' || status === 'changes_requested')) {
-                                                                                                return (
-                                                                                                    <button
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation();
-                                                                                                            handleActionClick(async () => {
-                                                                                                                if (updateSubmissionStatus) {
-                                                                                                                    await updateSubmissionStatus(runId, 'submitted_pending_processing', '', stat.model, stat.hardware);
-                                                                                                                }
-                                                                                                            });
-                                                                                                        }}
-                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
-                                                                                                        title="Resubmit this run for automated verification after corrections"
-                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/25 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer select-none flex items-center gap-1"
-                                                                                                    >
-                                                                                                        <RotateCcw className="w-2.5 h-2.5" /> Resubmit
-                                                                                                    </button>
-                                                                                                );
-                                                                                            }
-                                                                                            return null;
-                                                                                        })()}
-                                                                                    </div>
-                                                                                    {rejectingRunId === runId && (
-                                                                                        <div onClick={e => e.stopPropagation()} className="p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-lg shadow-inner w-64 flex flex-col gap-2 mt-1 z-30">
-                                                                                            <div className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider">Reason for Rejecting Run</div>
-                                                                                            <Textarea
-                                                                                                autoFocus
-                                                                                                value={rejectionFeedback}
-                                                                                                onChange={e => setRejectionFeedback(e.target.value)}
-                                                                                                placeholder="Reason details..."
-                                                                                                className="p-1.5 rounded h-12 resize-none font-sans focus:border-red-500/50 focus:ring-red-500/40"
-                                                                                            />
-                                                                                            <div className="flex justify-end gap-2 text-xs">
-                                                                                                <Button
-                                                                                                    variant="ghost"
-                                                                                                    size="xs"
-                                                                                                    className="uppercase font-bold"
-                                                                                                    onClick={() => setRejectingRunId(null)}
-                                                                                                >
-                                                                                                    Cancel
-                                                                                                </Button>
-                                                                                                <Button
-                                                                                                    variant="danger"
-                                                                                                    size="xs"
-                                                                                                    className="uppercase font-bold"
-                                                                                                    onClick={() => {
-                                                                                                        handleActionClick(async () => {
-                                                                                                            if (rejectionFeedback.trim() && updateSubmissionStatus) {
-                                                                                                                await updateSubmissionStatus(runId, 'rejected', rejectionFeedback, stat.model, stat.hardware);
-                                                                                                                setRejectingRunId(null);
-                                                                                                            }
-                                                                                                        });
-                                                                                                    }}
-                                                                                                    disabled={!rejectionFeedback.trim() || isLoadingSubmissions || isLocalActionPending}
-                                                                                                >
-                                                                                                    Submit
-                                                                                                </Button>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
-                                                                            {(() => {
-                                                                                const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
-                                                                                const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
-                                                                                if (isMine) {
-                                                                                    return (
-                                                                                        <Badge tone="success" size="xs">
-                                                                                            Yours
-                                                                                        </Badge>
-                                                                                    );
-                                                                                }
-                                                                                if (isResultsStore) {
-                                                                                    return (
-                                                                                        <Badge tone="info" size="xs">
-                                                                                            Community
-                                                                                        </Badge>
-                                                                                    );
-                                                                                }
-                                                                                return null;
-                                                                            })()}
-
-
-                                                                            {(() => {
-                                                                                const sub = isBrv02 && submissionsMap ? submissionsMap[runId] : null;
-                                                                                
-                                                                                if (isBrv02) {
-                                                                                    const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
-                                                                                    if (status === 'staged') {
-                                                                                        return <StatusChip status="staged" />;
-                                                                                    }
-                                                                                    if (status === 'submitted_pending_processing') {
-                                                                                        return <StatusChip status="processing" />;
-                                                                                    }
-                                                                                    if (status === 'submitted_pending_review' || status === 'in_review') {
-                                                                                        return <StatusChip status="in_review" />;
-                                                                                    }
-                                                                                    if (status === 'public' || status === 'promoted' || status === 'approved') {
-                                                                                        return <StatusChip status="approved" label="Public" />;
-                                                                                    }
-                                                                                    if (status === 'rejected' || status === 'changes_requested') {
-                                                                                        return <StatusChip status="rejected" />;
-                                                                                    }
-                                                                                } else {
-                                                                                    return (
-                                                                                        <Badge tone="success" size="xs">
-                                                                                            Official
-                                                                                        </Badge>
-                                                                                    );
-                                                                                }
-                                                                                return null;
-                                                                            })()}
-
-
-                                                                            <Badge
-                                                                                tone="neutral"
-                                                                                size="xs"
-                                                                                className="cursor-help"
-                                                                                title={getSourceTag(benchmarkData[0]) === 'llm-d' ? "Official llm-d benchmark results stored in shared Google Drive store" : `Source: ${getSourceTag(benchmarkData[0])}`}
-                                                                            >
-                                                                                {getSourceTag(benchmarkData[0])}
-                                                                            </Badge>
-
-                                                                            {(() => {
-                                                                                const type = getSourceType(benchmarkData[0]);
-                                                                                if (type === 'Cloud') return null;
-                                                                                const style = getSourceTypeStyle(type);
-                                                                                return (
-                                                                                    <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap', style.bg, style.text, style.border)}>
-                                                                                        {type}
-                                                                                    </span>
-                                                                                );
-                                                                            })()}
-                                                                        </div>
-                                                                    </div>
-
-                                                                    {(() => {
-                                                                        const sub = isBrv02 && submissionsMap ? submissionsMap[runId] : null;
-                                                                        if (sub && sub.status === 'changes_requested' && sub.feedback) {
-                                                                            return (
-                                                                                <div 
-                                                                                    onClick={e => e.stopPropagation()}
-                                                                                    className="mt-2 text-[11px] bg-red-500/10 text-red-300 border border-red-500/20 rounded-xl p-3 max-w-3xl italic leading-relaxed flex items-start gap-2 shadow-sm font-sans"
-                                                                                >
-                                                                                    <span className="font-extrabold uppercase text-[9px] not-italic tracking-wider bg-red-500/20 px-1.5 py-0.5 rounded text-red-450 shrink-0 mt-0.5">
-                                                                                        Changes Requested:
-                                                                                    </span>
-                                                                                    <span>"{sub.feedback}"</span>
-                                                                                </div>
-                                                                            );
-                                                                        }
-                                                                        return null;
-                                                                    })()}
-
-                                                                    {/* Line 2: Dedicated to just selected visible stats */}
-                                                                    {specs.length > 0 && (
-                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                                                            {specs.map((spec, sIdx) => {
-                                                                                const showDot = sIdx > 0;
-                                                                                return (
-                                                                                    <React.Fragment key={spec.key}>
-                                                                                        {showDot && <span className="text-slate-300 dark:text-slate-700 select-none font-bold">·</span>}
-                                                                                        {spec}
-                                                                                    </React.Fragment>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-
-                                                    {/* Right side expand icon */}
-                                                    <div className="flex-shrink-0 text-slate-400 flex items-center justify-center w-6 h-6 ml-2">
-                                                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                             {/* Expanded Table Details */}
-                                             {isExpanded && (
-                                                 <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
-                                                     <div className="flex justify-between items-stretch gap-4 mb-3 w-full">
-                                                         {benchmarkData[0]?.source_info?.type === 'benchmark_report_v02' ? (
-                                                             <div className="flex-1 p-2 bg-slate-100 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/80 font-sans flex flex-wrap gap-x-6 gap-y-2.5 text-xs text-slate-600 dark:text-slate-400">
-                                                             <div className="flex items-center gap-1.5">
-                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Run UUID:</span>
-                                                                 <span className="font-mono bg-slate-200 dark:bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] select-all">{benchmarkData[0]?.run_id}</span>
-                                                             </div>
-                                                             <div className="flex items-center gap-1.5">
-                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Submitted:</span>
-                                                                 <span>{benchmarkData[0]?.source_info?.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown'}</span>
-                                                                 {benchmarkData[0]?.github_author?.username && (
-                                                                     <span className="flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded ml-1">
-                                                                         <img 
-                                                                             src={`https://github.com/${benchmarkData[0].github_author.username}.png`} 
-                                                                             alt={benchmarkData[0].github_author.username} 
-                                                                             className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600"
-                                                                             onError={(e) => { e.target.style.display = 'none'; }}
-                                                                         />
-                                                                         <a 
-                                                                             href={`https://github.com/${benchmarkData[0].github_author.username}`} 
-                                                                             target="_blank" 
-                                                                             rel="noopener noreferrer" 
-                                                                             className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
-                                                                         >
-                                                                             {benchmarkData[0].github_author.username}
-                                                                         </a>
-                                                                     </span>
-                                                                 )}
-                                                             </div>
-                                                             <div className="flex items-center gap-1.5">
-                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Status:</span>
-                                                                 {(() => {
-                                                                     const details = getSubmissionStatusDetails(benchmarkData[0]?.source_info?.submission_state);
-                                                                     return (
-                                                                         <span className={cn('px-1.5 py-0.5 rounded border text-[11px] font-bold', details.bg, details.text, details.border)}>
-                                                                             {details.label}
-                                                                         </span>
-                                                                     );
-                                                                 })()}
-                                                             </div>
-                                                             {(benchmarkData[0]?.source_info?.submission_state === 'public' || benchmarkData[0]?.source_info?.submission_state === 'promoted' || benchmarkData[0]?.source_info?.approved_at) && (
-                                                                 <div className="flex items-center gap-1.5">
-                                                                     <span className="font-semibold text-slate-700 dark:text-slate-300">Approved:</span>
-                                                                     <span>{benchmarkData[0].source_info.approved_at ? new Date(benchmarkData[0].source_info.approved_at).toLocaleString() : (benchmarkData[0].source_info.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown')}</span>
-                                                                 </div>
-                                                             )}
-                                                         </div>
-                                                     ) : (
-                                                         <div className="flex-1" />
-                                                     )}
-
-                                                     <Button
-                                                         variant="secondary"
-                                                         size="sm"
-                                                         onClick={(e) => {
-                                                             e.stopPropagation();
-                                                             setViewingPayloadRun(stat);
-                                                         }}
-                                                         className="flex-shrink-0 whitespace-nowrap animate-in fade-in duration-200"
-                                                         title="Inspect Raw YAML / JSON Manifest"
-                                                     >
-                                                         <Code2 size={13} />
-                                                         Inspect Raw Manifest
-                                                     </Button>
-                                                 </div>
-
-                                                     <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
-                                                          <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs bg-white dark:bg-slate-800">
-                                                              <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium border-b border-slate-200 dark:border-slate-700">
-                                                                  <tr>
-                                                                      {isBrv02 && <th className="px-3 py-2 w-12 text-center">Stage</th>}
-                                                                      <th className="px-4 py-2">{isBrv02 ? 'QPS' : 'QPS'}</th>
-                                                                      <th className="px-2 py-2">Input Tok/s</th>
-                                                                      <th className="px-2 py-2">Output Tok/s</th>
-                                                                      <th className="px-2 py-2">Total Tok/s</th>
-                                                                      <th className="px-2 py-2">NTPOT (ms)</th>
-                                                                      <th className="px-2 py-2">TPOT (ms)</th>
-                                                                      <th className="px-2 py-2">ITL (ms)</th>
-                                                                      <th className="px-2 py-2">TTFT (ms)</th>
-                                                                      <th className="px-2 py-2">E2E (s)</th>
-                                                                      <th className="px-2 py-2">Cost/1M In ($)</th>
-                                                                      <th className="px-2 py-2">Cost/1M Out ($)</th>
-                                                                      <th className="px-2 py-2">Input Len</th>
-                                                                      <th className="px-2 py-2">Output Len</th>
-                                                                      <th className="px-2 py-2 w-16 text-center">Raw</th>
-                                                                  </tr>
-                                                              </thead>
-                                                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                                                  {[...benchmarkData]
-                                                                      .sort((a, b) => (a.workload?.stage ?? 0) - (b.workload?.stage ?? 0))
-                                                                      .map((d, index) => (
-                                                                          <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                                              {isBrv02 && (
-                                                                                  <td className="px-3 py-2 text-center w-12 text-slate-500 border-r border-slate-100 dark:border-slate-700">
-                                                                                      {d.workload?.stage ?? '-'}
-                                                                                  </td>
-                                                                              )}
-                                                                              <td className="px-4 py-2">
-                                                                                  {(d.metrics?.request_rate?.toFixed(2) || d.qps?.toFixed(2) || '-')}
-                                                                              </td>
-                                                                              <td className="px-2 py-2">{d.metrics?.input_tput?.toFixed(0) || '-'}</td>
-                                                                              <td className="px-2 py-2">{d.metrics?.output_tput?.toFixed(0) || d.throughput?.toFixed(0) || '-'}</td>
-                                                                              <td className="px-2 py-2 font-medium">{d.metrics?.total_tput?.toFixed(0) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.ntpot?.toFixed(2) || d.ntpot?.toFixed(2) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.tpot?.toFixed(2) || d.time_per_output_token?.toFixed(2) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.itl?.toFixed(2) || d.itl?.toFixed(2) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.ttft?.mean?.toFixed(2) || d.ttft?.mean?.toFixed(2) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{((d.metrics?.e2e_latency || d.latency?.mean) / 1000)?.toFixed(2) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px] text-slate-500">
-                                                                                  {d.metrics?.cost?.explicit_input > 0 ? `$${d.metrics.cost.explicit_input.toFixed(4)}` : '-'}
-                                                                              </td>
-                                                                              <td className="px-2 py-2 text-[10px] text-slate-500">
-                                                                                  {d.metrics?.cost?.explicit_output > 0 ? `$${d.metrics.cost.explicit_output.toFixed(4)}` : '-'}
-                                                                              </td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.isl?.toFixed(0) || d.workload?.input_tokens?.toFixed(0) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-[10px]">{d.osl?.toFixed(0) || d.workload?.output_tokens?.toFixed(0) || '-'}</td>
-                                                                              <td className="px-2 py-2 text-center">
-                                                                                  <button
-                                                                                      disabled={!d.rawReport}
-                                                                                      onClick={(e) => {
-                                                                                          e.stopPropagation();
-                                                                                          try {
-                                                                                              setRawYamlContent(d.rawReport ? yaml.dump(d.rawReport, { noRefs: true }) : '');
-                                                                                          } catch (err) {
-                                                                                              console.error("Failed to dump raw report to YAML:", err);
-                                                                                              setRawYamlContent("Error rendering raw report.");
-                                                                                          }
-                                                                                          setRawYamlTitle(d.source_info?.file_identifier || d.filename || `Stage ${d.workload?.stage}`);
-                                                                                      }}
-                                                                                      title="Raw"
-                                                                                      className={cn(
-                                                                                          'p-1 rounded transition-colors',
-                                                                                          d.rawReport
-                                                                                              ? 'text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 cursor-pointer'
-                                                                                              : 'text-slate-200 dark:text-slate-800 cursor-not-allowed opacity-50'
-                                                                                      )}
-                                                                                  >
-                                                                                      <FileText size={14} />
-                                                                                  </button>
-                                                                              </td>
-                                                                          </tr>
-                                                                      ))}
-                                                              </tbody>
-                                                          </table>
-                                                      </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                            stat={stat}
+                                            isSelected={isSelected}
+                                            isExpanded={isExpanded}
+                                            isBaseline={isBaseline}
+                                            user={user}
+                                            isAdmin={isAdmin}
+                                            submissionsMap={submissionsMap}
+                                            brv02Runs={brv02Runs}
+                                            visibleSpecs={visibleSpecs}
+                                            isLoadingSubmissions={isLoadingSubmissions}
+                                            isLocalActionPending={isLocalActionPending}
+                                            rejectingRunId={rejectingRunId}
+                                            rejectionFeedback={rejectionFeedback}
+                                            setRejectingRunId={setRejectingRunId}
+                                            setRejectionFeedback={setRejectionFeedback}
+                                            setViewingPayloadRun={setViewingPayloadRun}
+                                            setRawYamlContent={setRawYamlContent}
+                                            setRawYamlTitle={setRawYamlTitle}
+                                            handleSubmitStagedRunForReview={handleSubmitStagedRunForReview}
+                                            handleActionClick={handleActionClick}
+                                            updateSubmissionStatus={updateSubmissionStatus}
+                                            toggleModelExpansion={toggleModelExpansion}
+                                            handleCheckboxPointerDown={handleCheckboxPointerDown}
+                                            brv02CustomLabels={brv02CustomLabels}
+                                            handleEditStagedRun={handleEditStagedRun}
+                                            defaultSources={defaultSources}
+                                        />
                                     );
                                 })}
                             </div>
@@ -2586,3 +1860,863 @@ export const UnifiedDataTable = (props) => {
         </div>
     );
 };
+const BenchmarkRow = React.memo(({
+    stat,
+    isSelected,
+    isExpanded,
+    isBaseline,
+    user,
+    isAdmin,
+    submissionsMap,
+    brv02Runs,
+    visibleSpecs,
+    isLoadingSubmissions,
+    isLocalActionPending,
+    rejectingRunId,
+    rejectionFeedback,
+    setRejectingRunId,
+    setRejectionFeedback,
+    setViewingPayloadRun,
+    setRawYamlContent,
+    setRawYamlTitle,
+    handleSubmitStagedRunForReview,
+    handleActionClick,
+    updateSubmissionStatus,
+    toggleModelExpansion,
+    handleCheckboxPointerDown,
+    brv02CustomLabels,
+    handleEditStagedRun,
+    defaultSources,
+}) => {
+    const benchmarkData = stat.data || [];
+    const meta = benchmarkData[0]?.metadata || {};
+
+    const isDefaultSource = (src) => {
+        if (!src) return true;
+        if (src === 'local') return true;
+        if (src.startsWith('brv02:')) return true;
+        if (src === 'llm-d-results:google_drive') return true;
+        
+        if (src.startsWith('gcs:') || src.startsWith('aws:') || src.startsWith('lpg:')) {
+            const bucketName = src.split(':')[1];
+            return defaultSources.has(bucketName);
+        }
+        
+        return defaultSources.has(src);
+    };
+
+    const getSourceTooltipText = (src) => {
+        if (!src || src === 'local') {
+            return "Loaded from your local staging directory or files.";
+        }
+        if (src.startsWith('brv02:')) {
+            return "Staged locally in your browser cache.";
+        }
+        if (src === 'llm-d-results:google_drive') {
+            return "Loaded from the archived Google Drive folder.";
+        }
+        if (src.startsWith('gcs:')) {
+            return `Loaded from the Google Cloud Storage bucket: gs://${src.split(':')[1]}`;
+        }
+        if (src.startsWith('aws:')) {
+            return `Loaded from the Amazon S3 bucket: s3://${src.split(':')[1]}`;
+        }
+        if (src.startsWith('giq:')) {
+            return `Loaded from the Google Cloud Project: ${src.split(':')[1]}`;
+        }
+        if (src.startsWith('lpg:')) {
+            return `Loaded from the Google Cloud Storage bucket (LPG): gs://${src.split(':')[1]}`;
+        }
+        return `Source: ${src}`;
+    };
+
+    const getStatusTooltipText = (status, sub) => {
+        switch (status) {
+            case 'staged':
+                return "Staged locally on your machine. Not yet submitted to the Results Store.";
+            case 'submitted_pending_processing':
+            case 'processing':
+                return "Staged in the GCS bucket. Automated formatting checks are running.";
+            case 'submitted_pending_review':
+            case 'in_review':
+                return "Pending admin review. Check back later once a reviewer approves it.";
+            case 'approved':
+            case 'approved_pending_publish':
+                return "Approved by admins. Waiting for the next scheduled sync to publish.";
+            case 'public':
+            case 'promoted':
+                return "Published in the Public Results Store and visible to all users.";
+            case 'rejected':
+            case 'changes_requested': {
+                const reason = sub?.feedback || sub?.rejectionFeedback;
+                return reason 
+                    ? `Rejected by admins. Reason: "${reason}"`
+                    : "Rejected by Results Store admins.";
+            }
+            default:
+                return `Status: ${status}`;
+        }
+    };
+    const sourceStr = benchmarkData[0]?.source || '';
+    const isBrv02 = sourceStr.startsWith('brv02:') || benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+    const runId = isBrv02 ? (sourceStr.startsWith('brv02:') ? sourceStr.replace('brv02:', '') : benchmarkData[0]?.run_id) : null;
+    const runStatus = (runId && submissionsMap && submissionsMap[runId])?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
+    const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+    const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
+    const isLocal = sourceStr.startsWith('brv02:');
+    const canResubmit = isLocal || isMine || isAdmin;
+
+    const uniqueIsl = stat.uniqueIsl || [];
+    const uniqueOsl = stat.uniqueOsl || [];
+    const peakRun = stat.peakRun || {};
+    
+    const isl = uniqueIsl.length === 1 ? uniqueIsl[0] : (uniqueIsl.length > 1 ? 'Var' : '-');
+    const osl = uniqueOsl.length === 1 ? uniqueOsl[0] : (uniqueOsl.length > 1 ? 'Var' : '-');
+
+    const statusAccent = getCardStatusAccent(isBrv02, runId, submissionsMap, benchmarkData[0]?.source_info?.submission_state);
+    const cardBorderClass = isSelected 
+        ? 'border-blue-400 dark:border-blue-600 ring-1 ring-blue-400 dark:ring-blue-600/50' 
+        : statusAccent.borderClass;
+    const cardBgClass = isSelected ? '' : (statusAccent.bgClass || '');
+
+
+                                    return (
+                                        <div 
+                                            key={stat.benchmarkKey || stat.model}
+                                            className={cn(
+                                                'flex flex-col bg-white dark:bg-slate-900 border rounded-lg transition-colors duration-150 shadow-sm relative',
+                                                cardBorderClass,
+                                                cardBgClass,
+                                                isBaseline && 'ring-2 ring-cyan-400/50'
+                                            )}
+                                        >
+                                            {statusAccent.accentBar}
+                                            {/* Card Main Row (Header) */}
+                                            <div className="flex items-stretch min-h-[60px]">
+                                                {/* Left Checkbox Area (Dedicated Click Target) */}
+                                                <div 
+                                                    onPointerDown={(e) => handleCheckboxPointerDown(e, stat.benchmarkKey, isSelected)}
+                                                    className={cn(
+                                                        'benchmark-checkbox-area w-12 flex-shrink-0 flex items-center justify-center cursor-pointer border-r transition-colors select-none',
+                                                        statusAccent.accentBar && 'pl-1.5',
+                                                        isSelected
+                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                                                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                                                    )}
+                                                    data-benchmark-key={stat.benchmarkKey}
+                                                    style={{ touchAction: 'none' }}
+                                                >
+                                                    <div className={cn(
+                                                        'w-5 h-5 rounded flex items-center justify-center border transition-all',
+                                                        isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600'
+                                                    )}>
+                                                        {isSelected && <Check size={14} strokeWidth={3} />}
+                                                    </div>
+                                                </div>
+
+                                                {/* Card Content Area (Expand Toggle) */}
+                                                <div 
+                                                    onClick={() => toggleModelExpansion(stat.benchmarkKey || stat.model)}
+                                                    className="flex-1 flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-3"
+                                                >
+                                                    {/* Left side info block */}
+                                                    <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-4 min-w-0">
+                                                        {/* Specs list container */}
+                                                        {(() => {
+                                                            const nodesAndParallelismText = stat.nodesAndParallelismText || '';
+
+                                                             const specs = [];
+
+                                                             if (visibleSpecs.timestamp) {
+                                                                 const timestampVal = benchmarkData[0]?.timestamp;
+                                                                 if (timestampVal) {
+                                                                     const d = new Date(timestampVal);
+                                                                     if (!isNaN(d.getTime())) {
+                                                                         specs.push(
+                                                                             <span key="timestamp" className="inline-flex items-center gap-1">
+                                                                                 <span className="text-slate-400 dark:text-slate-500 font-normal">Date:</span>
+                                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                                                                     {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                                 </span>
+                                                                             </span>
+                                                                         );
+                                                                     }
+                                                                 }
+                                                             }
+
+                                                             if (visibleSpecs.stage) {
+                                                                 const isBrv02Run = benchmarkData[0]?.source?.startsWith('brv02:') || benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+                                                                 if (isBrv02Run) {
+                                                                     const stageCount = benchmarkData.length;
+                                                                     specs.push(
+                                                                         <span key="stage" className="inline-flex items-center gap-1">
+                                                                             <span className="text-slate-400 dark:text-slate-500 font-normal">Stages:</span>
+                                                                             <span className="font-semibold text-slate-700 dark:text-slate-300">{stageCount} stage{stageCount === 1 ? '' : 's'}</span>
+                                                                         </span>
+                                                                     );
+                                                                 } else {
+                                                                     const stageVal = benchmarkData[0]?.workload?.stage;
+                                                                     if (stageVal !== undefined && stageVal !== null && stageVal !== '') {
+                                                                         specs.push(
+                                                                             <span key="stage" className="inline-flex items-center gap-1">
+                                                                                 <span className="text-slate-400 dark:text-slate-500 font-normal">Stage:</span>
+                                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">{stageVal}</span>
+                                                                             </span>
+                                                                         );
+                                                                     }
+                                                                 }
+                                                             }
+
+                                                             if (visibleSpecs.hardware) {
+                                                                specs.push(
+                                                                    <span key="hardware" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Hardware:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{stat.accelerator_count}x {stat.hardware}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.nodes) {
+                                                                specs.push(
+                                                                    <span key="nodes" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Nodes:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{nodesAndParallelismText}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.islOsl) {
+                                                                specs.push(
+                                                                    <span key="islOsl" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">I/O Load:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{isl}/{osl}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.maxTput) {
+                                                                specs.push(
+                                                                    <span key="maxTput" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Max Tput:</span>
+                                                                        <span className="font-bold text-green-600 dark:text-green-400">{stat.maxTput.toFixed(0)} <span className="text-[10px] font-normal opacity-70">tok/s</span></span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.minLat) {
+                                                                specs.push(
+                                                                    <span key="minLat" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Min Lat:</span>
+                                                                        <span className="font-semibold text-amber-600 dark:text-amber-400">{stat.minLat ? `${stat.minLat.toFixed(0)} ms` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.qps) {
+                                                                const qpsVal = peakRun.metrics?.request_rate || peakRun.qps;
+                                                                specs.push(
+                                                                    <span key="qps" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">QPS:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{qpsVal != null ? qpsVal.toFixed(2) : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.inputTput) {
+                                                                const inVal = peakRun.metrics?.input_tput;
+                                                                specs.push(
+                                                                    <span key="inputTput" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Input Tput:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{inVal != null ? `${inVal.toFixed(0)} tok/s` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.outputTput) {
+                                                                const outVal = peakRun.metrics?.output_tput || peakRun.throughput;
+                                                                specs.push(
+                                                                    <span key="outputTput" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Output Tput:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{outVal != null ? `${outVal.toFixed(0)} tok/s` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.totalTput) {
+                                                                const totVal = peakRun.metrics?.total_tput;
+                                                                specs.push(
+                                                                    <span key="totalTput" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Total Tput:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{totVal != null ? `${totVal.toFixed(0)} tok/s` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.ntpot) {
+                                                                const ntpotVal = peakRun.metrics?.ntpot || peakRun.ntpot;
+                                                                specs.push(
+                                                                    <span key="ntpot" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">NTPOT:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{ntpotVal != null ? `${ntpotVal.toFixed(2)} ms` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.tpot) {
+                                                                const tpotVal = peakRun.metrics?.tpot || peakRun.time_per_output_token;
+                                                                specs.push(
+                                                                    <span key="tpot" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">TPOT:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{tpotVal != null ? `${tpotVal.toFixed(2)} ms` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.itl) {
+                                                                const itlVal = peakRun.metrics?.itl || peakRun.itl;
+                                                                specs.push(
+                                                                    <span key="itl" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">ITL:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{itlVal != null ? `${itlVal.toFixed(2)} ms` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.ttft) {
+                                                                const ttftVal = peakRun.metrics?.ttft?.mean || peakRun.ttft?.mean;
+                                                                specs.push(
+                                                                    <span key="ttft" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">TTFT:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{ttftVal != null ? `${ttftVal.toFixed(2)} ms` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.e2e) {
+                                                                const e2eVal = (peakRun.metrics?.e2e_latency || peakRun.latency?.mean);
+                                                                specs.push(
+                                                                    <span key="e2e" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">E2E Latency:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{e2eVal != null ? `${(e2eVal / 1000).toFixed(2)} s` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.costIn) {
+                                                                const costInVal = peakRun.metrics?.cost?.explicit_input;
+                                                                specs.push(
+                                                                    <span key="costIn" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Cost/1M In:</span>
+                                                                        <span className="font-semibold text-slate-500">{costInVal > 0 ? `$${costInVal.toFixed(4)}` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.costOut) {
+                                                                const costOutVal = peakRun.metrics?.cost?.explicit_output;
+                                                                specs.push(
+                                                                    <span key="costOut" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Cost/1M Out:</span>
+                                                                        <span className="font-semibold text-slate-500">{costOutVal > 0 ? `$${costOutVal.toFixed(4)}` : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.inputLen) {
+                                                                const inLenVal = peakRun.isl || peakRun.workload?.input_tokens;
+                                                                specs.push(
+                                                                    <span key="inputLen" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Input Len:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{inLenVal != null ? inLenVal.toFixed(0) : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            if (visibleSpecs.outputLen) {
+                                                                const outLenVal = peakRun.osl || peakRun.workload?.output_tokens;
+                                                                specs.push(
+                                                                    <span key="outputLen" className="inline-flex items-center gap-1">
+                                                                        <span className="text-slate-400 dark:text-slate-500 font-normal">Output Len:</span>
+                                                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{outLenVal != null ? outLenVal.toFixed(0) : '-'}</span>
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                             return (
+                                                                 <div className="flex-1 flex flex-col min-w-0">
+                                                                     {/* Line 1: Model Title on left, Source Tag & Date on right */}
+                                                                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 w-full">
+                                                                         <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                                                                         <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">
+                                                                                             {isBrv02 
+                                                                                                 ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
+                                                                                                 : (stat.model_name || stat.model || meta.model_name)}
+                                                                                         </span>
+                                                                                         {isBrv02 && runStatus === 'staged' && (
+                                                                                             <button
+                                                                                                 onClick={(e) => {
+                                                                                                     e.stopPropagation();
+                                                                                                     const run = brv02Runs.find(r => r.runId === runId);
+                                                                                                     if (run) {
+                                                                                                         handleEditStagedRun(run);
+                                                                                                     }
+                                                                                                 }}
+                                                                                                 title="Edit staged benchmark metadata"
+                                                                                                 className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0 cursor-pointer"
+                                                                                             >
+                                                                                                 <Pencil size={12} />
+                                                                                             </button>
+                                                                                         )}
+                                                                                     </div>
+
+                                                                            {isBrv02 && (
+                                                                                <div className="flex flex-col items-end gap-1.5 relative">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        {(() => {
+                                                                                            const sub = submissionsMap ? submissionsMap[runId] : null;
+                                                                                            const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
+                                                                                            
+                                                                                            if (canResubmit && status === 'staged') {
+                                                                                                return user?.permission === 'none' ? (
+                                                                                                    <div className="relative group/tooltip inline-block">
+                                                                                                        <button
+                                                                                                            disabled
+                                                                                                            className="px-2.5 py-1 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-500 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-not-allowed select-none flex items-center gap-1 opacity-60"
+                                                                                                        >
+                                                                                                            <Send className="w-2.5 h-2.5" /> Submit for Review
+                                                                                                        </button>
+                                                                                                        <div className="absolute right-0 bottom-full mb-2 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-350 text-xs font-medium rounded-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-64 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                            You are not in the Results Store closed-beta. Check back later once the feature is released.
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <button
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            const run = brv02Runs.find(r => r.runId === runId);
+                                                                                                            if (run) {
+                                                                                                                handleSubmitStagedRunForReview(run);
+                                                                                                            }
+                                                                                                        }}
+                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                                                        title="Submit this benchmark to staging GCS bucket for automated format checks"
+                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
+                                                                                                    >
+                                                                                                        <Send className="w-2.5 h-2.5" /> Submit for Review
+                                                                                                    </button>
+                                                                                                );
+                                                                                            }
+                                                                                            if (canResubmit && status === 'submitted_pending_processing') {
+                                                                                                return (
+                                                                                                    <button
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            handleActionClick(async () => {
+                                                                                                                if (updateSubmissionStatus) {
+                                                                                                                    await updateSubmissionStatus(runId, 'submitted_pending_review', '', stat.model, stat.hardware);
+                                                                                                                }
+                                                                                                            });
+                                                                                                        }}
+                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                                                        title="Promote benchmark to the admin review queue"
+                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
+                                                                                                    >
+                                                                                                        <Play className="w-2.5 h-2.5 fill-current" /> Promote to Review
+                                                                                                    </button>
+                                                                                                );
+                                                                                            }
+                                                                                            if (isAdmin && (status === 'submitted_pending_review' || status === 'in_review')) {
+                                                                                                return (
+                                                                                                    <>
+                                                                                                        <button
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation();
+                                                                                                                handleActionClick(async () => {
+                                                                                                                    if (updateSubmissionStatus) {
+                                                                                                                        await updateSubmissionStatus(runId, 'public', '', stat.model, stat.hardware);
+                                                                                                                    }
+                                                                                                                });
+                                                                                                            }}
+                                                                                                            disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                                                            title="Approve this run and publish it to the global Results store"
+                                                                                                            className="px-2.5 py-1 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-455 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
+                                                                                                        >
+                                                                                                            <Check className="w-2.5 h-2.5 stroke-[3]" /> Approve
+                                                                                                        </button>
+                                                                                                        <button
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation();
+                                                                                                                setRejectingRunId(runId);
+                                                                                                                setRejectionFeedback('');
+                                                                                                            }}
+                                                                                                            disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                                                            title="Reject compliance or request changes with custom feedback"
+                                                                                                            className="px-2.5 py-1 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 text-[9px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none flex items-center gap-1"
+                                                                                                        >
+                                                                                                            <X className="w-2.5 h-2.5" /> Reject
+                                                                                                        </button>
+                                                                                                    </>
+                                                                                                );
+                                                                                            }
+                                                                                            if (canResubmit && (status === 'rejected' || status === 'changes_requested')) {
+                                                                                                return (
+                                                                                                    <button
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            handleActionClick(async () => {
+                                                                                                                if (updateSubmissionStatus) {
+                                                                                                                    await updateSubmissionStatus(runId, 'submitted_pending_processing', '', stat.model, stat.hardware);
+                                                                                                                }
+                                                                                                            });
+                                                                                                        }}
+                                                                                                        disabled={isLoadingSubmissions || isLocalActionPending}
+                                                                                                        title="Resubmit this run for automated verification after corrections"
+                                                                                                        className="px-2.5 py-1 rounded-xl border border-purple-500/25 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer select-none flex items-center gap-1"
+                                                                                                    >
+                                                                                                        <RotateCcw className="w-2.5 h-2.5" /> Resubmit
+                                                                                                    </button>
+                                                                                                );
+                                                                                            }
+                                                                                            return null;
+                                                                                        })()}
+                                                                                    </div>
+                                                                                    {rejectingRunId === runId && (
+                                                                                        <div onClick={e => e.stopPropagation()} className="p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-lg shadow-inner w-64 flex flex-col gap-2 mt-1 z-30">
+                                                                                            <div className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider">Reason for Rejecting Run</div>
+                                                                                            <Textarea
+                                                                                                autoFocus
+                                                                                                value={rejectionFeedback}
+                                                                                                onChange={e => setRejectionFeedback(e.target.value)}
+                                                                                                placeholder="Reason details..."
+                                                                                                className="p-1.5 rounded h-12 resize-none font-sans focus:border-red-500/50 focus:ring-red-500/40"
+                                                                                            />
+                                                                                            <div className="flex justify-end gap-2 text-xs">
+                                                                                                <Button
+                                                                                                    variant="ghost"
+                                                                                                    size="xs"
+                                                                                                    className="uppercase font-bold"
+                                                                                                    onClick={() => setRejectingRunId(null)}
+                                                                                                >
+                                                                                                    Cancel
+                                                                                                </Button>
+                                                                                                <Button
+                                                                                                    variant="danger"
+                                                                                                    size="xs"
+                                                                                                    className="uppercase font-bold"
+                                                                                                    onClick={() => {
+                                                                                                        handleActionClick(async () => {
+                                                                                                            if (rejectionFeedback.trim() && updateSubmissionStatus) {
+                                                                                                                await updateSubmissionStatus(runId, 'rejected', rejectionFeedback, stat.model, stat.hardware);
+                                                                                                                setRejectingRunId(null);
+                                                                                                            }
+                                                                                                        });
+                                                                                                    }}
+                                                                                                    disabled={!rejectionFeedback.trim() || isLoadingSubmissions || isLocalActionPending}
+                                                                                                >
+                                                                                                    Submit
+                                                                                                </Button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                                                                            {(() => {
+                                                                                const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+                                                                                const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
+                                                                                if (isMine) {
+                                                                                    return (
+                                                                                        <Badge tone="success" size="xs">
+                                                                                            Yours
+                                                                                        </Badge>
+                                                                                    );
+                                                                                }
+                                                                                if (isResultsStore && isDefaultSource(sourceStr) && !isLocal) {
+                                                                                    return (
+                                                                                        <div className="relative group/community-row-tooltip inline-flex items-center">
+                                                                                            <Badge tone="info" size="xs" className="cursor-help">
+                                                                                                Community
+                                                                                            </Badge>
+                                                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/community-row-tooltip:opacity-100 group-hover/community-row-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                Contains community-submitted benchmarks stored in the official Prism Cloud bucket.
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+                                                                                return null;
+                                                                            })()}
+
+
+                                                                            {(() => {
+                                                                                const sub = isBrv02 && submissionsMap ? submissionsMap[runId] : null;
+                                                                                
+                                                                                if (isBrv02) {
+                                                                                    const status = sub?.status || benchmarkData[0]?.source_info?.submission_state || 'staged';
+                                                                                    let chipStatus = 'staged';
+                                                                                    let chipLabel = undefined;
+                                                                                    if (status === 'submitted_pending_processing') {
+                                                                                        chipStatus = 'processing';
+                                                                                    } else if (status === 'submitted_pending_review' || status === 'in_review') {
+                                                                                        chipStatus = 'in_review';
+                                                                                    } else if (status === 'public' || status === 'promoted' || status === 'approved') {
+                                                                                        chipStatus = 'approved';
+                                                                                        chipLabel = 'Public';
+                                                                                    } else if (status === 'rejected' || status === 'changes_requested') {
+                                                                                        chipStatus = 'rejected';
+                                                                                    }
+                                                                                    
+                                                                                    const tooltipText = getStatusTooltipText(status, sub);
+                                                                                    
+                                                                                    return (
+                                                                                        <div className="relative group/status-tooltip inline-flex items-center">
+                                                                                            <StatusChip status={chipStatus} label={chipLabel} className="cursor-help" />
+                                                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                {tooltipText}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                } else {
+                                                                                    return (
+                                                                                        <div className="relative group/status-tooltip inline-flex items-center">
+                                                                                            <Badge tone="success" size="xs" className="cursor-help">
+                                                                                                Official
+                                                                                            </Badge>
+                                                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                Official baseline benchmark run verified by Results Store admins.
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+                                                                            })()}
+
+
+                                                                            {getSourceTag(benchmarkData[0]) !== 'BRV02' && (
+                                                                                <Badge
+                                                                                    tone="neutral"
+                                                                                    size="xs"
+                                                                                    className="cursor-help"
+                                                                                    title={getSourceTag(benchmarkData[0]) === 'llm-d' ? "Official llm-d benchmark results stored in shared Google Drive store" : `Source: ${getSourceTag(benchmarkData[0])}`}
+                                                                                >
+                                                                                    {getSourceTag(benchmarkData[0])}
+                                                                                </Badge>
+                                                                            )}
+
+                                                                            {(() => {
+                                                                                const type = getSourceType(benchmarkData[0]);
+                                                                                if (type === 'Cloud') return null;
+                                                                                const style = getSourceTypeStyle(type);
+                                                                                const tooltipText = getSourceTooltipText(sourceStr);
+                                                                                return (
+                                                                                    <div className="relative group/source-type-tooltip inline-flex items-center">
+                                                                                        <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap cursor-help', style.bg, style.text, style.border)}>
+                                                                                            {type}
+                                                                                        </span>
+                                                                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/source-type-tooltip:opacity-100 group-hover/source-type-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                            {tooltipText}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })()}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {(() => {
+                                                                        const sub = isBrv02 && submissionsMap ? submissionsMap[runId] : null;
+                                                                        if (sub && sub.status === 'changes_requested' && sub.feedback) {
+                                                                            return (
+                                                                                <div 
+                                                                                    onClick={e => e.stopPropagation()}
+                                                                                    className="mt-2 text-[11px] bg-red-500/10 text-red-300 border border-red-500/20 rounded-xl p-3 max-w-3xl italic leading-relaxed flex items-start gap-2 shadow-sm font-sans"
+                                                                                >
+                                                                                    <span className="font-extrabold uppercase text-[9px] not-italic tracking-wider bg-red-500/20 px-1.5 py-0.5 rounded text-red-450 shrink-0 mt-0.5">
+                                                                                        Changes Requested:
+                                                                                    </span>
+                                                                                    <span>"{sub.feedback}"</span>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        return null;
+                                                                    })()}
+
+                                                                    {/* Line 2: Dedicated to just selected visible stats */}
+                                                                    {specs.length > 0 && (
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                                                            {specs.map((spec, sIdx) => {
+                                                                                const showDot = sIdx > 0;
+                                                                                return (
+                                                                                    <React.Fragment key={spec.key}>
+                                                                                        {showDot && <span className="text-slate-300 dark:text-slate-700 select-none font-bold">·</span>}
+                                                                                        {spec}
+                                                                                    </React.Fragment>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+
+                                                    {/* Right side expand icon */}
+                                                    <div className="flex-shrink-0 text-slate-400 flex items-center justify-center w-6 h-6 ml-2">
+                                                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                             {/* Expanded Table Details */}
+                                             {isExpanded && (
+                                                 <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4 rounded-b-lg">
+                                                     <div className="flex justify-between items-stretch gap-4 mb-3 w-full">
+                                                         {benchmarkData[0]?.source_info?.type === 'benchmark_report_v02' ? (
+                                                             <div className="flex-1 p-2 bg-slate-100 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/80 font-sans flex flex-wrap gap-x-6 gap-y-2.5 text-xs text-slate-600 dark:text-slate-400">
+                                                             <div className="flex items-center gap-1.5">
+                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Run UUID:</span>
+                                                                 <span className="font-mono bg-slate-200 dark:bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] select-all">{benchmarkData[0]?.run_id}</span>
+                                                             </div>
+                                                             <div className="flex items-center gap-1.5">
+                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Submitted:</span>
+                                                                 <span>{benchmarkData[0]?.source_info?.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown'}</span>
+                                                                 {benchmarkData[0]?.github_author?.username && (
+                                                                     <span className="flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded ml-1">
+                                                                         <img 
+                                                                             src={`https://github.com/${benchmarkData[0].github_author.username}.png`} 
+                                                                             alt={benchmarkData[0].github_author.username} 
+                                                                             className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600"
+                                                                             onError={(e) => { e.target.style.display = 'none'; }}
+                                                                         />
+                                                                         <a 
+                                                                             href={`https://github.com/${benchmarkData[0].github_author.username}`} 
+                                                                             target="_blank" 
+                                                                             rel="noopener noreferrer" 
+                                                                             className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                                                                         >
+                                                                             {benchmarkData[0].github_author.username}
+                                                                         </a>
+                                                                     </span>
+                                                                 )}
+                                                             </div>
+                                                             <div className="flex items-center gap-1.5">
+                                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">Status:</span>
+                                                                 {(() => {
+                                                                     const details = getSubmissionStatusDetails(benchmarkData[0]?.source_info?.submission_state);
+                                                                     return (
+                                                                         <span className={cn('px-1.5 py-0.5 rounded border text-[11px] font-bold', details.bg, details.text, details.border)}>
+                                                                             {details.label}
+                                                                         </span>
+                                                                     );
+                                                                 })()}
+                                                             </div>
+                                                             {(benchmarkData[0]?.source_info?.submission_state === 'public' || benchmarkData[0]?.source_info?.submission_state === 'promoted' || benchmarkData[0]?.source_info?.approved_at) && (
+                                                                 <div className="flex items-center gap-1.5">
+                                                                     <span className="font-semibold text-slate-700 dark:text-slate-300">Approved:</span>
+                                                                     <span>{benchmarkData[0].source_info.approved_at ? new Date(benchmarkData[0].source_info.approved_at).toLocaleString() : (benchmarkData[0].source_info.submitted_at ? new Date(benchmarkData[0].source_info.submitted_at).toLocaleString() : 'Unknown')}</span>
+                                                                 </div>
+                                                             )}
+                                                         </div>
+                                                     ) : (
+                                                         <div className="flex-1" />
+                                                     )}
+
+                                                     <Button
+                                                         variant="secondary"
+                                                         size="sm"
+                                                         onClick={(e) => {
+                                                             e.stopPropagation();
+                                                             setViewingPayloadRun(stat);
+                                                         }}
+                                                         className="flex-shrink-0 whitespace-nowrap animate-in fade-in duration-200"
+                                                         title="Inspect Raw YAML / JSON Manifest"
+                                                     >
+                                                         <Code2 size={13} />
+                                                         Inspect Raw Manifest
+                                                     </Button>
+                                                 </div>
+
+                                                     <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
+                                                          <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs bg-white dark:bg-slate-800">
+                                                              <thead className="bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium border-b border-slate-200 dark:border-slate-700">
+                                                                  <tr>
+                                                                      {isBrv02 && <th className="px-3 py-2 w-12 text-center">Stage</th>}
+                                                                      <th className="px-4 py-2">{isBrv02 ? 'QPS' : 'QPS'}</th>
+                                                                      <th className="px-2 py-2">Input Tok/s</th>
+                                                                      <th className="px-2 py-2">Output Tok/s</th>
+                                                                      <th className="px-2 py-2">Total Tok/s</th>
+                                                                      <th className="px-2 py-2">NTPOT (ms)</th>
+                                                                      <th className="px-2 py-2">TPOT (ms)</th>
+                                                                      <th className="px-2 py-2">ITL (ms)</th>
+                                                                      <th className="px-2 py-2">TTFT (ms)</th>
+                                                                      <th className="px-2 py-2">E2E (s)</th>
+                                                                      <th className="px-2 py-2">Cost/1M In ($)</th>
+                                                                      <th className="px-2 py-2">Cost/1M Out ($)</th>
+                                                                      <th className="px-2 py-2">Input Len</th>
+                                                                      <th className="px-2 py-2">Output Len</th>
+                                                                      <th className="px-2 py-2 w-16 text-center">Raw</th>
+                                                                  </tr>
+                                                              </thead>
+                                                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                                                  {[...benchmarkData]
+                                                                      .sort((a, b) => (a.workload?.stage ?? 0) - (b.workload?.stage ?? 0))
+                                                                      .map((d, index) => (
+                                                                          <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                                              {isBrv02 && (
+                                                                                  <td className="px-3 py-2 text-center w-12 text-slate-500 border-r border-slate-100 dark:border-slate-700">
+                                                                                      {d.workload?.stage ?? '-'}
+                                                                                  </td>
+                                                                              )}
+                                                                              <td className="px-4 py-2">
+                                                                                  {(d.metrics?.request_rate?.toFixed(2) || d.qps?.toFixed(2) || '-')}
+                                                                              </td>
+                                                                              <td className="px-2 py-2">{d.metrics?.input_tput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2">{d.metrics?.output_tput?.toFixed(0) || d.throughput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 font-medium">{d.metrics?.total_tput?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.ntpot?.toFixed(2) || d.ntpot?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.tpot?.toFixed(2) || d.time_per_output_token?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.itl?.toFixed(2) || d.itl?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.metrics?.ttft?.mean?.toFixed(2) || d.ttft?.mean?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{((d.metrics?.e2e_latency || d.latency?.mean) / 1000)?.toFixed(2) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px] text-slate-500">
+                                                                                  {d.metrics?.cost?.explicit_input > 0 ? `$${d.metrics.cost.explicit_input.toFixed(4)}` : '-'}
+                                                                              </td>
+                                                                              <td className="px-2 py-2 text-[10px] text-slate-500">
+                                                                                  {d.metrics?.cost?.explicit_output > 0 ? `$${d.metrics.cost.explicit_output.toFixed(4)}` : '-'}
+                                                                              </td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.isl?.toFixed(0) || d.workload?.input_tokens?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-[10px]">{d.osl?.toFixed(0) || d.workload?.output_tokens?.toFixed(0) || '-'}</td>
+                                                                              <td className="px-2 py-2 text-center">
+                                                                                  <button
+                                                                                      disabled={!d.rawReport}
+                                                                                      onClick={(e) => {
+                                                                                          e.stopPropagation();
+                                                                                          try {
+                                                                                              setRawYamlContent(d.rawReport ? yaml.dump(d.rawReport, { noRefs: true }) : '');
+                                                                                          } catch (err) {
+                                                                                              console.error("Failed to dump raw report to YAML:", err);
+                                                                                              setRawYamlContent("Error rendering raw report.");
+                                                                                          }
+                                                                                          setRawYamlTitle(d.source_info?.file_identifier || d.filename || `Stage ${d.workload?.stage}`);
+                                                                                      }}
+                                                                                      title="Raw"
+                                                                                      className={cn(
+                                                                                          'p-1 rounded transition-colors',
+                                                                                          d.rawReport
+                                                                                              ? 'text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 cursor-pointer'
+                                                                                              : 'text-slate-200 dark:text-slate-800 cursor-not-allowed opacity-50'
+                                                                                      )}
+                                                                                  >
+                                                                                      <FileText size={14} />
+                                                                                  </button>
+                                                                              </td>
+                                                                          </tr>
+                                                                      ))}
+                                                              </tbody>
+                                                          </table>
+                                                      </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+
+});
