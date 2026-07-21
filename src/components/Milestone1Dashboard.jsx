@@ -4,10 +4,11 @@ import {
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
 import IntelligentRoutingChart from './IntelligentRoutingChart';
-import { Zap, Download, Copy, Check, Info, ArrowLeft, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Share2, Eye, Maximize2, ArrowDown, X, MessageCircle, Menu, BarChart2, Table } from 'lucide-react';
+import { Zap, Download, Copy, Check, Info, ExternalLink, Settings, ShieldAlert, Cpu, Cloud, Server, Bell, Slack, ChevronDown, ChevronUp, Eye, Maximize2, ArrowDown, X, BarChart2, Table } from 'lucide-react';
 import { scanInferenceScheduling } from '../utils/gcsScanner';
 import { getLocalDashboardRuns } from '../utils/dashboardHelpers';
-import { CustomXAxis, CustomYAxis, CustomLabel, CustomChartTooltip, ChartCard } from './common';
+import { WellLitHeader, Badge, Button, ChartTooltip, ChartTooltipRow, Input, Label as FieldLabel, Modal, Panel, Select, ToggleGroup } from './ui';
+import { cn } from '../utils/cn';
 
 const RAW_GEMMA_DATA = [
     {
@@ -83,13 +84,15 @@ const CustomScatterTooltip = ({ active, payload }) => {
         const outcome = isOptimal ? "Cache Hit" : "Cache Miss";
 
         return (
-            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-2xl font-mono text-xs z-[100]">
-                <p className="font-bold text-white mb-1">Request #{data.req_id} <span className={isOptimal ? "text-emerald-400" : "text-slate-400"}>({outcome})</span></p>
-                <p className="text-slate-300">TTFT: <span className="font-semibold text-white">{Math.round(data.ttft)}ms</span></p>
-                <p className="text-slate-500 mt-2 pt-2 border-t border-slate-800 flex items-center">
-                    <Zap className={`w-3 h-3 mr-1 ${isOptimal ? "text-emerald-500" : "text-slate-500"}`} /> {version}
+            <ChartTooltip
+                className="font-mono"
+                title={<>Request #{data.req_id} <span className={isOptimal ? "text-emerald-400" : "text-slate-400"}>({outcome})</span></>}
+            >
+                <ChartTooltipRow label="TTFT" value={`${Math.round(data.ttft)}ms`} />
+                <p className="text-theme-muted text-[11px] mt-2 pt-2 border-t border-theme-border flex items-center">
+                    <Zap className={cn('w-3 h-3 mr-1', isOptimal ? 'text-emerald-500' : 'text-slate-500')} /> {version}
                 </p>
-            </div>
+            </ChartTooltip>
         );
     }
     return null;
@@ -103,18 +106,15 @@ const CustomTputTooltip = ({ active, payload, label }) => {
         const speedup = ((optimal - baseline) / baseline) * 100;
 
         return (
-            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-2xl font-mono text-xs z-[100]">
-                <p className="font-bold text-white mb-1">QPS: {label}</p>
-                <div className="space-y-1">
-                    <p className="text-slate-300">standard Kubernetes service: <span className="font-semibold text-white">{Math.round(baseline)}</span></p>
-                    <p className="text-emerald-400">Optimal: <span className="font-semibold text-white">{Math.round(optimal)}</span></p>
-                </div>
+            <ChartTooltip className="font-mono" title={`QPS: ${label}`}>
+                <ChartTooltipRow label="standard Kubernetes service" value={Math.round(baseline)} />
+                <ChartTooltipRow label="Optimal" value={Math.round(optimal)} />
                 {speedup > 0 && (
-                    <p className="text-cyan-400 mt-2 pt-2 border-t border-slate-800 flex items-center">
+                    <p className="text-cyan-400 text-[11px] mt-2 pt-2 border-t border-theme-border flex items-center">
                         <Zap className="w-3 h-3 mr-1 text-cyan-500" /> +{Math.round(speedup)}% speedup
                     </p>
                 )}
-            </div>
+            </ChartTooltip>
         );
     }
     return null;
@@ -153,22 +153,24 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     const yLabel = yLabelMap[zoomYAxis] || 'Y';
 
     return (
-        <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[220px] backdrop-blur-md text-slate-100 z-[100]">
-            {/* Unified Shared Context Header */}
-            <div className="border-b border-slate-200 dark:border-slate-700/60 pb-1.5 mb-1.5">
-                <div className="text-[11px] font-mono text-slate-400 leading-tight">
-                    {hw} • {model}
-                </div>
-                <div className="text-xs font-bold text-white mt-1">
-                    QPS: {qpsVal}
-                </div>
-                {pl.interpolated && (
-                    <div className="text-[10px] text-amber-500 font-mono mt-0.5">
-                        (Interpolated Curve)
+        <ChartTooltip
+            className="min-w-[220px]"
+            title={
+                <div className="border-b border-theme-border pb-1.5 mb-1.5">
+                    <div className="text-[11px] font-mono font-normal text-theme-muted leading-tight">
+                        {hw} • {model}
                     </div>
-                )}
-            </div>
-
+                    <div className="text-xs font-bold text-theme-text mt-1">
+                        QPS: {qpsVal}
+                    </div>
+                    {pl.interpolated && (
+                        <div className="text-[10px] font-normal text-amber-500 font-mono mt-0.5">
+                            (Interpolated Curve)
+                        </div>
+                    )}
+                </div>
+            }
+        >
             {/* Series Values List */}
             <div className="space-y-3">
                 {(() => {
@@ -194,7 +196,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                         return (
                             <div key={groupName} className="space-y-1">
                                 {groupName !== 'Other' && (
-                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-0.5 mb-1 flex items-center justify-between">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted border-b border-theme-border pb-0.5 mb-1 flex items-center justify-between">
                                         <span>{groupName.split(' [')[0]}</span>
                                     </div>
                                 )}
@@ -209,19 +211,16 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                                     }
 
                                     return (
-                                        <div key={index} className="flex items-center justify-between gap-4">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2.5 h-2.5 rounded-full shrink-0 border border-slate-950" style={{ backgroundColor: entry.stroke || entry.fill }} />
-                                                <span className="text-[11px] text-slate-200 font-medium">{label}</span>
-                                            </div>
-                                            <span className="text-[11px] font-mono font-bold text-white">
-                                                {xVal !== undefined && yVal !== undefined ? (
-                                                    `${xLabel}: ${typeof xVal === 'number' ? xVal.toFixed(1) : xVal} | ${yLabel}: ${typeof yVal === 'number' ? yVal.toFixed(1) : yVal}`
-                                                ) : (
-                                                    `${Number(entry.value ?? xVal).toFixed(1)} ${entry.name.includes('Rate') ? 'tokens/s' : 'ms'}`
-                                                )}
-                                            </span>
-                                        </div>
+                                        <ChartTooltipRow
+                                            key={index}
+                                            color={entry.stroke || entry.fill}
+                                            label={label}
+                                            value={xVal !== undefined && yVal !== undefined ? (
+                                                `${xLabel}: ${typeof xVal === 'number' ? xVal.toFixed(1) : xVal} | ${yLabel}: ${typeof yVal === 'number' ? yVal.toFixed(1) : yVal}`
+                                            ) : (
+                                                `${Number(entry.value ?? xVal).toFixed(1)} ${entry.name.includes('Rate') ? 'tokens/s' : 'ms'}`
+                                            )}
+                                        />
                                     );
                                 })}
                             </div>
@@ -229,7 +228,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                     });
                 })()}
             </div>
-        </div>
+        </ChartTooltip>
     );
 };
 
@@ -309,8 +308,6 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
         return params.get('hw') || '4x H100 80GB';
     });
     const [showFullProfile, setShowFullProfile] = useState(false);
-    const [shareToast, setShareToast] = useState(false);
-    const [toastMessage, setToastMessage] = useState("");
     const [perfMultiplier, setPerfMultiplier] = useState(1.0);
 
     const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
@@ -669,83 +666,19 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
             <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-emerald-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
 
             {/* Top Navigation Bar - Fully Fixed for 100% Scroll Independence */}
-            <header className="w-full h-16 border-b border-slate-900/65 flex justify-between items-center px-6 bg-slate-950/20 backdrop-blur-md fixed top-0 left-0 right-0 z-[49]">
-                <div className="flex items-center gap-4">
-                    {/* Hamburger Menu for Mobile */}
-                    <button
-                        onClick={onToggleMobileNav}
-                        className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-slate-800/60 md:hidden"
-                        title="Toggle Navigation"
-                    >
-                        <Menu className="h-6 w-6" />
-                    </button>
-
-                    {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-colors cursor-pointer border border-transparent hover:border-slate-800/60">
-                            <ArrowLeft className="h-5 w-5" />
-                        </button>
-                    )}
-
-                    {/* Compact Prism Logo & Name */}
-                    <div className="flex items-center gap-2.5 border-r border-slate-800 pr-4">
-                        <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 select-none inline-block sm:inline-block pl-0.5 py-0.5">
-                            Prism
-                        </span>
-                    </div>
-
-                    <div className="flex items-center">
-                        <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">Intelligent Routing</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hidden sm:inline uppercase tracking-wider font-mono">
-                            Guided mode
-                        </span>
-
-                    </div>
-                </div>
-
-                <div className="flex items-center space-x-2 sm:space-x-4">
-                    <a
-                        href="https://llm-d.ai/community"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-xl text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 cursor-pointer"
-                        title="Contact us"
-                    >
-                        <MessageCircle className="w-4 h-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Contact us</span>
-                    </a>
-                    <button
-                        onClick={() => {
-                            const params = new URLSearchParams();
-                            params.set('share', '1');
-                            params.set('view', 'intelligent-routing');
-                            params.set('hw', hardware);
-                            params.set('scale', latencyScale);
-                            const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-
-                            navigator.clipboard.writeText(shareUrl).then(() => {
-                                setShareToast(true);
-                                setToastMessage('Link copied to clipboard!');
-                                setTimeout(() => setShareToast(false), 2000);
-                            }).catch(err => {
-                                setShareToast(true);
-                                setToastMessage('Failed to copy link');
-                                setTimeout(() => setShareToast(false), 2000);
-                            });
-                        }}
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-xl text-slate-350 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative cursor-pointer"
-                        title="Share view"
-                    >
-                        <Share2 className="w-4 h-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Share view</span>
-                        {shareToast && (
-                            <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
-                                {toastMessage}
-                            </div>
-                        )}
-                    </button>
-                </div>
-            </header>
+            <WellLitHeader
+                pageTitle="Intelligent routing"
+                onNavigateBack={onNavigateBack}
+                onToggleMobileNav={onToggleMobileNav}
+                getShareUrl={() => {
+                    const params = new URLSearchParams();
+                    params.set('share', '1');
+                    params.set('view', 'intelligent-routing');
+                    params.set('hw', hardware);
+                    params.set('scale', latencyScale);
+                    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+                }}
+            />
 
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-8 z-10 relative">
                 {/* Description Card - Premium Aesthetic */}
@@ -813,7 +746,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <Badge tone="warning" size="xs">Coming Soon</Badge>
                                 </div>
                             </div>
 
@@ -828,7 +761,7 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                                         <span className="text-[10px]">Guide</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming Soon</span>
+                                    <Badge tone="warning" size="xs">Coming Soon</Badge>
                                 </div>
                             </div>
                         </div>
@@ -1006,9 +939,9 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                             </p>
                         </div>
 
-                        <button onClick={() => setIsModalOpen(true)} className="w-full mt-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex justify-center items-center">
-                            <Zap className="w-3.5 h-3.5 mr-1.5" /> View instructions
-                        </button>
+                        <Button variant="primary" size="sm" onClick={() => setIsModalOpen(true)} className="w-full mt-3 py-2 font-semibold">
+                            <Zap className="w-3.5 h-3.5" /> View instructions
+                        </Button>
                     </div>
                 </div>
 
@@ -1018,65 +951,35 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                 </div>
 
                 {/* Summary Metrics Table */}
-                <div id="summary-table" className="border border-slate-800 rounded-xl bg-slate-900 shadow-xl p-6 flex flex-col h-[32rem]">
+                <Panel id="summary-table" className="flex flex-col h-[32rem]">
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-md font-bold text-white">Summary metrics comparison</h3>
                             <span className="text-xs text-slate-500">Comparing Standard workloads against Approx. prefix aware routing workloads side-by-side.</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="flex gap-2 bg-slate-950 border border-slate-800 p-1 rounded-lg">
-                                <button
-                                    onClick={() => setTableMetricMode('ttft')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${tableMetricMode === 'ttft' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    TTFT
-                                </button>
-                                <button
-                                    onClick={() => setTableMetricMode('itl')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${tableMetricMode === 'itl' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    ITL
-                                </button>
-                                <button
-                                    onClick={() => setTableMetricMode('ntpot')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${tableMetricMode === 'ntpot' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    NTPOT
-                                </button>
-                                <button
-                                    onClick={() => setTableMetricMode('tpot')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${tableMetricMode === 'tpot' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    TPOT
-                                </button>
-                            </div>
-                            <div className="flex gap-2 bg-slate-950 border border-slate-800 p-1 rounded-lg">
-                                <button
-                                    onClick={() => setSelectedPercentile('P50')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${selectedPercentile === 'P50' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    P50
-                                </button>
-                                <button
-                                    onClick={() => setSelectedPercentile('P90')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${selectedPercentile === 'P90' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    P90
-                                </button>
-                                <button
-                                    onClick={() => setSelectedPercentile('P99')}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${selectedPercentile === 'P99' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    P99
-                                </button>
-                            </div>
-                            <button
-                                onClick={exportToCSV}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-700 transition-colors"
-                            >
+                            <ToggleGroup
+                                options={[
+                                    { value: 'ttft', label: 'TTFT' },
+                                    { value: 'itl', label: 'ITL' },
+                                    { value: 'ntpot', label: 'NTPOT' },
+                                    { value: 'tpot', label: 'TPOT' },
+                                ]}
+                                value={tableMetricMode}
+                                onChange={setTableMetricMode}
+                            />
+                            <ToggleGroup
+                                options={[
+                                    { value: 'P50', label: 'P50' },
+                                    { value: 'P90', label: 'P90' },
+                                    { value: 'P99', label: 'P99' },
+                                ]}
+                                value={selectedPercentile}
+                                onChange={setSelectedPercentile}
+                            />
+                            <Button variant="secondary" size="sm" onClick={exportToCSV}>
                                 Export CSV
-                            </button>
+                            </Button>
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto rounded-lg border border-slate-800">
@@ -1145,9 +1048,13 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                                                 {row.val_opt ? `${Math.round(row.val_opt)}ms` : 'N/A'}
                                             </td>
                                             <td className="px-4 py-4 border-l border-slate-800/60 text-right">
-                                                <span className={`px-2.5 py-1 text-[11px] font-semibold rounded-full ${row.gain > 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : row.gain < 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                                                <Badge
+                                                    tone={row.gain > 0 ? 'success' : row.gain < 0 ? 'danger' : 'neutral'}
+                                                    size="md"
+                                                    className="text-[11px] rounded-full"
+                                                >
                                                     {row.gain > 0 ? `+${Math.round(row.gain)}%` : row.gain < 0 ? `${Math.round(row.gain)}%` : '0%'}
-                                                </span>
+                                                </Badge>
                                             </td>
                                         </tr>
                                     ));
@@ -1155,113 +1062,103 @@ const Milestone1Dashboard = ({ onNavigateBack, onNavigate, onToggleMobileNav, da
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </Panel>
             </main>
 
             {/* Reproduction Modal Workflow */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <header className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/80">
-                            <div className="flex items-center">
-                                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg mr-3">
-                                    <Zap className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-white">Reproducibility Instructions</h3>
-                                    <p className="text-xs text-slate-400 mt-0.5">Execute this exact benchmark profile on your cluster.</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </header>
-
-                        <div className="p-6">
-                            <div className="mb-2">
-                                <h4 className="text-sm font-semibold text-slate-300 mb-1">Reference Documentation</h4>
-                                <p className="text-xs text-slate-400">
-                                    For deep architectural specifications, view the full instructions directly on our repository:
-                                </p>
-                                <a href="https://github.com/llm-d/llm-d/tree/main/guides/optimized-baseline" target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center text-xs font-bold text-cyan-400 hover:underline">
-                                    View complete guide <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                                </a>
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end">
-                            <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs transition-colors border border-slate-700">
-                                Close
-                            </button>
-                        </div>
-                    </div>
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                closeOnBackdrop={false}
+                closeOnEscape={false}
+                size="lg"
+                title={
+                    <span className="flex items-center">
+                        <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg mr-3">
+                            <Zap className="w-5 h-5" />
+                        </span>
+                        Reproducibility Instructions
+                    </span>
+                }
+                subtitle="Execute this exact benchmark profile on your cluster."
+                footer={
+                    <Button variant="secondary" size="sm" onClick={() => setIsModalOpen(false)}>
+                        Close
+                    </Button>
+                }
+            >
+                <div className="mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300 mb-1">Reference Documentation</h4>
+                    <p className="text-xs text-slate-400">
+                        For deep architectural specifications, view the full instructions directly on our repository:
+                    </p>
+                    <a href="https://github.com/llm-d/llm-d/tree/main/guides/optimized-baseline" target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center text-xs font-bold text-cyan-400 hover:underline">
+                        View complete guide <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                    </a>
                 </div>
-            )}
+            </Modal>
 
             {/* SLA Alert Modal Mock */}
-            {isAlertModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <header className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/80">
-                            <div className="flex items-center">
-                                <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg mr-3">
-                                    <Bell className="w-5 h-5 cursor-pointer" />
-                                </div>
-                                <div>
-                                    <h3 className="text-[15px] font-bold text-white">Create SLA Alert</h3>
-                                    <p className="text-[11px] text-slate-400 mt-0.5">Notifies your team when performance drops.</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsAlertModalOpen(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </header>
-
-                        <div className="p-5 space-y-4">
-                            <div>
-                                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Condition</label>
-                                <div className="flex items-center space-x-2 text-sm text-slate-300 bg-slate-950 p-2.5 rounded border border-slate-800">
-                                    <span className="font-mono text-emerald-400">P99 TTFT</span>
-                                    <span> exceeds </span>
-                                    <input type="number" defaultValue={450} className="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-center text-white outline-none" />
-                                    <span>ms</span>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Duration</label>
-                                <div className="flex items-center space-x-2 text-sm text-slate-300">
-                                    <span>For</span>
-                                    <select className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white outline-none">
-                                        <option>2 consecutive days</option>
-                                        <option>3 consecutive days</option>
-                                        <option>1 week</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="pt-2">
-                                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Routing</label>
-                                <button className="w-full flex items-center justify-between p-3 border border-indigo-500/30 bg-indigo-500/10 rounded-lg hover:bg-indigo-500/20 transition-colors">
-                                    <div className="flex items-center">
-                                        <Slack className="w-4 h-4 text-indigo-400 mr-2" />
-                                        <span className="text-sm font-medium text-slate-200">#ops-alerts-inference</span>
-                                    </div>
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="px-5 py-3 bg-slate-900 border-t border-slate-800 flex justify-end items-center">
-                            {alertSaved && <span className="text-xs font-medium text-emerald-500 mr-4 animate-in fade-in slide-in-from-right-4">Alert Saved!</span>}
-                            <button onClick={() => setIsAlertModalOpen(false)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs transition-colors border border-slate-700 mr-2 font-semibold">Cancel</button>
-                            <button onClick={handleSaveAlert} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs transition-colors shadow-sm flex items-center border border-indigo-500 line-clamp-1">
-                                Save Alert Condition
-                            </button>
+            <Modal
+                isOpen={isAlertModalOpen}
+                onClose={() => setIsAlertModalOpen(false)}
+                closeOnBackdrop={false}
+                closeOnEscape={false}
+                size="md"
+                title={
+                    <span className="flex items-center">
+                        <span className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg mr-3">
+                            <Bell className="w-5 h-5 cursor-pointer" />
+                        </span>
+                        Create SLA Alert
+                    </span>
+                }
+                subtitle="Notifies your team when performance drops."
+                footer={
+                    <>
+                        {alertSaved && <span className="text-xs font-medium text-emerald-500 mr-2 animate-in fade-in slide-in-from-right-4">Alert Saved!</span>}
+                        <Button variant="secondary" size="sm" onClick={() => setIsAlertModalOpen(false)}>Cancel</Button>
+                        <button onClick={handleSaveAlert} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs transition-colors shadow-sm flex items-center border border-indigo-500 line-clamp-1">
+                            Save Alert Condition
+                        </button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div>
+                        <FieldLabel>Condition</FieldLabel>
+                        <div className="flex items-center space-x-2 text-sm text-slate-300 bg-slate-950 p-2.5 rounded border border-slate-800">
+                            <span className="font-mono text-emerald-400">P99 TTFT</span>
+                            <span> exceeds </span>
+                            <Input type="number" defaultValue={450} className="w-16 px-2 py-0.5 text-center" />
+                            <span>ms</span>
                         </div>
                     </div>
+
+                    <div>
+                        <FieldLabel>Duration</FieldLabel>
+                        <div className="flex items-center space-x-2 text-sm text-slate-300">
+                            <span>For</span>
+                            <Select className="w-auto px-2 py-1">
+                                <option>2 consecutive days</option>
+                                <option>3 consecutive days</option>
+                                <option>1 week</option>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div className="pt-2">
+                        <FieldLabel>Routing</FieldLabel>
+                        <button className="w-full flex items-center justify-between p-3 border border-indigo-500/30 bg-indigo-500/10 rounded-lg hover:bg-indigo-500/20 transition-colors">
+                            <div className="flex items-center">
+                                <Slack className="w-4 h-4 text-indigo-400 mr-2" />
+                                <span className="text-sm font-medium text-slate-200">#ops-alerts-inference</span>
+                            </div>
+                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        </button>
+                    </div>
                 </div>
-            )}
+            </Modal>
 
         </div>
     );

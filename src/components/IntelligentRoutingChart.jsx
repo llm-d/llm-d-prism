@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
-} from 'recharts';
+import { LineChart, Line, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChevronUp, ChevronDown } from 'lucide-react';
-import { CustomXAxis, CustomYAxis, CustomLabel, CustomChartTooltip, ChartCard } from './common';
+import {
+    Button, ToggleGroup, ChartXAxis, ChartYAxis, ChartTooltip, ChartTooltipRow,
+    CHART_SERIES, seriesColor, gridProps, getChartTheme,
+} from './ui';
+import { cn } from '../utils/cn';
+
+// Series colors from the shared chart palette, assigned stably by entity with
+// hue-family continuity to the old hexes: Standard Kubernetes (baseline) was
+// orange-400 → amber slot; prefix-aware routing (router) was sky-400 → sky slot.
+const SCENARIO_COLORS = {
+    baseline: CHART_SERIES[2], // amber — Standard Kubernetes
+    router: CHART_SERIES[1],   // sky — Approx. prefix aware routing
+};
 
 const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     if (!active || !payload || !payload.length) return null;
@@ -21,12 +30,12 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
     const yLabel = yLabelMap[zoomYAxis] || 'Y';
 
     return (
-        <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[220px] backdrop-blur-md text-slate-100 z-[100]">
+        <ChartTooltip className="min-w-[220px]">
             <div className="border-b border-slate-200 dark:border-slate-700/60 pb-1.5 mb-1.5">
-                <div className="text-[11px] font-mono text-slate-400 leading-tight">
+                <div className="text-[11px] font-mono text-theme-muted leading-tight">
                     {hw} • {model}
                 </div>
-                <div className="text-xs font-bold text-white mt-1">
+                <div className="text-xs font-bold text-theme-text mt-1">
                     QPS: {qpsVal}
                 </div>
                 {pl.interpolated && (
@@ -60,7 +69,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                         return (
                             <div key={groupName} className="space-y-1">
                                 {groupName !== 'Other' && (
-                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-0.5 mb-1 flex items-center justify-between">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted border-b border-theme-border pb-0.5 mb-1 flex items-center justify-between">
                                         <span>{groupName.split(' [')[0]}</span>
                                     </div>
                                 )}
@@ -68,26 +77,23 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                                     const epl = entry.payload;
                                     const xVal = epl.dynamic_x ?? epl.x;
                                     const yVal = epl.dynamic_y ?? epl.y;
-                                    
+
                                     let label = entry.name;
                                     if (groupName !== 'Other') {
                                         label = label.replace('Standard Kubernetes ', '').replace('Approx. prefix aware routing ', '').replace('Baseline ', '').replace('Router ', '');
                                     }
 
                                     return (
-                                        <div key={index} className="flex items-center justify-between gap-4">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2.5 h-2.5 rounded-full shrink-0 border border-slate-950" style={{ backgroundColor: entry.stroke || entry.fill }} />
-                                                <span className="text-[11px] text-slate-200 font-medium">{label}</span>
-                                            </div>
-                                            <span className="text-[11px] font-mono font-bold text-white">
-                                                {xVal !== undefined && yVal !== undefined ? (
-                                                    `${xLabel}: ${typeof xVal === 'number' ? xVal.toFixed(1) : xVal} | ${yLabel}: ${typeof yVal === 'number' ? yVal.toFixed(1) : yVal}`
-                                                ) : (
-                                                    `${Number(entry.value ?? xVal).toFixed(1)} ${entry.name.includes('Rate') ? 'tokens/s' : 'ms'}`
-                                                )}
-                                            </span>
-                                        </div>
+                                        <ChartTooltipRow
+                                            key={index}
+                                            color={entry.stroke || entry.fill}
+                                            label={label}
+                                            value={xVal !== undefined && yVal !== undefined ? (
+                                                `${xLabel}: ${typeof xVal === 'number' ? xVal.toFixed(1) : xVal} | ${yLabel}: ${typeof yVal === 'number' ? yVal.toFixed(1) : yVal}`
+                                            ) : (
+                                                `${Number(entry.value ?? xVal).toFixed(1)} ${entry.name.includes('Rate') ? 'tokens/s' : 'ms'}`
+                                            )}
+                                        />
                                     );
                                 })}
                             </div>
@@ -95,7 +101,7 @@ const RichSchedulingTooltip = ({ active, payload, zoomXAxis, zoomYAxis }) => {
                     });
                 })()}
             </div>
-        </div>
+        </ChartTooltip>
     );
 };
 
@@ -307,13 +313,15 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                             </div>
                         </div>
                     </div>
-                    <button 
-                        onClick={() => setShowFilters(!showFilters)} 
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50"
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowFilters(!showFilters)}
+                        className="text-[10px] font-extrabold uppercase tracking-widest"
                     >
                         Filters
                         {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
+                    </Button>
                 </div>
 
                 {showFilters && (
@@ -321,24 +329,35 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14">X-Axis:</span>
-                            <div className="flex flex-wrap bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
-                                <button onClick={() => setZoomXAxis('ntpot')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'ntpot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>NTPOT</button>
-                                <button onClick={() => setZoomXAxis('tpot')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'tpot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TPOT</button>
-                                <button onClick={() => setZoomXAxis('ttft')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'ttft' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TTFT</button>
-                                <button onClick={() => setZoomXAxis('itl')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'itl' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>ITL</button>
-                                <button onClick={() => setZoomXAxis('e2e')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomXAxis === 'e2e' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>E2E Latency</button>
-                            </div>
+                            <ToggleGroup
+                                size="xs"
+                                className="flex-wrap"
+                                options={[
+                                    { value: 'ntpot', label: 'NTPOT' },
+                                    { value: 'tpot', label: 'TPOT' },
+                                    { value: 'ttft', label: 'TTFT' },
+                                    { value: 'itl', label: 'ITL' },
+                                    { value: 'e2e', label: 'E2E Latency' },
+                                ]}
+                                value={zoomXAxis}
+                                onChange={setZoomXAxis}
+                            />
                         </div>
 
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14">Y-Axis:</span>
                             <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
-                                    <button onClick={() => setZoomYAxis('output')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Output</button>
-                                    <button onClick={() => setZoomYAxis('input')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Input</button>
-                                    <button onClick={() => setZoomYAxis('total')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Total</button>
-                                    <button onClick={() => setZoomYAxis('qps')} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomYAxis === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>QPS</button>
-                                </div>
+                                <ToggleGroup
+                                    size="xs"
+                                    options={[
+                                        { value: 'output', label: 'Output' },
+                                        { value: 'input', label: 'Input' },
+                                        { value: 'total', label: 'Total' },
+                                        { value: 'qps', label: 'QPS' },
+                                    ]}
+                                    value={zoomYAxis}
+                                    onChange={setZoomYAxis}
+                                />
                             </div>
                         </div>
                     </div>
@@ -346,15 +365,15 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                     <div className="flex flex-col gap-3 md:items-end w-full md:w-auto">
                         <div className="flex flex-wrap items-center gap-4 justify-end">
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">
-                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log Scale</button>
+                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all', zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Log Scale</button>
                                 <div className="h-3 w-px bg-slate-700" />
-                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per Chip">Per Chip</button>
+                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all', zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white')} title="Normalize per Chip">Per Chip</button>
                             </div>
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">
-                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p50') ? prev.filter(x => x !== 'p50') : [...prev, 'p50'])} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${visiblePercentiles.includes('p50') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>P50</button>
-                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p90') ? prev.filter(x => x !== 'p90') : [...prev, 'p90'])} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${visiblePercentiles.includes('p90') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>P90</button>
-                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p99') ? prev.filter(x => x !== 'p99') : [...prev, 'p99'])} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${visiblePercentiles.includes('p99') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>P99</button>
+                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p50') ? prev.filter(x => x !== 'p50') : [...prev, 'p50'])} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all', visiblePercentiles.includes('p50') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white')}>P50</button>
+                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p90') ? prev.filter(x => x !== 'p90') : [...prev, 'p90'])} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all', visiblePercentiles.includes('p90') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white')}>P90</button>
+                                <button onClick={() => setVisiblePercentiles(prev => prev.includes('p99') ? prev.filter(x => x !== 'p99') : [...prev, 'p99'])} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all', visiblePercentiles.includes('p99') ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white')}>P99</button>
                             </div>
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 px-3 py-1 rounded-lg">
@@ -374,25 +393,23 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                     <div className="relative w-full h-[500px] select-none">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart margin={{ top: 20, right: 30, left: 60, bottom: 45 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <CustomXAxis 
-                                    type="number" 
-                                    dataKey="dynamic_x" 
-                                    label={xLabels[zoomXAxis] || 'Queries Per Second'} 
+                                <CartesianGrid {...gridProps()} opacity={0.5} />
+                                <ChartXAxis
+                                    type="number"
+                                    dataKey="dynamic_x"
+                                    label={xLabels[zoomXAxis] || 'Queries Per Second'}
                                     domain={zoomLogScale ? [logTicks[0] || 1, 'auto'] : ['auto', 'auto']}
                                     scale={zoomLogScale ? 'log' : 'auto'}
                                     ticks={zoomLogScale ? logTicks : undefined}
-                                    theme="dark"
                                 />
-                                <CustomYAxis 
-                                    label={yLabels[zoomYAxis] || 'Tokens/sec'} 
+                                <ChartYAxis
+                                    label={yLabels[zoomYAxis] || 'Tokens/sec'}
                                     domain={['auto', 'auto']}
-                                    theme="dark"
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     content={<RichSchedulingTooltip zoomXAxis={zoomXAxis} zoomYAxis={zoomYAxis} />}
                                     wrapperStyle={{ outline: 'none', zIndex: 100 }}
-                                    cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                    cursor={{ stroke: getChartTheme().tick, strokeWidth: 1, strokeDasharray: '4 4' }}
                                 />
                                 {(() => {
                                     const groups = {};
@@ -406,12 +423,10 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                         groups[key].push(pt);
                                     });
 
-                                    const defaultColors = ['#38bdf8', '#f472b6', '#34d399', '#fbbf24', '#a78bfa'];
-                                    
                                     return Object.keys(groups).map((k, idx) => {
-                                        let scatterColor = defaultColors[idx % defaultColors.length];
+                                        let scatterColor = seriesColor(idx);
                                         if (zoomColorMode === 'default') {
-                                            scatterColor = k.includes('Standard Kubernetes') ? '#fb923c' : '#38bdf8';
+                                            scatterColor = k.includes('Standard Kubernetes') ? SCENARIO_COLORS.baseline : SCENARIO_COLORS.router;
                                         }
                                         
                                         let dashArray = "0";
@@ -487,7 +502,7 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                 return Object.entries(scenarios).map(([scenarioName, keys]) => {
                                     if (keys.length === 0) return null;
                                     
-                                    const color = scenarioName.includes('Standard Kubernetes') ? '#fb923c' : '#38bdf8';
+                                    const color = scenarioName.includes('Standard Kubernetes') ? SCENARIO_COLORS.baseline : SCENARIO_COLORS.router;
                                     
                                     return (
                                         <div key={scenarioName} className="flex flex-col gap-1">

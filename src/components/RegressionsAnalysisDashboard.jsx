@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-const RUN_COLORS = [
-    { p50: '#22d3ee', p90: '#0891b2', p99: '#0e7490' }, // Cyan (P50 bright, P90 mid, P99 dark)
-    { p50: '#c084fc', p90: '#a855f7', p99: '#7e22ce' }, // Purple
-    { p50: '#fb7185', p90: '#f43f5e', p99: '#be123c' }, // Rose/Red
-    { p50: '#34d399', p90: '#10b981', p99: '#047857' }, // Emerald/Green
-    { p50: '#fbbf24', p90: '#f59e0b', p99: '#b45309' }, // Amber/Yellow
-];
+// Runs (builds) map onto the shared CHART_SERIES palette by fixed slot,
+// preserving hue-family continuity with the old per-run colors:
+// cyan→sky, purple→violet, rose→pink, emerald→emerald, amber→amber.
+// Percentiles (P50/P90/P99) are distinguished by line style
+// (solid/dashed/dotted), not by shade.
+const RUN_SERIES_SLOTS = [1, 3, 4, 0, 2];
+const runColor = (idx) => seriesColor(RUN_SERIES_SLOTS[idx % RUN_SERIES_SLOTS.length]);
 
 const CustomizedDot = (props) => {
     const { cx, cy, stroke, payload } = props;
@@ -14,13 +14,13 @@ const CustomizedDot = (props) => {
     const isFailed = payload && payload.success_rate < 90;
     if (isFailed) {
         return (
-            <circle 
-                cx={cx} 
-                cy={cy} 
-                r={6} 
-                fill="#ef4444" 
-                stroke="#fca5a5" 
-                strokeWidth={2} 
+            <circle
+                cx={cx}
+                cy={cy}
+                r={6}
+                fill={CHART_STATUS.critical}
+                stroke="#fca5a5"
+                strokeWidth={2}
                 className="animate-pulse"
                 style={{ cursor: 'pointer' }}
             />
@@ -111,18 +111,21 @@ const formatBuildId = (buildId) => {
     return buildId;
 };
 
-import { 
-    Activity, Zap, BarChart2, ArrowLeft, Menu, Share2, Shield, CheckCircle, AlertTriangle, 
-    ExternalLink, FileCode, GitCommit, Clock, Cpu, Server, Info, ChevronDown, ChevronUp, Download, Layers 
+import {
+    Activity, Zap, BarChart2, ArrowLeft, Menu, Shield, CheckCircle, AlertTriangle,
+    ExternalLink, FileCode, GitCommit, Clock, Cpu, Server, Info, ChevronDown, ChevronUp, Download, Layers
 } from 'lucide-react';
-import { 
-    ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine 
+import {
+    ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts';
-import { CustomXAxis, CustomYAxis } from './common';
+import {
+    Badge, Button, ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
+    Panel, ShareLinkButton, ToggleGroup, CHART_STATUS, gridProps, seriesColor,
+} from './ui';
+import { cn } from '../utils/cn';
 import { scanRegressions } from '../utils/gcsScanner';
 
 export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleMobileNav }) {
-    const [shareToast, setShareToast] = useState(false);
     const [selectedPath, setSelectedPath] = useState('');
     const [activeMetric, setActiveMetric] = useState('ttft'); // 'ttft' | 'itl' | 'qps' | 'p90Latency' | 'cacheHitPct'
     const [selectedRunMenu, setSelectedRunMenu] = useState('optimized-baseline/gke/kustomize');
@@ -434,12 +437,6 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
         }
     }, [selectedRunsData, isLogScaleX]);
 
-    const handleShareView = () => {
-        navigator.clipboard.writeText(window.location.href);
-        setShareToast(true);
-        setTimeout(() => setShareToast(false), 2000);
-    };
-
     const handleExportJson = () => {
         const payload = JSON.stringify({ selectedPath, activeMetric, runs: runs }, null, 2);
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
@@ -481,15 +478,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                 </div>
 
                 <div className="flex items-center space-x-3">
-                    <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-355 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative cursor-pointer">
-                        <Share2 className="w-3.5 h-3.5 mr-1.5" />
-                        <span>Share link</span>
-                        {shareToast && (
-                            <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 whitespace-nowrap animate-in fade-in duration-200">
-                                Link copied!
-                            </div>
-                        )}
-                    </button>
+                    <ShareLinkButton />
                 </div>
             </header>
 
@@ -504,7 +493,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                 {/* CORE WORKSPACE LAYOUT: TEST RUN SIDEBAR & RECHARTS SUITE */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
                     {/* Left Column: Dedicated Test Run Menu Suite */}
-                    <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col h-full shadow-xl">
+                    <Panel className="lg:col-span-3 rounded-2xl p-5 flex flex-col h-full shadow-xl">
                         <div className="border-b border-slate-800 pb-3 mb-4">
                             <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                                 <Layers className="w-4 h-4 text-cyan-400" />
@@ -519,13 +508,14 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             {derivedSuites.map(run => {
                                 const isSelected = selectedRunMenu === run.id;
                                 return (
-                                    <div 
+                                    <div
                                         key={run.id}
-                                        className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1.5 ${
-                                            isSelected 
-                                                ? 'bg-slate-800 border-cyan-500 shadow-md shadow-cyan-950/50 text-white' 
+                                        className={cn(
+                                            'w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1.5',
+                                            isSelected
+                                                ? 'bg-slate-800 border-cyan-500 shadow-md shadow-cyan-950/50 text-white'
                                                 : 'bg-slate-950/50 border-slate-800/80 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
-                                        }`}
+                                        )}
                                     >
                                         <div 
                                             onClick={() => setSelectedRunMenu(run.id)}
@@ -534,14 +524,14 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                             <span className="font-bold text-xs font-sans text-slate-100 truncate">{run.title}</span>
                                             <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                                 {run.infraTag && (
-                                                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border bg-slate-950 text-cyan-400 border-cyan-950/50 shrink-0">
+                                                    <Badge tone="info" size="xs" className="shrink-0">
                                                         {run.infraTag}
-                                                    </span>
+                                                    </Badge>
                                                 )}
                                                 {run.methodTag && (
-                                                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border bg-slate-950 text-slate-400 border-slate-800 shrink-0">
+                                                    <Badge tone="neutral" size="xs" className="shrink-0">
                                                         {run.methodTag}
-                                                    </span>
+                                                    </Badge>
                                                 )}
                                                 <span className="text-[8px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
                                                     {run.sig}
@@ -554,21 +544,23 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                 {uniqueRunsForSidebar.map(runPoint => {
                                                     const isRunSelected = selectedBuilds.includes(runPoint.build);
                                                     return (
-                                                        <div 
-                                                            key={runPoint.build} 
+                                                        <div
+                                                            key={runPoint.build}
                                                             onClick={() => handleToggleBuild(runPoint.build)}
-                                                            className={`flex items-center justify-between text-[10px] p-2 rounded-lg border transition-all cursor-pointer ${
-                                                                isRunSelected 
-                                                                    ? 'bg-slate-800 border-cyan-500 shadow-md shadow-cyan-950/50 text-white' 
+                                                            className={cn(
+                                                                'flex items-center justify-between text-[10px] p-2 rounded-lg border transition-all cursor-pointer',
+                                                                isRunSelected
+                                                                    ? 'bg-slate-800 border-cyan-500 shadow-md shadow-cyan-950/50 text-white'
                                                                     : 'bg-slate-900/80 hover:bg-slate-900 border-slate-800/50 text-slate-300'
-                                                            }`}
+                                                            )}
                                                         >
                                                             <div className="flex items-center gap-2">
-                                                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
-                                                                    isRunSelected 
-                                                                        ? 'bg-cyan-500 border-cyan-400 text-slate-950 font-black' 
+                                                                <div className={cn(
+                                                                    'w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all',
+                                                                    isRunSelected
+                                                                        ? 'bg-cyan-500 border-cyan-400 text-slate-950 font-black'
                                                                         : 'border-slate-700 bg-slate-950'
-                                                                }`}>
+                                                                )}>
                                                                     {isRunSelected && '✓'}
                                                                 </div>
                                                                 <div className="flex flex-col flex-1 min-w-0">
@@ -588,13 +580,12 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                                     </a>
                                                                     {runPoint.hardware && runPoint.hardware !== 'Unknown' && (
                                                                         <div className="flex items-center gap-1.5 mt-0.5">
-                                                                            <span className={`px-1 py-0.5 text-[8px] font-extrabold rounded-sm uppercase tracking-wide border ${
-                                                                                runPoint.hardware.startsWith('TPU') 
-                                                                                    ? 'bg-purple-950/60 text-purple-300 border-purple-800/40' 
-                                                                                    : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40'
-                                                                            }`}>
+                                                                            <Badge
+                                                                                tone={runPoint.hardware.startsWith('TPU') ? 'violet' : 'success'}
+                                                                                size="xs"
+                                                                            >
                                                                                 {runPoint.hardware}
-                                                                            </span>
+                                                                            </Badge>
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -608,17 +599,19 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 );
                             })}
                         </div>
-                    </div>
+                    </Panel>
 
                     {/* Right Column: The Core Recharts Suite & Filters */}
-                    <div className="lg:col-span-9 bg-slate-900/80 border border-slate-700/60 rounded-2xl shadow-2xl flex flex-col w-full min-h-[550px] overflow-visible backdrop-blur-sm relative overflow-hidden">
+                    {/* Note: the original shell carried both overflow-visible and overflow-hidden;
+                        overflow-visible won in the compiled cascade, so it is kept explicitly. */}
+                    <ChartContainer className="lg:col-span-9 p-0 flex flex-col w-full min-h-[550px] overflow-visible backdrop-blur-sm relative">
                         <div className="flex flex-col w-full h-full">
                             <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/80 flex justify-between items-start gap-6 shadow-sm">
                                 <div className="flex flex-col gap-2.5">
                                     <h3 className="text-lg font-bold text-white flex items-center gap-2 font-sans">
                                         <Activity className="w-5 h-5 text-cyan-400" />
                                         <span>Nightly Regression Tracker • {selectedPath}</span>
-                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Active Focus</span>
+                                        <Badge tone="info" size="xs" className="font-mono">Active Focus</Badge>
                                     </h3>
                                     
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
@@ -648,21 +641,23 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <button 
-                                        onClick={handleExportJson} 
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleExportJson}
                                         title="Export Raw Benchmark JSON"
-                                        className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer"
                                     >
                                         <Download className="w-3.5 h-3.5" />
                                         <span>Export</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setShowChartFilters(!showChartFilters)} 
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer"
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => setShowChartFilters(!showChartFilters)}
                                     >
                                         Filters
                                         {showChartFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
 
@@ -672,39 +667,36 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
                                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-Axis:</span>
-                                        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 gap-0.5 font-bold whitespace-nowrap overflow-x-auto no-scrollbar w-full">
-                                            {[
-                                                { id: 'output', label: 'Output' },
-                                                { id: 'input', label: 'Input' },
-                                                { id: 'total', label: 'Total' },
-                                                { id: 'qps', label: 'QPS' },
-                                            ].map(metric => (
-                                                <button
-                                                    key={metric.id}
-                                                    onClick={() => setXAxisMode(metric.id)}
-                                                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer shrink-0 ${
-                                                        xAxisMode === metric.id
-                                                            ? 'bg-purple-600 text-white shadow-sm' 
-                                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                                                    }`}
-                                                >
-                                                    {metric.label}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <ToggleGroup
+                                            className="w-full whitespace-nowrap overflow-x-auto no-scrollbar"
+                                            options={[
+                                                { value: 'output', label: 'Output' },
+                                                { value: 'input', label: 'Input' },
+                                                { value: 'total', label: 'Total' },
+                                                { value: 'qps', label: 'QPS' },
+                                            ]}
+                                            value={xAxisMode}
+                                            onChange={setXAxisMode}
+                                        />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-3 lg:justify-end shrink-0">
                                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/50 rounded-lg p-0.5 shrink-0">
-                                            <button 
-                                                onClick={() => setIsLogScaleX(!isLogScaleX)} 
-                                                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                            <button
+                                                onClick={() => setIsLogScaleX(!isLogScaleX)}
+                                                className={cn(
+                                                    'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer',
+                                                    isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                                )}
                                             >
                                                 Log Scale
                                             </button>
                                             <div className="h-3 w-px bg-slate-700" />
-                                            <button 
-                                                onClick={() => setShowPerChip(!showPerChip)} 
-                                                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                            <button
+                                                onClick={() => setShowPerChip(!showPerChip)}
+                                                className={cn(
+                                                    'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer',
+                                                    showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                                )}
                                             >
                                                 Per Chip
                                             </button>
@@ -715,7 +707,10 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                 <button
                                                     key={p}
                                                     onClick={() => setVisiblePercentiles(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
-                                                    className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                                    className={cn(
+                                                        'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer',
+                                                        visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                                    )}
                                                 >
                                                     {p}
                                                 </button>
@@ -728,27 +723,18 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
                                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-Axis:</span>
-                                        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 gap-0.5 font-bold whitespace-nowrap overflow-x-auto no-scrollbar w-full">
-                                            {[
-                                                { id: 'ntpot', label: 'NTPOT' },
-                                                { id: 'tpot', label: 'TPOT' },
-                                                { id: 'ttft', label: 'TTFT' },
-                                                { id: 'itl', label: 'ITL' },
-                                                { id: 'e2e', label: 'E2E Latency' },
-                                            ].map(mode => (
-                                                <button
-                                                    key={mode.id}
-                                                    onClick={() => setYMetric(mode.id)}
-                                                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer shrink-0 ${
-                                                        yMetric === mode.id
-                                                            ? 'bg-indigo-600 text-white shadow' 
-                                                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                                    }`}
-                                                >
-                                                    {mode.label}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <ToggleGroup
+                                            className="w-full whitespace-nowrap overflow-x-auto no-scrollbar"
+                                            options={[
+                                                { value: 'ntpot', label: 'NTPOT' },
+                                                { value: 'tpot', label: 'TPOT' },
+                                                { value: 'ttft', label: 'TTFT' },
+                                                { value: 'itl', label: 'ITL' },
+                                                { value: 'e2e', label: 'E2E Latency' },
+                                            ]}
+                                            value={yMetric}
+                                            onChange={setYMetric}
+                                        />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-3 lg:justify-end shrink-0">
                                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/50 px-3 py-1 rounded-lg shrink-0">
@@ -780,12 +766,11 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             <div className="w-full h-[460px] bg-slate-950/50 border border-slate-800/60 rounded-xl p-4 select-none relative overflow-visible flex flex-col">
                                 <ResponsiveContainer width="100%" height="100%">
                                 <LineChart margin={{ top: 25, right: 20, left: 0, bottom: 10 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                    <CustomXAxis 
-                                        dataKey="xVal" 
+                                    <CartesianGrid {...gridProps()} opacity={0.5} />
+                                    <ChartXAxis
+                                        dataKey="xVal"
                                         type="number"
                                         label={yLabels[yMetric] || 'Latency'}
-                                        theme="dark"
                                         scale={isLogScaleX ? 'log' : 'auto'}
                                         domain={xDomain}
                                         allowDataOverflow={true}
@@ -802,78 +787,54 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                         })() : undefined}
                                         strokeWidth={1}
                                     />
-                                    <CustomYAxis 
+                                    <ChartYAxis
                                         label={xLabels[xAxisMode] || 'Throughput'}
-                                        theme="dark"
                                         strokeWidth={1}
                                     />
-                                    <Tooltip 
+                                    <Tooltip
                                         isAnimationActive={false}
                                         content={({ active, payload }) => {
                                             if (active && payload && payload.length) {
                                                 const d = payload[0].payload;
+                                                const tputUnit = xAxisMode === 'qps' ? 'qps' : 'tok/s';
                                                 return (
-                                                    <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[240px] backdrop-blur-md text-slate-100 z-[100]">
-                                                        <div className="border-b border-slate-700/60 pb-1.5 mb-1.5">
-                                                            <div className="text-[11px] font-mono text-cyan-400 font-bold leading-tight flex justify-between">
+                                                    <ChartTooltip className="min-w-[240px]">
+                                                        <div className="border-b border-theme-border pb-1.5 mb-1.5">
+                                                            <div className="text-[11px] font-mono font-bold text-theme-text leading-tight flex justify-between gap-3">
                                                                 <span>Run: {formatBuildId(d.build)}</span>
-                                                                <span className="text-purple-400">Stage {d.stage}</span>
+                                                                <span className="text-theme-muted">Stage {d.stage}</span>
                                                             </div>
-                                                            <div className="text-[9px] text-slate-400 mt-0.5">
+                                                            <div className="text-[9px] text-theme-muted mt-0.5">
                                                                 Date: {d.date} | Model: {d.model}
                                                             </div>
-                                                            <div className="text-[9px] text-slate-500 font-mono mt-1.5 flex flex-col gap-0.5">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-500">Target Rate:</span>
-                                                                    <span className="text-white font-bold">{d.request_rate ? `${d.request_rate} QPS` : 'N/A'}</span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-500">Achieved Rate:</span>
-                                                                    <span className="text-white font-bold">{d.qps !== undefined ? `${Number(d.qps).toFixed(1)} QPS` : 'N/A'}</span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-500">Duration:</span>
-                                                                    <span className="text-white font-bold">{d.duration ? `${Number(d.duration).toFixed(0)}s` : 'N/A'}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-[9px] font-mono mt-1 flex justify-between items-center border-t border-slate-800/40 pt-1">
-                                                                <span className="text-slate-500">Request Success Rate:</span>
-                                                                <span className={`font-bold ${d.success_rate < 90 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                                        </div>
+                                                        <ChartTooltipRow label="Target Rate" value={d.request_rate ? `${d.request_rate} QPS` : 'N/A'} />
+                                                        <ChartTooltipRow label="Achieved Rate" value={d.qps !== undefined ? `${Number(d.qps).toFixed(1)} QPS` : 'N/A'} />
+                                                        <ChartTooltipRow label="Duration" value={d.duration ? `${Number(d.duration).toFixed(0)}s` : 'N/A'} />
+                                                        <ChartTooltipRow
+                                                            label="Request Success Rate"
+                                                            value={
+                                                                <span className={cn(d.success_rate < 90 ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400')}>
                                                                     {d.success_rate.toFixed(1)}%
                                                                 </span>
+                                                            }
+                                                        />
+                                                        {payload.map((entry, index) => (
+                                                            <div key={index} className="pt-1.5 mt-1.5 border-t border-theme-border">
+                                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: entry.stroke }} aria-hidden="true" />
+                                                                    <span className="text-[10px] font-bold text-theme-text">{entry.name}</span>
+                                                                </div>
+                                                                <ChartTooltipRow label="Latency" value={entry.value !== undefined ? `${Number(entry.value).toFixed(1)} ms` : 'N/A'} />
+                                                                <ChartTooltipRow label="Throughput" value={entry.payload.xVal !== undefined ? `${Number(entry.payload.xVal).toFixed(1)} ${tputUnit}` : 'N/A'} />
                                                             </div>
-                                                        </div>
-
-                                                        <div className="space-y-2 pt-1">
-                                                            {payload.map((entry, index) => {
-                                                                const throughputVal = entry.payload.xVal;
-                                                                const latencyVal = entry.value;
-                                                                const tputUnit = xAxisMode === 'qps' ? 'qps' : 'tok/s';
-                                                                
-                                                                return (
-                                                                    <div key={index} className="flex flex-col gap-0.5 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0">
-                                                                        <div className="flex items-center gap-1.5">
-                                                                            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: entry.stroke }} />
-                                                                            <span className="text-[10px] text-slate-200 font-bold">{entry.name}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center justify-between text-[10px] font-mono pl-4">
-                                                                            <span className="text-slate-500">Latency:</span>
-                                                                            <span className="text-white font-bold">{latencyVal !== undefined ? `${Number(latencyVal).toFixed(1)} ms` : 'N/A'}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center justify-between text-[10px] font-mono pl-4">
-                                                                            <span className="text-slate-500">Throughput:</span>
-                                                                            <span className="text-white font-bold">{throughputVal !== undefined ? `${Number(throughputVal).toFixed(1)} ${tputUnit}` : 'N/A'}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
+                                                        ))}
                                                         {d.note && (
-                                                            <div className="mt-2 pt-1 border-t border-slate-800 text-[10px] text-amber-300 font-sans leading-normal">
+                                                            <div className="mt-1.5 pt-1.5 border-t border-theme-border text-[10px] text-amber-600 dark:text-amber-300 font-sans leading-normal">
                                                                 ⚠️ {d.note}
                                                             </div>
                                                         )}
-                                                    </div>
+                                                    </ChartTooltip>
                                                 );
                                             }
                                             return null;
@@ -881,7 +842,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                     />
                                     
                                     {selectedBuilds.map((build, buildIdx) => {
-                                        const colors = RUN_COLORS[buildIdx % RUN_COLORS.length];
+                                        const color = runColor(buildIdx);
                                         const runData = filteredRuns.filter(r => r.build === build);
                                         
                                         const p50Data = runData.map(r => ({ ...r, xVal: r.xVal_p50 })).sort((a, b) => a.stage - b.stage);
@@ -895,9 +856,9 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                         type="monotone" 
                                                         data={p50Data}
                                                         dataKey="yVal" 
-                                                        name={`${formatBuildId(build)} P50`} 
-                                                        stroke={colors.p50} 
-                                                        strokeWidth={3} 
+                                                        name={`${formatBuildId(build)} P50`}
+                                                        stroke={color}
+                                                        strokeWidth={3}
                                                         dot={<CustomizedDot />} 
                                                         activeDot={<CustomizedDot r={6} />}
                                                         isAnimationActive={false} 
@@ -908,8 +869,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                         type="monotone" 
                                                         data={p90Data}
                                                         dataKey="yVal" 
-                                                        name={`${formatBuildId(build)} P90`} 
-                                                        stroke={colors.p90} 
+                                                        name={`${formatBuildId(build)} P90`}
+                                                        stroke={color}
                                                         strokeDasharray="5 5"
                                                         strokeWidth={2} 
                                                         dot={<CustomizedDot />} 
@@ -922,8 +883,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                         type="monotone" 
                                                         data={p99Data}
                                                         dataKey="yVal" 
-                                                        name={`${formatBuildId(build)} P99`} 
-                                                        stroke={colors.p99} 
+                                                        name={`${formatBuildId(build)} P99`}
+                                                        stroke={color}
                                                         strokeDasharray="2 2"
                                                         strokeWidth={2} 
                                                         dot={<CustomizedDot />} 
@@ -955,9 +916,17 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                             ].map(item => (
                                                 <div key={item.p} className="flex items-center gap-1.5">
                                                     <div className="w-5 h-3 flex items-center">
-                                                        <div className="w-full h-0 border-t-2" style={{ borderColor: '#cbd5e1', borderStyle: item.style, opacity: visiblePercentiles.includes(item.p) ? 1 : 0.3 }} />
+                                                        <div className={cn(
+                                                            'w-full h-0 border-t-2 border-slate-300',
+                                                            item.style === 'dashed' && 'border-dashed',
+                                                            item.style === 'dotted' && 'border-dotted',
+                                                            !visiblePercentiles.includes(item.p) && 'opacity-30'
+                                                        )} />
                                                     </div>
-                                                    <span className={`text-[10px] font-semibold ${visiblePercentiles.includes(item.p) ? 'text-slate-300' : 'text-slate-600'}`}>{item.p}</span>
+                                                    <span className={cn(
+                                                        'text-[10px] font-semibold',
+                                                        visiblePercentiles.includes(item.p) ? 'text-slate-300' : 'text-slate-600'
+                                                    )}>{item.p}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -966,10 +935,9 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Selected Nightly Runs</div>
                                         <div className="flex gap-x-6 gap-y-1.5 flex-wrap">
                                             {selectedBuilds.map((build, idx) => {
-                                                const colors = RUN_COLORS[idx % RUN_COLORS.length];
                                                 return (
                                                     <div key={build} className="flex items-center gap-2">
-                                                        <div className="w-3 h-3 rounded" style={{ backgroundColor: colors.p50 }} />
+                                                        <div className="w-3 h-3 rounded" style={{ backgroundColor: runColor(idx) }} />
                                                         <span className="text-[10px] font-mono font-bold text-slate-300">{formatBuildId(build)}</span>
                                                     </div>
                                                 );
@@ -981,11 +949,11 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                         </div>
                         </div>
                     </div>
-                </div>
+                </ChartContainer>
             </div>
 
             {/* WELL-LIT PATH STATUS MATRIX */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <Panel padding="none" className="rounded-2xl shadow-xl overflow-hidden">
                     <div className="p-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-4">
                         <div>
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1023,13 +991,14 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                     setSelectedPath(suiteRuns[0].model);
                                                 }
                                             }}
-                                            className={`hover:bg-slate-800/40 transition-colors cursor-pointer ${
-                                                isCurrent ? 'bg-slate-800/70' : ''
-                                            }`}
+                                            className={cn(
+                                                'hover:bg-slate-800/40 transition-colors cursor-pointer',
+                                                isCurrent && 'bg-slate-800/70'
+                                            )}
                                         >
                                             <td className="p-4 text-white font-sans flex items-center gap-2">
                                                 <span>{path.name}</span>
-                                                {isCurrent && <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider">Active</span>}
+                                                {isCurrent && <Badge tone="info" size="xs" className="font-sans">Active</Badge>}
                                             </td>
                                             <td className="p-4 font-sans text-white">{path.sig}</td>
                                             <td className="p-4 text-white">{path.owner}</td>
@@ -1043,10 +1012,10 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </Panel>
 
                 {/* FAQ SECTION */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <Panel className="rounded-2xl shadow-xl space-y-4">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
                         <div className="p-1.5 bg-purple-500/20 text-purple-400 rounded-lg">
                             <Zap className="w-4 h-4" />
@@ -1079,7 +1048,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             </div>
                         ))}
                     </div>
-                </div>
+                </Panel>
 
             </main>
 

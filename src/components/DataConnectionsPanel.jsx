@@ -13,7 +13,9 @@
 // limitations under the License.
 
 import React from "react";
-import { Activity, X, Cloud, FileJson, CheckCircle, AlertCircle, Loader, ChevronDown, ChevronUp, Eye, EyeOff, Trash2, RefreshCw, Plus, Target, Database, Check, Share2 } from "lucide-react";
+import { Activity, X, Cloud, FileJson, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Eye, EyeOff, Trash2, RefreshCw, Plus, Target, Database, Check, Share2 } from "lucide-react";
+import { Badge, Button, Spinner, StatusChip } from "./ui";
+import { cn } from "../utils/cn";
 import { GIQPanel } from "./DataConnections/GIQPanel";
 import { LPGPanel } from "./DataConnections/LPGPanel";
 import { CustomGCSPanel } from "./DataConnections/CustomGCSPanel";
@@ -169,7 +171,7 @@ const DataConnectionsPanel = (props) => {
   });
 
   return (
-            <div className={`fixed inset-y-0 right-0 w-96 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl transform transition-transform duration-300 z-[60] flex flex-col ${showDataPanel ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={cn('fixed inset-y-0 right-0 w-96 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl transform transition-transform duration-300 z-[60] flex flex-col', showDataPanel ? 'translate-x-0' : 'translate-x-full')}>
                 <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
                     <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
                         <Activity size={14} />
@@ -192,30 +194,30 @@ const DataConnectionsPanel = (props) => {
                                 const isExpanded = expandedIntegration === integ.id;
 
                                 return (
-                                    <div key={integ.id} className={`bg-slate-50 dark:bg-slate-800 rounded-lg border transition-all duration-200 ${isConnected ? 'border-blue-500/30 dark:border-blue-500/30 shadow-sm' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div key={integ.id} className={cn('bg-slate-50 dark:bg-slate-800 rounded-lg border transition-all duration-200', isConnected ? 'border-blue-500/30 dark:border-blue-500/30 shadow-sm' : 'border-slate-200 dark:border-slate-700')}>
                                         <div className="p-4">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className={`p-1.5 rounded-md ${isConnected ? 'bg-blue-100 dark:bg-blue-900/20' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                                    <div className={cn('p-1.5 rounded-md', isConnected ? 'bg-blue-100 dark:bg-blue-900/20' : 'bg-slate-200 dark:bg-slate-700')}>
                                                         <Icon size={16} className={integ.color} />
                                                     </div>
                                                     <div>
                                                         <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{integ.name}</h4>
                                                         <div className="flex items-center gap-1">
-                                                             <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">{integ.type}</span>
+                                                             <Badge tone="neutral" size="sm" className="normal-case tracking-normal">{integ.type}</Badge>
                                                              {(() => {
                                                                  const type = getIntegrationSourceType(integ.id);
                                                                  const style = getSourceTypeStyle(type);
                                                                  return (
-                                                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                                                     <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', style.bg, style.text, style.border)}>
                                                                          {type}
                                                                      </span>
                                                                  );
                                                              })()}
                                                              {isConnected && (
-                                                                 matchCount > 0 
-                                                                 ? <span className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1">● Active</span>
-                                                                 : <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">● Empty</span>
+                                                                 matchCount > 0
+                                                                 ? <StatusChip status="active" className="normal-case tracking-normal" />
+                                                                 : <StatusChip status="pending" label="Empty" className="normal-case tracking-normal" />
                                                              )}
                                                         </div>
                                                     </div>
@@ -290,22 +292,26 @@ const DataConnectionsPanel = (props) => {
                                                                     }
                                                                 }
                                                             }}
-                                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${
+                                                            className={cn(
+                                                                'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75',
                                                                 integ.id === 'benchmark_report_v02'
                                                                     ? ((isExpanded || isConnected) ? 'bg-violet-500' : 'bg-slate-200 dark:bg-slate-700')
                                                                     : integ.id === 'lpg_lifecycle'
                                                                         ? ((isExpanded || isConnected) ? 'bg-green-600' : 'bg-slate-200 dark:bg-slate-700')
                                                                         : isConnected ? 'bg-blue-600' : (localSampleColor === integ.id ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700')
-                                                            }`}
+                                                            )}
                                                         >
                                                             <span className="sr-only">Toggle Connection</span>
                                                             <span
                                                                 aria-hidden="true"
-                                                                className={`${((integ.id === 'benchmark_report_v02' || integ.id === 'lpg_lifecycle') ? (isExpanded || isConnected) : isConnected) ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
+                                                                className={cn(
+                                                                    ((integ.id === 'benchmark_report_v02' || integ.id === 'lpg_lifecycle') ? (isExpanded || isConnected) : isConnected) ? 'translate-x-4' : 'translate-x-0',
+                                                                    'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out'
+                                                                )}
                                                             />
                                                         </button>
                                                     ) : (
-                                                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-500 px-2 py-1 rounded cursor-not-allowed opacity-80">Coming Soon</span>
+                                                        <Badge tone="neutral" size="md" className="text-[10px] px-2 cursor-not-allowed opacity-80">Coming Soon</Badge>
                                                     )}
                                                 </div>
                                             </div>
@@ -333,7 +339,7 @@ const DataConnectionsPanel = (props) => {
                                                 <div className="mt-2 text-xs">
                                                     {driveLoading && (
                                                         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/10 p-2 rounded animate-pulse">
-                                                            <Loader size={12} className="animate-spin" />
+                                                            <Spinner className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                                                             <span>{driveStatus || (driveProgress > 0 ? `syncing... (${driveProgress} files)` : "Initializing...")}</span>
                                                         </div>
                                                     )}
@@ -373,7 +379,7 @@ const DataConnectionsPanel = (props) => {
                                                         if (isLoading) {
                                                             return (
                                                                 <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/10 p-2 rounded">
-                                                                    <Loader size={12} className="animate-spin" />
+                                                                    <Spinner className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                                                                     <span>Connecting...</span>
                                                                 </div>
                                                             );
@@ -552,20 +558,24 @@ const DataConnectionsPanel = (props) => {
                 {/* Footer Inspector Link */}
                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-3">
-                  <button
+                  <Button
+                      variant="dangerOutline"
+                      size="sm"
+                      className="w-1/2"
                       onClick={handleClearCache}
-                      className="w-1/2 flex items-center justify-center gap-2 text-xs text-rose-500 hover:text-white py-2 border border-rose-200 hover:border-rose-500 hover:bg-rose-500 dark:border-rose-900/50 dark:hover:bg-rose-600 dark:hover:border-rose-600 rounded transition-colors"
                   >
                       <Trash2 size={12} />
                       Clear Local Cache
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-1/2"
                       onClick={() => { setIsInspectorOpen(true); setShowDataPanel(false); }}
-                      className="w-1/2 flex items-center justify-center gap-2 text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white py-2 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
                       <Database size={12} />
                       Open Data Inspector
-                  </button>
+                  </Button>
               </div>
                 </div>
             </div>

@@ -16,6 +16,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Filter, ChevronDown, ChevronUp, Check, ArrowDown01, ArrowDown10, Loader, FileText, FileClock, Sliders, Search, Activity, TrendingUp, ShieldCheck, Database, Layout, HelpCircle, Bookmark, Trash2, Settings, X, Pencil, Laptop, CloudUpload, ArrowRight } from 'lucide-react';
 import { MultiSelectDropdown } from '../common';
+import { Button, Input, Select, Label } from '../ui';
+import { cn } from '../../utils/cn';
 import { USE_CASE_META, formatOriginLabel } from '../../utils/dashboardHelpers';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 
@@ -580,18 +582,17 @@ export const FilterPanel = ({
                                 {/* Left stacked buttons */}
                                 <div className="flex flex-col gap-1.5 w-[140px] shrink-0">
                                     {/* Button 1: Public Store */}
-                                    <button 
+                                    <button
                                         onClick={() => setKpiFilter(null)}
-                                        className={`flex-1 flex items-center justify-between px-3 py-1.5 rounded-lg border text-left transition-all duration-300 cursor-pointer ${
-                                            kpiFilter === null 
-                                            ? 'bg-slate-900 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.12)]' 
+                                        className={cn(
+                                            'flex-1 flex items-center justify-between px-3 py-1.5 rounded-lg border text-left transition-all duration-300 cursor-pointer',
+                                            kpiFilter === null
+                                            ? 'bg-slate-900 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.12)]'
                                             : 'bg-slate-900/40 border-slate-800/60 hover:border-slate-700/60 hover:bg-slate-800/40'
-                                        }`}
+                                        )}
                                     >
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Public Store</span>
-                                        <span className={`text-sm font-black transition-colors duration-200 ${
-                                            kpiFilter === null ? 'text-cyan-400' : 'text-slate-350'
-                                        }`}>
+                                        <span className={cn('text-sm font-black transition-colors duration-200', kpiFilter === null ? 'text-cyan-400' : 'text-slate-350')}>
                                             {totalCount}
                                         </span>
                                     </button>
@@ -605,16 +606,18 @@ export const FilterPanel = ({
                                                 setKpiFilter('my-submissions');
                                             }
                                         }}
-                                        className={`flex-1 flex items-center justify-between px-3 py-1.5 rounded-lg border text-left transition-all duration-300 cursor-pointer ${
+                                        className={cn(
+                                            'flex-1 flex items-center justify-between px-3 py-1.5 rounded-lg border text-left transition-all duration-300 cursor-pointer',
                                             (kpiFilter === 'my-submissions' || ['staged', 'processing', 'in_review', 'approved', 'action'].includes(kpiFilter))
                                             ? 'bg-slate-900 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.12)]'
                                             : 'bg-slate-900/40 border-slate-800/60 hover:border-slate-700/60 hover:bg-slate-800/40'
-                                        }`}
+                                        )}
                                     >
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">My Benchmarks</span>
-                                        <span className={`text-sm font-black transition-colors duration-200 ${
+                                        <span className={cn(
+                                            'text-sm font-black transition-colors duration-200',
                                             (kpiFilter === 'my-submissions' || ['staged', 'processing', 'in_review', 'approved', 'action'].includes(kpiFilter)) ? 'text-cyan-400' : 'text-slate-350'
-                                        }`}>
+                                        )}>
                                             {verifiedCount}
                                         </span>
                                     </button>
@@ -637,20 +640,17 @@ export const FilterPanel = ({
                                                     {/* Step 1: Locally Staged */}
                                                     <button 
                                                         onClick={() => setKpiFilter(kpiFilter === 'staged' ? 'my-submissions' : 'staged')}
-                                                        className={`relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden ${
-                                                            kpiFilter === 'staged' 
-                                                            ? 'bg-amber-500/5 border-amber-500/35 shadow-[0_0_12px_rgba(245,158,11,0.08)] -translate-y-0.5' 
+                                                        className={cn(
+                                                            'relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden',
+                                                            kpiFilter === 'staged'
+                                                            ? 'bg-amber-500/5 border-amber-500/35 shadow-[0_0_12px_rgba(245,158,11,0.08)] -translate-y-0.5'
                                                             : 'bg-slate-900/25 border-transparent hover:border-slate-800/60 hover:bg-slate-900/40 hover:-translate-y-0.5'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <div className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300 ${
-                                                            kpiFilter === 'staged' ? 'bg-amber-400 h-6' : 'bg-amber-500/55'
-                                                        }`} />
+                                                        <div className={cn('absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300', kpiFilter === 'staged' ? 'bg-amber-400 h-6' : 'bg-amber-500/55')} />
                                                         <div className="flex flex-col items-start leading-none text-left">
                                                             <span className="text-[8px] font-bold uppercase text-slate-400/90 tracking-wider">Staged</span>
-                                                            <span className={`text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200 ${
-                                                                kpiFilter === 'staged' ? 'text-amber-400 font-black' : 'text-slate-200'
-                                                            }`}>{staged}</span>
+                                                            <span className={cn('text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200', kpiFilter === 'staged' ? 'text-amber-400 font-black' : 'text-slate-200')}>{staged}</span>
                                                         </div>
                                                     </button>
 
@@ -659,20 +659,17 @@ export const FilterPanel = ({
                                                     {/* Step 2: Processing */}
                                                     <button 
                                                         onClick={() => setKpiFilter(kpiFilter === 'processing' ? 'my-submissions' : 'processing')}
-                                                        className={`relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden ${
-                                                            kpiFilter === 'processing' 
-                                                            ? 'bg-yellow-500/5 border-yellow-500/35 shadow-[0_0_12px_rgba(234,179,8,0.08)] -translate-y-0.5' 
+                                                        className={cn(
+                                                            'relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden',
+                                                            kpiFilter === 'processing'
+                                                            ? 'bg-yellow-500/5 border-yellow-500/35 shadow-[0_0_12px_rgba(234,179,8,0.08)] -translate-y-0.5'
                                                             : 'bg-slate-900/25 border-transparent hover:border-slate-800/60 hover:bg-slate-900/40 hover:-translate-y-0.5'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <div className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300 ${
-                                                            kpiFilter === 'processing' ? 'bg-yellow-400 h-6' : 'bg-yellow-500/55'
-                                                        }`} />
+                                                        <div className={cn('absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300', kpiFilter === 'processing' ? 'bg-yellow-400 h-6' : 'bg-yellow-500/55')} />
                                                         <div className="flex flex-col items-start leading-none text-left">
                                                             <span className="text-[8px] font-bold uppercase text-slate-400/90 tracking-wider">Processing</span>
-                                                            <span className={`text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200 ${
-                                                                kpiFilter === 'processing' ? 'text-yellow-400 font-black' : 'text-slate-200'
-                                                            }`}>{processing}</span>
+                                                            <span className={cn('text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200', kpiFilter === 'processing' ? 'text-yellow-400 font-black' : 'text-slate-200')}>{processing}</span>
                                                         </div>
                                                     </button>
 
@@ -681,20 +678,17 @@ export const FilterPanel = ({
                                                     {/* Step 3: Under Review */}
                                                     <button 
                                                         onClick={() => setKpiFilter(kpiFilter === 'in_review' ? 'my-submissions' : 'in_review')}
-                                                        className={`relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden ${
-                                                            kpiFilter === 'in_review' 
-                                                            ? 'bg-purple-500/5 border-purple-500/35 shadow-[0_0_12px_rgba(168,85,247,0.08)] -translate-y-0.5' 
+                                                        className={cn(
+                                                            'relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden',
+                                                            kpiFilter === 'in_review'
+                                                            ? 'bg-purple-500/5 border-purple-500/35 shadow-[0_0_12px_rgba(168,85,247,0.08)] -translate-y-0.5'
                                                             : 'bg-slate-900/25 border-transparent hover:border-slate-800/60 hover:bg-slate-900/40 hover:-translate-y-0.5'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <div className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300 ${
-                                                            kpiFilter === 'in_review' ? 'bg-purple-400 h-6' : 'bg-purple-500/55'
-                                                        }`} />
+                                                        <div className={cn('absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300', kpiFilter === 'in_review' ? 'bg-purple-400 h-6' : 'bg-purple-500/55')} />
                                                         <div className="flex flex-col items-start leading-none text-left">
                                                             <span className="text-[8px] font-bold uppercase text-slate-400/90 tracking-wider">Review</span>
-                                                            <span className={`text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200 ${
-                                                                kpiFilter === 'in_review' ? 'text-purple-400 font-black' : 'text-slate-200'
-                                                            }`}>{inReview}</span>
+                                                            <span className={cn('text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200', kpiFilter === 'in_review' ? 'text-purple-400 font-black' : 'text-slate-200')}>{inReview}</span>
                                                         </div>
                                                     </button>
 
@@ -703,20 +697,17 @@ export const FilterPanel = ({
                                                     {/* Step 4: Published */}
                                                     <button 
                                                         onClick={() => setKpiFilter(kpiFilter === 'approved' ? 'my-submissions' : 'approved')}
-                                                        className={`relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden ${
-                                                            kpiFilter === 'approved' 
-                                                            ? 'bg-emerald-500/5 border-emerald-500/35 shadow-[0_0_12px_rgba(16,185,129,0.08)] -translate-y-0.5' 
+                                                        className={cn(
+                                                            'relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden',
+                                                            kpiFilter === 'approved'
+                                                            ? 'bg-emerald-500/5 border-emerald-500/35 shadow-[0_0_12px_rgba(16,185,129,0.08)] -translate-y-0.5'
                                                             : 'bg-slate-900/25 border-transparent hover:border-slate-800/60 hover:bg-slate-900/40 hover:-translate-y-0.5'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <div className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300 ${
-                                                            kpiFilter === 'approved' ? 'bg-emerald-400 h-6' : 'bg-emerald-500/55'
-                                                        }`} />
+                                                        <div className={cn('absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300', kpiFilter === 'approved' ? 'bg-emerald-400 h-6' : 'bg-emerald-500/55')} />
                                                         <div className="flex flex-col items-start leading-none text-left">
                                                             <span className="text-[8px] font-bold uppercase text-slate-400/90 tracking-wider">Published</span>
-                                                            <span className={`text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200 ${
-                                                                kpiFilter === 'approved' ? 'text-emerald-450 font-black' : 'text-slate-200'
-                                                            }`}>{approved}</span>
+                                                            <span className={cn('text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200', kpiFilter === 'approved' ? 'text-emerald-450 font-black' : 'text-slate-200')}>{approved}</span>
                                                         </div>
                                                     </button>
 
@@ -726,20 +717,17 @@ export const FilterPanel = ({
                                                     {/* Step 5: Rejected */}
                                                     <button 
                                                         onClick={() => setKpiFilter(kpiFilter === 'action' ? 'my-submissions' : 'action')}
-                                                        className={`relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden ${
-                                                            kpiFilter === 'action' 
-                                                            ? 'bg-red-500/5 border-red-500/35 shadow-[0_0_12px_rgba(239,68,68,0.08)] -translate-y-0.5' 
+                                                        className={cn(
+                                                            'relative flex-1 flex items-center pl-3 pr-2 py-1 rounded-md border transition-all duration-300 cursor-pointer overflow-hidden',
+                                                            kpiFilter === 'action'
+                                                            ? 'bg-red-500/5 border-red-500/35 shadow-[0_0_12px_rgba(239,68,68,0.08)] -translate-y-0.5'
                                                             : 'bg-slate-900/25 border-transparent hover:border-slate-800/60 hover:bg-slate-900/40 hover:-translate-y-0.5'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <div className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300 ${
-                                                            kpiFilter === 'action' ? 'bg-red-400 h-6' : 'bg-red-500/55'
-                                                        }`} />
+                                                        <div className={cn('absolute left-0 top-1 bottom-1 w-0.5 rounded-r transition-all duration-300', kpiFilter === 'action' ? 'bg-red-400 h-6' : 'bg-red-500/55')} />
                                                         <div className="flex flex-col items-start leading-none text-left">
                                                             <span className="text-[8px] font-bold uppercase text-slate-400/90 tracking-wider">Rejected</span>
-                                                            <span className={`text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200 ${
-                                                                kpiFilter === 'action' ? 'text-red-400 font-black' : 'text-slate-200'
-                                                            }`}>{rejected}</span>
+                                                            <span className={cn('text-xs md:text-sm font-extrabold mt-0.5 transition-colors duration-200', kpiFilter === 'action' ? 'text-red-400 font-black' : 'text-slate-200')}>{rejected}</span>
                                                         </div>
                                                     </button>
 
@@ -819,8 +807,11 @@ export const FilterPanel = ({
 
                     {/* Action Buttons */}
                     <div className="mt-2 w-full">
-                        <button 
+                        <Button
                             id="stage-benchmarks-btn"
+                            variant="primary"
+                            size="sm"
+                            className="w-full font-bold"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 try {
@@ -828,10 +819,9 @@ export const FilterPanel = ({
                                 } catch (e) {}
                                 onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
                             }}
-                            className="w-full py-1.5 px-3 bg-slate-950 border border-emerald-500/40 text-emerald-400 hover:border-emerald-500 hover:bg-emerald-500/10 rounded-xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer gap-1.5"
                         >
                             Stage Benchmarks
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -844,12 +834,12 @@ export const FilterPanel = ({
                         {/* Search Bar */}
                         <div id="manage-tour-search" className="relative flex-1 min-w-[240px]">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                            <input
+                            <Input
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder="Search by model name or hardware..."
-                                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-800/50 bg-[#070b13] text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all font-medium"
+                                className="pl-9 pr-4 text-xs rounded-xl font-medium"
                             />
                         </div>
 
@@ -881,11 +871,12 @@ export const FilterPanel = ({
                                     setShowViewSettings(!showViewSettings);
                                     setShowPresetsDropdown(false);
                                 }}
-                                className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                                className={cn(
+                                    'px-3 py-2 text-xs font-semibold rounded-xl border transition-colors cursor-pointer flex items-center gap-1.5',
                                     showViewSettings || groupBy !== 'None' || sortByField !== 'timestamp'
-                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-bold' 
+                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-bold'
                                     : 'bg-[#070b13] border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-205'
-                                }`}
+                                )}
                             >
                                 <Sliders size={13} />
                                 <span>View Options</span>
@@ -898,9 +889,9 @@ export const FilterPanel = ({
                                         
                                         {/* Grouping */}
                                         <div className="flex flex-col gap-1.5">
-                                            <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Group By</label>
-                                            <select 
-                                                className="text-xs bg-[#06080e] border border-slate-800 rounded-lg px-2.5 py-1.5 outline-none focus:border-cyan-500/50 text-slate-200 cursor-pointer"
+                                            <Label className="mb-0 text-[9px] uppercase font-bold text-slate-400 tracking-wider">Group By</Label>
+                                            <Select
+                                                className="text-xs rounded-lg px-2.5 py-1.5 cursor-pointer"
                                                 value={groupBy}
                                                 onChange={(e) => setGroupBy(e.target.value)}
                                             >
@@ -909,15 +900,15 @@ export const FilterPanel = ({
                                                 <option value="Hardware">Hardware</option>
                                                 <option value="Origin">Source Connections</option>
                                                 <option value="OriginFolder">Origin/Folder</option>
-                                            </select>
+                                            </Select>
                                         </div>
 
                                         {/* Sorting */}
                                         <div className="flex flex-col gap-1.5">
-                                            <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Sort By</label>
+                                            <Label className="mb-0 text-[9px] uppercase font-bold text-slate-400 tracking-wider">Sort By</Label>
                                             <div className="flex gap-1.5">
-                                                <select 
-                                                    className="flex-1 text-xs bg-[#06080e] border border-slate-800 rounded-lg px-2.5 py-1.5 outline-none focus:border-cyan-500/50 text-slate-200 cursor-pointer"
+                                                <Select
+                                                    className="flex-1 text-xs rounded-lg px-2.5 py-1.5 cursor-pointer"
                                                     value={sortByField}
                                                     onChange={(e) => setSortByField(e.target.value)}
                                                 >
@@ -936,7 +927,7 @@ export const FilterPanel = ({
                                                     <option value="e2e">E2E Latency</option>
                                                     <option value="costIn">Cost/1M In</option>
                                                     <option value="costOut">Cost/1M Out</option>
-                                                </select>
+                                                </Select>
                                                 <button
                                                     onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
                                                     title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
@@ -949,7 +940,7 @@ export const FilterPanel = ({
 
                                         {/* Columns (Metrics) */}
                                         <div className="flex flex-col gap-1.5">
-                                            <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Metrics Columns</label>
+                                            <Label className="mb-0 text-[9px] uppercase font-bold text-slate-400 tracking-wider">Metrics Columns</Label>
                                             <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
                                                 {Object.entries(SPEC_LABELS).map(([key, label]) => {
                                                     const isColSelected = visibleSpecs[key];
@@ -957,13 +948,15 @@ export const FilterPanel = ({
                                                         <button
                                                             key={key}
                                                             onClick={() => setVisibleSpecs(prev => ({ ...prev, [key]: !prev[key] }))}
-                                                            className={`text-left px-1.5 py-1 text-[10px] rounded transition-all flex items-center gap-1.5 cursor-pointer ${
+                                                            className={cn(
+                                                                'text-left px-1.5 py-1 text-[10px] rounded transition-all flex items-center gap-1.5 cursor-pointer',
                                                                 isColSelected ? 'bg-cyan-500/10 text-cyan-400 font-semibold' : 'text-slate-450 hover:text-slate-200'
-                                                            }`}
+                                                            )}
                                                         >
-                                                            <div className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
+                                                            <div className={cn(
+                                                                'w-3 h-3 rounded-sm border flex items-center justify-center',
                                                                 isColSelected ? 'bg-cyan-500 border-cyan-500 text-white' : 'border-slate-800 bg-[#06080e]'
-                                                            }`}>
+                                                            )}>
                                                                 {isColSelected && <Check size={8} strokeWidth={4} />}
                                                             </div>
                                                             <span className="truncate">{label}</span>
@@ -984,11 +977,12 @@ export const FilterPanel = ({
                                     setShowPresetsDropdown(!showPresetsDropdown);
                                     setShowViewSettings(false);
                                 }}
-                                className={`px-3 py-2 text-xs font-semibold rounded-xl border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                                    activePreset 
-                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-bold' 
+                                className={cn(
+                                    'px-3 py-2 text-xs font-semibold rounded-xl border flex items-center gap-1.5 transition-colors cursor-pointer',
+                                    activePreset
+                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-bold'
                                     : 'bg-[#070b13] border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-205'
-                                }`}
+                                )}
                             >
                                 <Bookmark size={13} />
                                 <span>{activePreset ? activePreset.name : 'Presets'}</span>
@@ -1012,7 +1006,7 @@ export const FilterPanel = ({
                                                                     applyPreset(preset);
                                                                     setShowPresetsDropdown(false);
                                                                 }}
-                                                                className={`flex-1 text-left text-xs font-medium cursor-pointer transition-colors ${isActive ? 'text-cyan-400 font-bold' : 'text-slate-450 hover:text-cyan-400'}`}
+                                                                className={cn('flex-1 text-left text-xs font-medium cursor-pointer transition-colors', isActive ? 'text-cyan-400 font-bold' : 'text-slate-450 hover:text-cyan-400')}
                                                             >
                                                                 <span className="flex items-center gap-1.5">
                                                                     {isActive && <Check className="w-3 h-3 text-cyan-400 stroke-[2.5]" />}
@@ -1045,21 +1039,22 @@ export const FilterPanel = ({
                                         >
                                             <div className="text-[9px] uppercase tracking-wider font-bold text-slate-500">Save current filters</div>
                                             <div className="flex gap-1.5">
-                                                <input 
+                                                <Input
                                                     type="text"
                                                     placeholder="Name..."
                                                     value={newPresetName}
                                                     onChange={(e) => setNewPresetName(e.target.value)}
-                                                    className="bg-[#0b0f17] border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-cyan-500/40 flex-1 font-medium placeholder-slate-500"
+                                                    className="text-xs rounded-lg px-2.5 py-1.5 flex-1 font-medium"
                                                 />
-                                                <button 
+                                                <button
                                                     type="submit"
                                                     disabled={!newPresetName.trim() || !hasFiltersToSave}
-                                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                                    className={cn(
+                                                        'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
                                                         (newPresetName.trim() && hasFiltersToSave)
                                                         ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-sm'
                                                         : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-800/20'
-                                                    }`}
+                                                    )}
                                                 >
                                                     Save
                                                 </button>
@@ -1071,13 +1066,14 @@ export const FilterPanel = ({
                         </div>
 
                         {/* Advanced Toggle */}
-                        <button 
+                        <Button
                             id="manage-tour-filter-toggle"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded)}
-                            className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-950/60 text-slate-300 border border-slate-900/60 hover:border-slate-800 hover:bg-slate-900/40 cursor-pointer flex items-center gap-1 transition-colors"
                         >
                             {isAdvancedExpanded ? "Basic Filters" : `Advanced Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}`}
-                        </button>
+                        </Button>
                     </div>
 
                 {/* Advanced Filters Backdrop */}
@@ -1091,7 +1087,10 @@ export const FilterPanel = ({
 
                 {/* Advanced Filters Drawer */}
                 {createPortal(
-                    <div className={`fixed top-20 right-4 h-[calc(100vh-6rem)] w-[420px] bg-slate-950/95 border border-slate-900 shadow-2xl z-[60] flex flex-col rounded-3xl overflow-hidden transform transition-transform duration-300 backdrop-blur-xl ${isAdvancedExpanded ? 'translate-x-0' : 'translate-x-[calc(100%+2rem)]'}`}>
+                    <div className={cn(
+                        'fixed top-20 right-4 h-[calc(100vh-6rem)] w-[420px] bg-slate-950/95 border border-slate-900 shadow-2xl z-[60] flex flex-col rounded-3xl overflow-hidden transform transition-transform duration-300 backdrop-blur-xl',
+                        isAdvancedExpanded ? 'translate-x-0' : 'translate-x-[calc(100%+2rem)]'
+                    )}>
                     {/* Header */}
                     <div className="bg-slate-950/40 p-4 border-b border-slate-900/60 flex items-center justify-between select-none">
                         <div className="flex items-center gap-2">
@@ -1132,18 +1131,18 @@ export const FilterPanel = ({
 
                                     {/* Inline Name Input */}
                                     <div className="space-y-1.5">
-                                        <label className="text-[8px] font-extrabold uppercase tracking-widest text-slate-400 select-none">Preset Name</label>
-                                        <input 
+                                        <Label className="mb-0 text-[8px] font-extrabold uppercase tracking-widest text-slate-400 select-none">Preset Name</Label>
+                                        <Input
                                             type="text"
                                             value={editPresetName}
                                             onChange={(e) => setEditPresetName(e.target.value)}
-                                            className="w-full px-3 py-1.5 text-xs text-white bg-[#0b0f17] border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500/40 flex-1 font-medium"
+                                            className="py-1.5 text-xs rounded-xl flex-1 font-medium"
                                         />
                                     </div>
 
                                     {/* Inline Preset Filters List */}
                                     <div className="space-y-1.5">
-                                        <label className="text-[8px] font-extrabold uppercase tracking-widest text-slate-400 select-none">Saved Filter Parameters</label>
+                                        <Label className="mb-0 text-[8px] font-extrabold uppercase tracking-widest text-slate-400 select-none">Saved Filter Parameters</Label>
                                         <div className="max-h-[140px] overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
                                             {editPresetSearch && (
                                                 <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/40 rounded-xl px-2.5 py-1 text-[10px]">
@@ -1212,31 +1211,36 @@ export const FilterPanel = ({
 
                                     {/* Inline Actions Row */}
                                     <div className="flex items-center justify-between border-t border-slate-800/40 pt-3 mt-1.5">
-                                        <button 
+                                        <Button
                                             type="button"
+                                            variant="danger"
+                                            size="xs"
+                                            className="uppercase font-bold"
                                             onClick={() => handleDeletePreset(editingPreset.id)}
-                                            className="px-2.5 py-1.5 text-[9px] font-bold uppercase text-red-400 hover:text-white border border-red-500/20 hover:border-red-500 bg-red-500/5 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer flex items-center gap-1"
                                         >
                                             <Trash2 size={10} /> Delete
-                                        </button>
+                                        </Button>
 
                                         <div className="flex gap-1.5">
-                                            <button 
+                                            <Button
                                                 type="button"
+                                                variant="secondary"
+                                                size="xs"
+                                                className="uppercase font-bold"
                                                 onClick={() => setEditingPreset(null)}
-                                                className="px-2.5 py-1.5 text-[9px] font-bold uppercase text-slate-400 hover:text-white border border-slate-800 rounded-xl transition-all cursor-pointer"
                                             >
                                                 Cancel
-                                            </button>
-                                            <button 
+                                            </Button>
+                                            <button
                                                 type="button"
                                                 onClick={handleUpdatePreset}
                                                 disabled={!editPresetName.trim() || (!editPresetSearch && !editPresetKpi && Object.keys(editPresetFilters).length === 0)}
-                                                className={`px-3 py-1.5 text-[9px] font-bold uppercase text-white rounded-xl transition-all cursor-pointer ${
+                                                className={cn(
+                                                    'px-3 py-1.5 text-[9px] font-bold uppercase text-white rounded-xl transition-all cursor-pointer',
                                                     (editPresetName.trim() && (editPresetSearch || editPresetKpi || Object.keys(editPresetFilters).length > 0))
                                                     ? 'bg-cyan-600 hover:bg-cyan-500 shadow-md'
                                                     : 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-                                                }`}
+                                                )}
                                             >
                                                 Update
                                             </button>
@@ -1253,19 +1257,21 @@ export const FilterPanel = ({
                                             presets.map((preset) => {
                                                 const isActive = isPresetActive(preset);
                                                 return (
-                                                    <div 
+                                                    <div
                                                         key={preset.id}
-                                                        className={`flex items-center gap-1.5 bg-[#0b0f17] border rounded-xl pl-2.5 pr-1.5 py-1 transition-all ${
-                                                            isActive 
-                                                            ? 'border-cyan-500/30 bg-cyan-500/5 shadow-sm shadow-cyan-500/5' 
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 bg-[#0b0f17] border rounded-xl pl-2.5 pr-1.5 py-1 transition-all',
+                                                            isActive
+                                                            ? 'border-cyan-500/30 bg-cyan-500/5 shadow-sm shadow-cyan-500/5'
                                                             : 'border-slate-800/40'
-                                                        }`}
+                                                        )}
                                                     >
-                                                        <button 
+                                                        <button
                                                             onClick={() => applyPreset(preset)}
-                                                            className={`text-[10px] font-semibold cursor-pointer select-none truncate max-w-[110px] transition-colors flex items-center gap-1 ${
+                                                            className={cn(
+                                                                'text-[10px] font-semibold cursor-pointer select-none truncate max-w-[110px] transition-colors flex items-center gap-1',
                                                                 isActive ? 'text-cyan-400 font-bold' : 'text-slate-350 hover:text-cyan-400'
-                                                            }`}
+                                                            )}
                                                             title={`Apply "${preset.name}"`}
                                                         >
                                                             {isActive && <Check className="w-2.5 h-2.5 text-cyan-400 stroke-[2.5] animate-in zoom-in-50 duration-200" />}
@@ -1284,21 +1290,22 @@ export const FilterPanel = ({
                                         )}
                                     </div>
                                     <form onSubmit={handleSavePreset} className="flex items-center gap-2 pt-2 border-t border-slate-800/40 mt-1">
-                                        <input 
+                                        <Input
                                             type="text"
                                             placeholder="Preset name..."
                                             value={newPresetName}
                                             onChange={(e) => setNewPresetName(e.target.value)}
-                                            className="bg-[#0b0f17] border border-slate-800/40 text-slate-200 text-xs rounded-xl px-3 py-1.5 outline-none focus:border-cyan-500/40 flex-1 font-medium placeholder-slate-600"
+                                            className="text-xs rounded-xl py-1.5 flex-1 font-medium"
                                         />
-                                        <button 
+                                        <button
                                             type="submit"
                                             disabled={!newPresetName.trim() || !hasFiltersToSave}
-                                            className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-lg ${
+                                            className={cn(
+                                                'px-3 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-lg',
                                                 (newPresetName.trim() && hasFiltersToSave)
                                                 ? 'bg-cyan-600/90 hover:bg-cyan-500 text-white'
                                                 : 'bg-slate-800/60 text-slate-500 cursor-not-allowed shadow-none border border-slate-800/20'
-                                            }`}
+                                            )}
                                         >
                                             Save
                                         </button>
@@ -1472,11 +1479,11 @@ export const FilterPanel = ({
                                                     const options = filterOptions.connectionNames || [];
                                                     return (
                                                         <>
-                                                            <div 
-                                                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-slate-800/80 transition-all ${selectedCount === 0 ? 'bg-cyan-500/10 text-cyan-400 font-semibold' : 'text-slate-300 hover:text-slate-200'}`}
+                                                            <div
+                                                                className={cn('flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-slate-800/80 transition-all', selectedCount === 0 ? 'bg-cyan-500/10 text-cyan-400 font-semibold' : 'text-slate-300 hover:text-slate-200')}
                                                                 onClick={() => toggleDraftFilter('connectionNames', '')}
                                                             >
-                                                                 <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${selectedCount === 0 ? 'bg-cyan-500 border-cyan-500 text-white' : 'border-slate-800/40 bg-slate-950'}`}>
+                                                                 <div className={cn('w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors', selectedCount === 0 ? 'bg-cyan-500 border-cyan-500 text-white' : 'border-slate-800/40 bg-slate-950')}>
                                                                     {selectedCount === 0 && <Check size={10} className="text-white" strokeWidth={3} />}
                                                                  </div>
                                                                  <span className="text-xs">All Connections</span>
@@ -1489,12 +1496,16 @@ export const FilterPanel = ({
                                                                 const count = (facetCounts.connectionNames && facetCounts.connectionNames[opt]) || 0;
                                                                 const isSelected = selectedConnectionNames.has(opt);
                                                                 return (
-                                                                    <div 
-                                                                        key={opt} 
-                                                                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${count === 0 ? 'opacity-45 hover:bg-slate-800/30' : 'hover:bg-slate-800/80'} ${isSelected ? 'bg-cyan-500/10 text-cyan-400 font-semibold' : 'text-slate-300 hover:text-slate-200'}`}
+                                                                    <div
+                                                                        key={opt}
+                                                                        className={cn(
+                                                                            'flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all',
+                                                                            count === 0 ? 'opacity-45 hover:bg-slate-800/30' : 'hover:bg-slate-800/80',
+                                                                            isSelected ? 'bg-cyan-500/10 text-cyan-400 font-semibold' : 'text-slate-300 hover:text-slate-200'
+                                                                        )}
                                                                         onClick={() => toggleDraftFilter('connectionNames', opt)}
                                                                     >
-                                                                         <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-cyan-500 border-cyan-500 text-white' : 'border-slate-800/40 bg-slate-950'}`}>
+                                                                         <div className={cn('w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors', isSelected ? 'bg-cyan-500 border-cyan-500 text-white' : 'border-slate-800/40 bg-slate-950')}>
                                                                             {isSelected && <Check size={10} className="text-white" strokeWidth={3} />}
                                                                          </div>
                                                                          <span className="text-xs truncate flex-1">
@@ -1525,13 +1536,15 @@ export const FilterPanel = ({
 
                     {/* Drawer Footer Actions */}
                     <div className="p-4 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-3 select-none">
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
                             onClick={() => setIsAdvancedExpanded(false)}
-                            className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-900/60 hover:bg-slate-800/60 border border-slate-800 rounded-xl transition-all cursor-pointer flex-1 text-center"
                         >
                             Cancel
-                        </button>
+                        </Button>
                         <button
                             type="button"
                             onClick={() => {

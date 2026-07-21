@@ -16,7 +16,11 @@ import {
     ResponsiveContainer, LabelList, Tooltip,
 } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
-import { ChartCard, CustomXAxis, CustomYAxis } from '../common';
+import {
+    ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
+    CHART_SERIES, EmptyState, ToggleGroup, gridProps,
+} from '../ui';
+import { cn } from '../../utils/cn';
 
 // One-bar-per-run comparison chart. Metrics are grouped into families
 // (TTFT / TPOT / ITL / E2E / observability) so the user picks the family
@@ -89,10 +93,13 @@ const METRICS = [
 ];
 
 // Stable colors per stat — used for both bar fill and the legend.
+// Fixed slots from the shared chart palette, keyed by stat id so each stat
+// keeps its color no matter which stats are toggled on (hue-continuous with
+// the old blue/amber/violet hexes).
 const STAT_COLORS = {
-    mean: '#3b82f6', // blue-500
-    p50:  '#f59e0b', // amber-500
-    p99:  '#8b5cf6', // violet-500
+    mean: CHART_SERIES[1], // sky
+    p50:  CHART_SERIES[2], // amber
+    p99:  CHART_SERIES[3], // violet
 };
 
 const aggregateValue = (entries, statFn, higher) => {
@@ -131,45 +138,51 @@ const BarTooltip = ({ active, payload, metric, activeStats, baselineSet }) => {
     if (!active || !payload || !payload.length) return null;
     const d = payload[0].payload;
     return (
-        <div className="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-2xl px-3 py-2 backdrop-blur-md text-slate-900 dark:text-slate-100 text-xs min-w-[220px]">
-            <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-semibold truncate">{d.fullLabel}</span>
-                {d.isBaseline && <span className="text-cyan-500 dark:text-cyan-400 text-[10px] shrink-0">📌 baseline</span>}
-            </div>
-            <div className="space-y-1 font-mono">
-                {activeStats.map(s => {
-                    const raw = d[`raw_${s.id}`];
-                    const diff = d[`diff_${s.id}`];
-                    const isImp = d[`imp_${s.id}`];
-                    const statLabel = `${metric.label}${metric.stats.length > 1 ? ` ${s.label}` : ''}`;
-                    return (
-                        <div key={s.id} className="flex items-baseline justify-between gap-3 border-l-2 pl-2"
-                             style={{ borderColor: STAT_COLORS[s.id] }}>
-                            <span className="text-slate-500 dark:text-slate-400 text-[11px]">{statLabel}</span>
-                            <span className="text-sm flex items-baseline gap-2">
+        <ChartTooltip
+            className="min-w-[220px]"
+            title={
+                <span className="flex items-center gap-2">
+                    <span className="truncate">{d.fullLabel}</span>
+                    {d.isBaseline && <span className="text-cyan-500 dark:text-cyan-400 text-[10px] font-normal shrink-0">📌 baseline</span>}
+                </span>
+            }
+        >
+            {activeStats.map(s => {
+                const raw = d[`raw_${s.id}`];
+                const diff = d[`diff_${s.id}`];
+                const isImp = d[`imp_${s.id}`];
+                const statLabel = `${metric.label}${metric.stats.length > 1 ? ` ${s.label}` : ''}`;
+                return (
+                    <ChartTooltipRow
+                        key={s.id}
+                        color={STAT_COLORS[s.id]}
+                        label={statLabel}
+                        value={
+                            <span className="flex items-baseline gap-2">
                                 <span>{formatVal(raw, metric.dec)}
                                     {metric.unit && (
-                                        <span className="text-slate-500 dark:text-slate-400 text-[10px] ml-1">{metric.unit}</span>
+                                        <span className="text-theme-muted text-[10px] ml-1 font-normal">{metric.unit}</span>
                                     )}
                                 </span>
                                 {baselineSet && diff !== null && diff !== undefined && (
-                                    <span className={`text-xs font-bold ${
+                                    <span className={cn(
+                                        'font-bold',
                                         isImp === null ? 'text-slate-400'
                                             : isImp ? 'text-emerald-500 dark:text-emerald-400'
                                             : 'text-red-500 dark:text-red-400'
-                                    }`}>
+                                    )}>
                                         {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
                                     </span>
                                 )}
                             </span>
-                        </div>
-                    );
-                })}
-                {!baselineSet && (
-                    <div className="text-[10px] text-slate-400 pt-1">no baseline · select 📌 on a run to compare</div>
-                )}
-            </div>
-        </div>
+                        }
+                    />
+                );
+            })}
+            {!baselineSet && (
+                <div className="text-[10px] text-slate-400 pt-1">no baseline · select 📌 on a run to compare</div>
+            )}
+        </ChartTooltip>
     );
 };
 
@@ -409,7 +422,7 @@ export const RunComparisonChart = ({
     const inactiveToggleClass = 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50';
 
     return (
-        <ChartCard title="Run Comparison">
+        <ChartContainer title="Run Comparison">
             {plotData.length > 20 && (
                 <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-start gap-2.5 leading-relaxed font-sans">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -420,18 +433,14 @@ export const RunComparisonChart = ({
             )}
             {/* Toggle row */}
             <div className="flex items-center gap-3 flex-wrap mb-4">
-                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50 flex-wrap">
-                    <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Metric</span>
-                    <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
-                    {METRICS.map(opt => (
-                        <button
-                            key={opt.id}
-                            onClick={() => setMetricId(opt.id)}
-                            className={`${baseTogglesClass} ${metricId === opt.id ? activeClass('blue') : inactiveToggleClass}`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Metric</span>
+                    <ToggleGroup
+                        options={METRICS.map(opt => ({ value: opt.id, label: opt.label }))}
+                        value={metricId}
+                        onChange={setMetricId}
+                        className="flex-wrap"
+                    />
                 </div>
 
                 {metric.stats.length > 1 && (
@@ -445,9 +454,11 @@ export const RunComparisonChart = ({
                                     key={opt.id}
                                     onClick={() => toggleStat(opt.id)}
                                     title={isOn && statIds.size === 1 ? 'Keep at least one stat' : ''}
-                                    className={`${baseTogglesClass} flex items-center gap-1.5 ${
+                                    className={cn(
+                                        baseTogglesClass,
+                                        'flex items-center gap-1.5',
                                         isOn ? activeClass('purple') : inactiveToggleClass
-                                    }`}
+                                    )}
                                 >
                                     <span
                                         className="w-2 h-2 rounded-sm"
@@ -465,7 +476,7 @@ export const RunComparisonChart = ({
                     <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
                     <button
                         onClick={() => setViewOverride('absolute')}
-                        className={`${baseTogglesClass} ${view === 'absolute' ? activeClass('emerald') : inactiveToggleClass}`}
+                        className={cn(baseTogglesClass, view === 'absolute' ? activeClass('emerald') : inactiveToggleClass)}
                     >
                         Absolute
                     </button>
@@ -473,13 +484,14 @@ export const RunComparisonChart = ({
                         onClick={() => canDiff && setViewOverride('diff')}
                         disabled={!canDiff}
                         title={canDiff ? '' : 'Set a baseline (📌) on a row in the table to enable Δ% view'}
-                        className={`${baseTogglesClass} ${
+                        className={cn(
+                            baseTogglesClass,
                             !canDiff
                                 ? 'text-slate-600 cursor-not-allowed opacity-50'
                                 : view === 'diff'
                                     ? activeClass('cyan')
                                     : inactiveToggleClass
-                        }`}
+                        )}
                     >
                         Δ% vs baseline
                     </button>
@@ -501,23 +513,21 @@ export const RunComparisonChart = ({
                                 margin={{ top: 44, right: 20, left: 30, bottom: 60 }}
                                 barGap={2}
                             >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.3} vertical={false} />
-                                <CustomXAxis
+                                <CartesianGrid {...gridProps()} opacity={0.3} vertical={false} />
+                                <ChartXAxis
                                     dataKey="label"
                                     type="category"
                                     interval={0}
                                     height={60}
                                     angle={-15}
                                     textAnchor="end"
-                                    theme={theme}
                                     label={null}
-                                    // CustomXAxis defaults to a numeric tickFormatter, which turns
+                                    // ChartXAxis defaults to a numeric tickFormatter, which turns
                                     // category strings into NaN. Override with identity.
                                     tickFormatter={(v) => v}
                                 />
-                                <CustomYAxis
+                                <ChartYAxis
                                     label={yLabel}
-                                    theme={theme}
                                     width={68}
                                     tickFormatter={(v) => view === 'diff'
                                         ? `${v > 0 ? '+' : ''}${v}%`
@@ -560,16 +570,11 @@ export const RunComparisonChart = ({
                         </ResponsiveContainer>
                     </div>
                 ) : (
-                    <div className="h-full flex items-center justify-center text-center px-6">
-                        <div className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
-                            <p className="font-medium mb-1">No data for {metric.label}</p>
-                            <p className="text-xs">
-                                The selected benchmarks don't include this metric. Try a different
-                                metric (observability metrics like KV cache usage and pod startup
-                                are only available in v0.2 reports), or select more benchmarks.
-                            </p>
-                        </div>
-                    </div>
+                    <EmptyState
+                        className="h-full py-0"
+                        title={`No data for ${metric.label}`}
+                        message="The selected benchmarks don't include this metric. Try a different metric (observability metrics like KV cache usage and pod startup are only available in v0.2 reports), or select more benchmarks."
+                    />
                 )}
             </div>
 
@@ -580,6 +585,6 @@ export const RunComparisonChart = ({
                     ? ' · Δ% in green = improvement, red = regression'
                     : ' · set a baseline (📌) on a run to enable Δ% comparison'}
             </p>
-        </ChartCard>
+        </ChartContainer>
     );
 };

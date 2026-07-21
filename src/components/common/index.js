@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Legacy shared components. Superseded by src/components/ui/ (see
+// skills/style.md); what remains here is only what still has live importers.
+// Card -> ui/StatCard, ChartCard -> ui/ChartContainer,
+// CustomXAxis/CustomYAxis -> ui/ChartXAxis/ChartYAxis.
 export { CustomLabel } from './CustomLabel';
 export { MultiSelectDropdown } from './MultiSelectDropdown';
 export { Row } from './Row';
 export { CustomChartTooltip } from './CustomChartTooltip';
-export { CustomXAxis, CustomYAxis } from './CustomAxis';
-export { Card } from './Card';
-export { ChartCard } from './ChartCard';

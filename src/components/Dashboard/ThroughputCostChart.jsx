@@ -15,7 +15,9 @@
 import React from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line } from 'recharts';
 import { RotateCcw, Maximize, Minimize, ChevronUp, ChevronDown } from 'lucide-react';
-import { CustomLabel, CustomChartTooltip, CustomXAxis, CustomYAxis, ChartCard } from '../common';
+import { CustomLabel, CustomChartTooltip } from '../common';
+import { Button, ChartContainer, ChartXAxis, ChartYAxis, Input, Select, gridProps } from '../ui';
+import { cn } from '../../utils/cn';
 import { getBucket, getEffectiveTp, getParetoFrontier } from '../../utils/dashboardHelpers';
 import { normalizeQualityModelName } from '../../utils/qualityParser';
 
@@ -713,11 +715,11 @@ export const ThroughputCostChart = (props) => {
                                         <div className="flex items-center gap-3">
                                              <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">X-Axis:</span>
                                              <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
-                                                 <button onClick={() => setChartMode('tpot')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'tpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TPOT</button>
-                                                 <button onClick={() => setChartMode('ntpot')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'ntpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>NTPOT</button>
-                                                 <button onClick={() => setChartMode('ttft')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'ttft' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>TTFT</button>
-                                                 <button onClick={() => setChartMode('itl')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'itl' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>ITL</button>
-                                                 <button onClick={() => setChartMode('lat')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${chartMode === 'lat' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>E2E Latency</button>
+                                                 <button onClick={() => setChartMode('tpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'tpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TPOT</button>
+                                                 <button onClick={() => setChartMode('ntpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ntpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>NTPOT</button>
+                                                 <button onClick={() => setChartMode('ttft')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ttft' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TTFT</button>
+                                                 <button onClick={() => setChartMode('itl')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'itl' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>ITL</button>
+                                                 <button onClick={() => setChartMode('lat')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'lat' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>E2E Latency</button>
                                              </div>
                                          </div>
 
@@ -725,11 +727,11 @@ export const ThroughputCostChart = (props) => {
                                         <div className="flex items-center gap-3">
                                              <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">Y-Axis:</span>
                                              <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
-                                                 <button onClick={() => setTputType('output')} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${tputType === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Output</button>
-                                                 <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.input ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Input</button>
-                                                 <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.total ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Total</button>
-                                                 <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.qps ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>QPS</button>
-                                                 <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!metricAvailability.cost ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Cost</button>
+                                                 <button onClick={() => setTputType('output')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', tputType === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Output</button>
+                                                 <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.input ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Input</button>
+                                                 <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.total ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Total</button>
+                                                 <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.qps ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>QPS</button>
+                                                 <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.cost ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Cost</button>
                                              </div>
                                              {tputType === 'cost' && (
                                                  <select 
@@ -750,16 +752,16 @@ export const ThroughputCostChart = (props) => {
                                          <div className="flex flex-wrap items-center gap-3 justify-start lg:justify-end w-full">
                                              {/* Normalization & Scale Options */}
                                              <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5">
-                                                 <button onClick={() => setIsLogScaleX(!isLogScaleX)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log Scale</button>
+                                                 <button onClick={() => setIsLogScaleX(!isLogScaleX)} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', isLogScaleX ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Log Scale</button>
                                                  <div className="h-3 w-px bg-slate-850" />
-                                                 <button onClick={() => canShowPerChip && setShowPerChip(!showPerChip)} disabled={!canShowPerChip} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${!canShowPerChip ? 'text-slate-700 cursor-not-allowed opacity-40' : showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per chip">Per Chip</button>
+                                                 <button onClick={() => canShowPerChip && setShowPerChip(!showPerChip)} disabled={!canShowPerChip} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !canShowPerChip ? 'text-slate-700 cursor-not-allowed opacity-40' : showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white')} title="Normalize per chip">Per Chip</button>
                                              </div>
 
                                              {/* Visual Toggles Group */}
                                              <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5">
-                                                 <button onClick={() => setShowLabels(!showLabels)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showLabels ? 'bg-indigo-655 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Labels</button>
-                                                 <button onClick={() => setShowDataLabels(!showDataLabels)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showDataLabels ? 'bg-pink-650 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Points</button>
-                                                 <button onClick={() => setShowPareto(!showPareto)} className={`px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all ${showPareto ? 'bg-amber-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Pareto</button>
+                                                 <button onClick={() => setShowLabels(!showLabels)} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', showLabels ? 'bg-indigo-655 text-white shadow' : 'text-slate-400 hover:text-white')}>Labels</button>
+                                                 <button onClick={() => setShowDataLabels(!showDataLabels)} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', showDataLabels ? 'bg-pink-650 text-white shadow' : 'text-slate-400 hover:text-white')}>Points</button>
+                                                 <button onClick={() => setShowPareto(!showPareto)} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', showPareto ? 'bg-amber-500 text-white shadow' : 'text-slate-400 hover:text-white')}>Pareto</button>
                                              </div>
 
                                              {/* Cap Input */}
@@ -809,7 +811,7 @@ export const ThroughputCostChart = (props) => {
 
                                 <div 
                                     ref={chartContainerRef}
-                                    className={`relative w-full h-[55vh] select-none ${isZoomEnabled ? (isDragging ? 'cursor-grabbing' : 'cursor-default') : 'cursor-default'}`}
+                                    className={cn('relative w-full h-[55vh] select-none', isZoomEnabled && isDragging ? 'cursor-grabbing' : 'cursor-default')}
                                     onWheel={handleWheel}
                                     onMouseDown={handleMouseDown}
                                     onMouseMove={handleMouseMove}
@@ -818,15 +820,14 @@ export const ThroughputCostChart = (props) => {
                                 >
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart margin={{ top: 25, right: 20, left: 35, bottom: 25 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.35} />
-                                            <CustomXAxis 
-                                                type="number" 
-                                                dataKey="vx" 
-                                                label={xLabel} 
+                                            <CartesianGrid {...gridProps()} opacity={0.35} />
+                                            <ChartXAxis
+                                                type="number"
+                                                dataKey="vx"
+                                                label={xLabel}
                                                 domain={curX}
                                                 scale={isLogScaleX ? 'log' : 'auto'}
                                                 allowDataOverflow={true}
-                                                theme={theme}
                                                 ticks={isLogScaleX ? (() => {
                                                     const min = curX[0];
                                                     const max = curX[1];
@@ -843,11 +844,10 @@ export const ThroughputCostChart = (props) => {
                                                     return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
                                                 }}
                                             />
-                                            <CustomYAxis 
-                                                label={yLabel} 
+                                            <ChartYAxis
+                                                label={yLabel}
                                                 domain={curY}
                                                 allowDataOverflow={true}
-                                                theme={theme}
                                                 tickFormatter={(val) => {
                                                     const v = Number(val);
                                                     return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -990,7 +990,7 @@ export const ThroughputCostChart = (props) => {
             }
 
             return (
-                <ChartCard title={config.title}>
+                <ChartContainer title={config.title}>
                   {/* Y-Axis Controls - Connected Sticky within Card */}
                   <div className="sticky top-[60px] z-30 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 pb-2 mb-2 -mx-2 px-2 flex items-center justify-between gap-4 flex-wrap">
                        <div className="flex-1 flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
@@ -998,44 +998,44 @@ export const ThroughputCostChart = (props) => {
                           <div className="flex items-center gap-2">
                               <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Y-Axis</span>
                               <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
-                              <button onClick={() => setTputType('output')} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tputType === 'output' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}>Output</button>
-                              <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.input ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'input' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title={metricAvailability.input ? "Input Tokens per Second" : "Available only when input token stats are reported"}>Input</button>
-                              <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.total ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'total' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title={metricAvailability.total ? "Total Tokens per Second" : "Available only when total token stats are reported"}>Total</button>
-                              <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.qps ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title={metricAvailability.qps ? "Queries Per Second (QPS)" : "Available only when QPS is reported"}>QPS</button>
-                              <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.cost ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title={metricAvailability.cost ? "Cost per 1M Tokens" : "Available only when cost data is reported"}>Cost</button>
+                              <button onClick={() => setTputType('output')} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', tputType === 'output' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}>Output</button>
+                              <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.input ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'input' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title={metricAvailability.input ? "Input Tokens per Second" : "Available only when input token stats are reported"}>Input</button>
+                              <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.total ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'total' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title={metricAvailability.total ? "Total Tokens per Second" : "Available only when total token stats are reported"}>Total</button>
+                              <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.qps ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title={metricAvailability.qps ? "Queries Per Second (QPS)" : "Available only when QPS is reported"}>QPS</button>
+                              <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.cost ? 'text-slate-600 cursor-not-allowed opacity-50' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title={metricAvailability.cost ? "Cost per 1M Tokens" : "Available only when cost data is reported"}>Cost</button>
                           </div>
                       
                       <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
                       
                       {tputType === 'cost' && (
-                          <select 
-                                value={costMode} 
+                          <Select
+                                value={costMode}
                                 onChange={(e) => setCostMode(e.target.value)}
-                                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-2 py-1 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500"
+                                className="w-auto text-xs px-2 py-1"
                           >
                               <option value="spot">Spot</option>
                               <option value="on_demand">On Demand</option>
                               <option value="cud_1y">CUD 1y</option>
                               <option value="cud_3y">CUD 3y</option>
-                          </select>
+                          </Select>
                       )}
 
                       {tputType !== 'cost' && (
-                          <button onClick={() => canShowPerChip && setShowPerChip(!showPerChip)} disabled={!canShowPerChip} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!canShowPerChip ? 'text-slate-600 cursor-not-allowed opacity-50' : showPerChip ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title={canShowPerChip ? "Normalize metric per chip" : "Available only when all selected benchmarks have known chip counts"}>Per Chip</button>
+                          <button onClick={() => canShowPerChip && setShowPerChip(!showPerChip)} disabled={!canShowPerChip} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !canShowPerChip ? 'text-slate-600 cursor-not-allowed opacity-50' : showPerChip ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title={canShowPerChip ? "Normalize metric per chip" : "Available only when all selected benchmarks have known chip counts"}>Per Chip</button>
                       )}
                       
                       <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
                       
-                      <button 
-                          onClick={() => setShowLabels(!showLabels)} 
-                          className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${showLabels ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                      <button
+                          onClick={() => setShowLabels(!showLabels)}
+                          className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', showLabels ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                       >
                           Labels
                       </button>
-                      
-                      <button 
-                          onClick={() => setShowDataLabels(!showDataLabels)} 
-                          className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${showDataLabels ? 'bg-pink-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+
+                      <button
+                          onClick={() => setShowDataLabels(!showDataLabels)}
+                          className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', showDataLabels ? 'bg-pink-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                           title="Show TP data points"
                       >
                           Points
@@ -1043,18 +1043,18 @@ export const ThroughputCostChart = (props) => {
 
                       <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
 
-                      <button 
-                          onClick={() => setShowPareto(!showPareto)} 
-                          className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${showPareto ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                      <button
+                          onClick={() => setShowPareto(!showPareto)}
+                          className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', showPareto ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                           title={`Pareto Frontier \n\nImplementation Model:\nCalculates the Pareto Efficiency Frontier by identifying the set of non-dominated configurations (e.g. highest throughput for a given latency) and connecting them linearly.`}
                       >
                           Pareto
                       </button>
                     </div>
                   </div>
-                  <div 
+                  <div
                       ref={chartContainerRef}
-                      className={`relative w-full min-h-[450px] h-[60vh] select-none ${isZoomEnabled ? (isDragging ? 'cursor-grabbing' : 'cursor-default') : 'cursor-default'}`}
+                      className={cn('relative w-full min-h-[450px] h-[60vh] select-none', isZoomEnabled && isDragging ? 'cursor-grabbing' : 'cursor-default')}
                       onWheel={handleWheel}
                       onMouseDown={handleMouseDown}
                       onMouseMove={handleMouseMove}
@@ -1062,25 +1062,26 @@ export const ThroughputCostChart = (props) => {
                       onMouseLeave={handleMouseUp}
                   >
                       {zoomDomain && (
-                          <button 
+                          <Button
+                              variant="secondary"
+                              size="xs"
                               onClick={() => setZoomDomain(null)}
-                              className="absolute top-2 right-2 z-10 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded border border-slate-600 shadow-sm flex items-center gap-1"
+                              className="absolute top-2 right-2 z-10 shadow-sm"
                           >
                               <RotateCcw size={10} /> Reset Zoom
-                          </button>
+                          </Button>
                       )}
                       
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart margin={{ top: 45, right: 30, left: 60, bottom: 45 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
-                          <CustomXAxis 
-                            type="number" 
-                            dataKey="vx" 
-                            label={config.xLabel} 
+                          <CartesianGrid {...gridProps()} opacity={0.5} />
+                          <ChartXAxis
+                            type="number"
+                            dataKey="vx"
+                            label={config.xLabel}
                             domain={curX}
                             scale={isLogScaleX ? 'log' : 'auto'}
                             allowDataOverflow={true}
-                            theme={theme}
                             ticks={isLogScaleX ? (() => {
                                 // Generating power-of-10 ticks within the current domain
                                 const min = curX[0];
@@ -1099,11 +1100,10 @@ export const ThroughputCostChart = (props) => {
                                 return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
                             }}
                           />
-                          <CustomYAxis 
-                            label={config.yLabel} 
+                          <ChartYAxis
+                            label={config.yLabel}
                             domain={curY}
                             allowDataOverflow={true}
-                            theme={theme}
                             tickFormatter={(val) => {
                                 const v = Number(val);
                                 return Math.abs(v) >= 100 ? v.toFixed(0) : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -1254,15 +1254,15 @@ export const ThroughputCostChart = (props) => {
                            {/* Color Mode Selector */}
                            <div className="flex items-center gap-2">
                                <span className="text-[10px] text-slate-500 font-medium">Color By:</span>
-                               <select 
+                               <Select
                                    value={chartColorMode}
                                    onChange={(e) => setChartColorMode(e.target.value)}
-                                   className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-[10px] px-1 py-0.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500"
+                                   className="w-auto text-[10px] px-1 py-0.5 rounded"
                                >
                                    <option value="hardware">Hardware</option>
                                    <option value="node_config">Node Config</option>
                                    <option value="model">Model</option>
-                               </select>
+                               </Select>
                            </div>
                        </div>
                        
@@ -1324,32 +1324,32 @@ export const ThroughputCostChart = (props) => {
                            <div className="flex items-center gap-2">
                                <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">X-Axis</span>
                                <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"/>
-                               <button onClick={() => setChartMode('tpot')} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${chartMode === 'tpot' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}>TPOT</button>
-                               <button 
-                                   onClick={() => metricAvailability.ntpot && setChartMode('ntpot')} 
+                               <button onClick={() => setChartMode('tpot')} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', chartMode === 'tpot' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}>TPOT</button>
+                               <button
+                                   onClick={() => metricAvailability.ntpot && setChartMode('ntpot')}
                                    disabled={!metricAvailability.ntpot}
-                                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.ntpot ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'ntpot' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                                   className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.ntpot ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'ntpot' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                                    title={metricAvailability.ntpot ? "Normalized Time Per Output Token" : "Available only when NTPOT data is reported"}
                                 >NTPOT</button>
-                               <button 
-                                   onClick={() => metricAvailability.ttft && setChartMode('ttft')} 
+                               <button
+                                   onClick={() => metricAvailability.ttft && setChartMode('ttft')}
                                    disabled={!metricAvailability.ttft}
-                                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.ttft ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'ttft' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                                   className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.ttft ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'ttft' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                                    title={metricAvailability.ttft ? "Time To First Token" : "Available only when TTFT data is reported"}
                                 >TTFT</button>
-                               <button 
-                                   onClick={() => metricAvailability.itl && setChartMode('itl')} 
+                               <button
+                                   onClick={() => metricAvailability.itl && setChartMode('itl')}
                                    disabled={!metricAvailability.itl}
-                                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.itl ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'itl' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                                   className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.itl ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'itl' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                                    title={metricAvailability.itl ? "Inter Token Latency" : "Available only when ITL data is reported"}
                                 >ITL</button>
-                               <button 
-                                   onClick={() => metricAvailability.tokens_per_sec && setChartMode('tokens_per_sec')} 
+                               <button
+                                   onClick={() => metricAvailability.tokens_per_sec && setChartMode('tokens_per_sec')}
                                    disabled={!metricAvailability.tokens_per_sec}
-                                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${!metricAvailability.tokens_per_sec ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'tokens_per_sec' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                                   className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', !metricAvailability.tokens_per_sec ? 'text-slate-600 cursor-not-allowed opacity-50' : chartMode === 'tokens_per_sec' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                                    title={metricAvailability.tokens_per_sec ? "Tokens Per Second (Reciprocal of ITL)" : "Available only when Tokens/Sec data is derived/reported"}
                                 >Tokens/Sec</button>
-                               <button onClick={() => { setChartMode('lat'); setLatType('e2e'); }} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${chartMode === 'lat' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}>E2E Latency</button>
+                               <button onClick={() => { setChartMode('lat'); setLatType('e2e'); }} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', chartMode === 'lat' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}>E2E Latency</button>
                            </div>
                            
                            {/* Max Slider */}
@@ -1373,7 +1373,7 @@ export const ThroughputCostChart = (props) => {
                                     <div className="flex-1 flex items-center gap-2 border-l border-slate-300 dark:border-slate-700 pl-4">
                                         <span className="text-[10px] text-slate-500 dark:text-slate-400">Max:</span>
                                         <input type="range" min={0} max={dataMax} step={step} value={currentMax} onChange={(e) => { const val = parseFloat(e.target.value); if (val >= dataMax * 0.99) setXAxisMax(Infinity); else setXAxisMax(val); }} className="w-full h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                                        <input type="number" value={xAxisMax === Infinity ? '' : xAxisMax} placeholder={dataMax.toFixed(chartMode === 'tpot' ? 2 : 0)} onChange={(e) => { const val = parseFloat(e.target.value); if (!val || isNaN(val)) setXAxisMax(Infinity); else setXAxisMax(val); }} className="w-16 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-1 py-0.5 text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none placeholder:text-slate-500 dark:placeholder:text-slate-600 text-right" />
+                                        <Input type="number" value={xAxisMax === Infinity ? '' : xAxisMax} placeholder={dataMax.toFixed(chartMode === 'tpot' ? 2 : 0)} onChange={(e) => { const val = parseFloat(e.target.value); if (!val || isNaN(val)) setXAxisMax(Infinity); else setXAxisMax(val); }} className="w-16 rounded text-xs px-1 py-0.5 placeholder:text-slate-500 dark:placeholder:text-slate-600 text-right" />
                                         <span className="text-[10px] text-slate-500 w-4">{chartMode === 'tpot' || chartMode === 'lat' ? 'ms' : ''}</span>
                                     </div>
                                 );
@@ -1383,21 +1383,21 @@ export const ThroughputCostChart = (props) => {
                        {/* Zoom Toggle */}
                        <div className="flex items-center gap-2">
                             {/* Log X Toggle */}
-                            <button 
-                                onClick={() => setIsLogScaleX(!isLogScaleX)} 
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${isLogScaleX ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`}
+                            <button
+                                onClick={() => setIsLogScaleX(!isLogScaleX)}
+                                className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', isLogScaleX ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')}
                                 title="Toggle Logarithmic Scale for X-Axis"
                             >
                                 Log X
                             </button>
 
                            <div className="h-4 w-px bg-slate-700"/>
-                           <button onClick={() => { const newValue = !isZoomEnabled; setIsZoomEnabled(newValue); if (!newValue) setZoomDomain(null); }} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${isZoomEnabled ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title="Enable mouse wheel zoom and drag pan">
+                           <button onClick={() => { const newValue = !isZoomEnabled; setIsZoomEnabled(newValue); if (!newValue) setZoomDomain(null); }} className={cn('px-3 py-1 text-xs font-medium rounded-md transition-all', isZoomEnabled ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50')} title="Enable mouse wheel zoom and drag pan">
                                {isZoomEnabled ? 'Zoom: ON' : 'Zoom: OFF'}
                            </button>
                        </div>
                   </div>
-                </ChartCard>
+                </ChartContainer>
             );
         })()}
       </div>

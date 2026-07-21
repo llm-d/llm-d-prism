@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    ScatterChart, Scatter, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
-    ArrowLeft, Menu, Share2, Zap, Download, Info,
-    ExternalLink, Cpu, Server, Layers, HardDrive, ChevronDown, ChevronUp, Check, MessageCircle, Code, X, BookOpen, Loader
+    ExternalLink, ChevronDown, ChevronUp, Check, Code,
 } from 'lucide-react';
-import { CustomXAxis, CustomYAxis } from './common';
+import { WellLitHeader, Button, Badge, Modal, Panel, ToggleGroup, Spinner, ChartTooltip, ChartXAxis, ChartYAxis, seriesColor, gridProps, getChartTheme } from './ui';
+import { cn } from '../utils/cn';
 import { scanAgenticWorkloads } from '../utils/gcsScanner';
 import { getLocalDashboardRuns } from '../utils/dashboardHelpers';
 
@@ -16,10 +16,12 @@ const SCENARIOS = [
     { id: 2, name: 'Combined Optimizations', label: 'Opt 2: Combined', description: 'Pallas kernels + stream-load + FP8' }
 ];
 
+// Shared chart palette slots, assigned stably by scenario id with hue-family
+// continuity to the old per-dashboard hexes (orange→amber, cyan→sky, emerald→emerald).
 const SCENARIO_COLORS = {
-    0: '#f97316',
-    1: '#06b6d4',
-    2: '#10b981',
+    0: seriesColor(2), // amber — K8s Service (Reference)
+    1: seriesColor(1), // sky — llm-d Routing
+    2: seriesColor(0), // emerald — Combined Optimizations
 };
 
 const RECIPE_VLLM = `apiVersion: apps/v1
@@ -93,7 +95,7 @@ const RichAgentWorkloadTooltip = ({ active, payload, metadata }) => {
     });
 
     return (
-        <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[220px] backdrop-blur-md text-slate-100 z-[100] font-mono">
+        <ChartTooltip className="min-w-[220px] text-slate-100 font-mono">
             <div className="border-b border-slate-700/60 pb-1.5 mb-1.5">
                 {payload[0]?.payload?.scenarioName && (
                     <div className="text-[11px] font-bold text-white mb-0.5">
@@ -134,7 +136,7 @@ const RichAgentWorkloadTooltip = ({ active, payload, metadata }) => {
                                             <svg className="w-4 h-2 shrink-0" viewBox="0 0 16 8">
                                                 <line
                                                     x1="0" y1="4" x2="16" y2="4"
-                                                    stroke={entry.stroke || entry.fill || '#38bdf8'}
+                                                    stroke={entry.stroke || entry.fill || seriesColor(1)}
                                                     strokeWidth="2"
                                                     strokeDasharray={percentile === 'P90' ? '4 3' : percentile === 'P99' ? '2 2' : 'none'}
                                                 />
@@ -151,7 +153,7 @@ const RichAgentWorkloadTooltip = ({ active, payload, metadata }) => {
                     );
                 })}
             </div>
-        </div>
+        </ChartTooltip>
     );
 };
 
@@ -165,7 +167,6 @@ const getThroughputValue = (report, metric) => {
 };
 
 export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, onToggleMobileNav, dashboardData }) {
-    const [shareToast, setShareToast] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeRecipeTab, setActiveRecipeTab] = useState(0);
     const [copiedStates, setCopiedStates] = useState({});
@@ -194,15 +195,15 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             try {
                 setLoading(true);
                 const reports = await scanAgenticWorkloads();
-                
+
                 // Get local runs targeting agentic-serving
-                const localRuns = dashboardData?.brv02Runs 
+                const localRuns = dashboardData?.brv02Runs
                     ? getLocalDashboardRuns(dashboardData.brv02Runs, 'agentic-serving')
                     : [];
-                
+
                 const combinedReports = [...reports, ...localRuns];
                 setData(combinedReports);
-                
+
                 if (combinedReports.length > 0) {
                     const concurrencies = [...new Set(combinedReports.map(r => r.concurrency))].sort((a, b) => a - b);
                     setSelectedConcurrency(concurrencies[concurrencies.length - 1]);
@@ -358,7 +359,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
     if (loading) {
         return (
             <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center pt-16 md:pl-24 w-full font-sans">
-                <Loader className="animate-spin text-cyan-500" size={40} />
+                <Spinner size="lg" />
                 <div className="text-lg font-semibold text-slate-200 mt-4">Loading Agentic Serving Data...</div>
                 <p className="text-xs text-slate-500 mt-2">Scanning GCS benchmark results</p>
             </div>
@@ -406,10 +407,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                         </div>
                     </div>
                 </div>
-                <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer">
+                <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)} className="uppercase tracking-widest text-[10px] font-extrabold">
                     Filters
                     {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
+                </Button>
             </div>
 
             {showFilters && (
@@ -417,33 +418,35 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14">X-Axis:</span>
-                            <div className="flex flex-wrap bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
-                                {[['ntpot', 'NTPOT'], ['tpot', 'TPOT'], ['ttft', 'TTFT'], ['itl', 'ITL'], ['e2e', 'E2E Latency']].map(([key, label]) => (
-                                    <button key={key} onClick={() => setZoomXAxis(key)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${zoomXAxis === key ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>{label}</button>
-                                ))}
-                            </div>
+                            <ToggleGroup
+                                size="xs"
+                                options={[['ntpot', 'NTPOT'], ['tpot', 'TPOT'], ['ttft', 'TTFT'], ['itl', 'ITL'], ['e2e', 'E2E Latency']].map(([value, label]) => ({ value, label }))}
+                                value={zoomXAxis}
+                                onChange={setZoomXAxis}
+                            />
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14">Y-Axis:</span>
-                            <div className="flex bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
-                                {[['output', 'Output'], ['input', 'Input'], ['total', 'Total'], ['qps', 'QPS']].map(([key, label]) => (
-                                    <button key={key} onClick={() => setZoomYAxis(key)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${zoomYAxis === key ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>{label}</button>
-                                ))}
-                            </div>
+                            <ToggleGroup
+                                size="xs"
+                                options={[['output', 'Output'], ['input', 'Input'], ['total', 'Total'], ['qps', 'QPS']].map(([value, label]) => ({ value, label }))}
+                                value={zoomYAxis}
+                                onChange={setZoomYAxis}
+                            />
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-3 md:items-end w-full md:w-auto">
                         <div className="flex flex-wrap items-center gap-4 justify-end">
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">
-                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Log Scale</button>
+                                <button onClick={() => setZoomLogScale(!zoomLogScale)} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer', zoomLogScale ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Log Scale</button>
                                 <div className="h-3 w-px bg-slate-700" />
-                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`} title="Normalize per Chip">Per Chip</button>
+                                <button onClick={() => setZoomPerChip(!zoomPerChip)} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer', zoomPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white')} title="Normalize per Chip">Per Chip</button>
                             </div>
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5">
                                 {['P50', 'P90', 'P99'].map(p => (
-                                    <button key={p} onClick={() => togglePercentile(p)} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>{p}</button>
+                                    <button key={p} onClick={() => togglePercentile(p)} className={cn('px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer', visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white')}>{p}</button>
                                 ))}
                             </div>
 
@@ -462,13 +465,13 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                 <div className="relative w-full h-[380px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.4} />
-                            <CustomXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={['auto', 'auto']} scale={zoomLogScale ? 'log' : 'auto'} theme="dark" />
-                            <CustomYAxis dataKey="y" type="number" name="Throughput" label={yAxisLabel} domain={['auto', 'auto']} theme="dark" />
+                            <CartesianGrid {...gridProps()} opacity={0.4} />
+                            <ChartXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={['auto', 'auto']} scale={zoomLogScale ? 'log' : 'auto'} />
+                            <ChartYAxis dataKey="y" type="number" name="Throughput" label={yAxisLabel} domain={['auto', 'auto']} />
                             <Tooltip
                                 content={<RichAgentWorkloadTooltip metadata={metadata} />}
                                 wrapperStyle={{ outline: 'none', zIndex: 100 }}
-                                cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                cursor={{ stroke: getChartTheme().tick, strokeWidth: 1, strokeDasharray: '4 4' }}
                             />
                             {buildChartLines.map(line => (
                                 <Scatter
@@ -518,56 +521,11 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             <div className="absolute top-0 -left-1/4 w-1/2 h-1/2 bg-blue-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
             <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-emerald-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
 
-            <header className="w-full h-16 border-b border-slate-900/65 flex justify-between items-center px-6 bg-slate-950/20 backdrop-blur-md fixed top-0 left-0 right-0 z-[49]">
-                <div className="flex items-center gap-4">
-                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-slate-800/60 md:hidden">
-                        <Menu className="h-6 w-6" />
-                    </button>
-                    {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-xl hover:bg-slate-900/60 text-slate-400 hover:text-white transition-colors cursor-pointer border border-transparent hover:border-slate-800/60">
-                            <ArrowLeft className="h-5 w-5" />
-                        </button>
-                    )}
-                    <div className="flex items-center gap-2.5 border-r border-slate-800 pr-4">
-                        <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 select-none inline-block sm:inline-block pl-0.5 py-0.5">
-                            Prism
-                        </span>
-                    </div>
-                    <div className="flex items-center">
-                        <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">Agentic serving</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hidden sm:inline uppercase tracking-wider font-mono">
-                            Guided path
-                        </span>
-                    </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                    <a
-                        href="https://llm-d.ai/community"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-350 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 cursor-pointer"
-                        title="Contact us"
-                    >
-                        <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
-                        <span className="hidden sm:inline">Contact us</span>
-                    </a>
-                    <button onClick={() => {
-                        navigator.clipboard.writeText(window.location.href);
-                        setShareToast(true);
-                        setTimeout(() => setShareToast(false), 2000);
-                    }} className="px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-355 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative cursor-pointer">
-                        <Share2 className="w-3.5 h-3.5 mr-1.5" />
-                        <span>Share link</span>
-                        {shareToast && (
-                            <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 whitespace-nowrap animate-in fade-in duration-200">
-                                Link copied!
-                            </div>
-                        )}
-                    </button>
-                </div>
-            </header>
+            <WellLitHeader
+                pageTitle="Agentic serving"
+                onNavigateBack={onNavigateBack}
+                onToggleMobileNav={onToggleMobileNav}
+            />
 
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-6 z-10 relative">
 
@@ -594,11 +552,13 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                     <button
                                         key={s.id}
                                         onClick={() => !s.comingSoon && setActiveTiers(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                                        className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all ${s.comingSoon ? 'cursor-not-allowed' : 'cursor-pointer'} ${
+                                        className={cn(
+                                            'w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all',
+                                            s.comingSoon ? 'cursor-not-allowed' : 'cursor-pointer',
                                             activeTiers[s.id] && !s.comingSoon
                                                 ? 'bg-slate-900/60'
                                                 : 'border-slate-800/50 bg-slate-900/20 opacity-60'
-                                        }`}
+                                        )}
                                         style={{ borderColor: activeTiers[s.id] && !s.comingSoon ? `${SCENARIO_COLORS[s.id]}50` : undefined }}
                                     >
                                         <div>
@@ -606,11 +566,11 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                             <p className="text-[10px] text-slate-500">{s.description}</p>
                                         </div>
                                         {s.comingSoon ? (
-                                            <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Coming soon</span>
+                                            <Badge tone="warning" size="xs">Coming soon</Badge>
                                         ) : activeTiers[s.id] ? (
                                             <span className="text-[9px] border px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none" style={{ backgroundColor: `${SCENARIO_COLORS[s.id]}20`, color: SCENARIO_COLORS[s.id], borderColor: `${SCENARIO_COLORS[s.id]}40` }}>Active</span>
                                         ) : (
-                                            <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                            <Badge tone="neutral" size="xs">Inactive</Badge>
                                         )}
                                     </button>
                                 ))}
@@ -627,12 +587,9 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                             <span className="text-[11px] font-extrabold text-sky-400/90 uppercase tracking-widest block">
                                 Benchmark scenario
                             </span>
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold text-[10px] rounded-lg border border-slate-700/80 transition-all flex items-center gap-1.5 shadow cursor-pointer"
-                            >
+                            <Button variant="secondary" size="xs" onClick={() => setIsModalOpen(true)} className="font-bold">
                                 <Code className="w-3 h-3" /> View configuration
-                            </button>
+                            </Button>
                         </div>
 
                         <div className="grid grid-cols-12 gap-2">
@@ -785,69 +742,55 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                 </div>
 
                 {/* Summary Metrics Table */}
-                <div id="summary-table" className="border border-slate-800 rounded-xl bg-slate-900 shadow-xl p-6 flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <div>
-                            <h3 className="text-md font-bold text-white">Summary metrics comparison</h3>
-                            <span className="text-xs text-slate-500">Comparing Reference configuration vs. Combined Optimizations side-by-side across concurrency levels.</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => setShowTableFilters(!showTableFilters)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer">
+                <Panel
+                    id="summary-table"
+                    className="bg-slate-900 border-slate-800 shadow-xl flex flex-col"
+                    title={
+                        <span className="block">
+                            <span className="block text-md font-bold">Summary metrics comparison</span>
+                            <span className="block text-xs text-slate-500 font-normal">Comparing Reference configuration vs. Combined Optimizations side-by-side across concurrency levels.</span>
+                        </span>
+                    }
+                    actions={
+                        <>
+                            <Button variant="secondary" size="sm" onClick={() => setShowTableFilters(!showTableFilters)} className="uppercase tracking-widest text-[10px] font-extrabold">
                                 Filters
                                 {showTableFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
-                            <button
-                                onClick={exportToCSV}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-700 transition-colors cursor-pointer"
-                            >
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={exportToCSV}>
                                 Export CSV
-                            </button>
-                        </div>
-                    </div>
-
+                            </Button>
+                        </>
+                    }
+                >
                     {showTableFilters && (
                         <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Latency:</span>
-                                <div className="flex gap-1 bg-slate-950 border border-slate-800 p-1 rounded-lg">
-                                    {['ntpot', 'tpot', 'ttft', 'itl', 'e2e'].map((mode) => (
-                                        <button
-                                            key={mode}
-                                            onClick={() => setTableMetricMode(mode)}
-                                            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all uppercase cursor-pointer ${tableMetricMode === mode ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                        >
-                                            {mode}
-                                        </button>
-                                    ))}
-                                </div>
+                                <ToggleGroup
+                                    size="xs"
+                                    options={['ntpot', 'tpot', 'ttft', 'itl', 'e2e'].map((mode) => ({ value: mode, label: mode.toUpperCase() }))}
+                                    value={tableMetricMode}
+                                    onChange={setTableMetricMode}
+                                />
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Percentile:</span>
-                                <div className="flex gap-1 bg-slate-950 border border-slate-800 p-1 rounded-lg">
-                                    {['P50', 'P90', 'P99'].map((p) => (
-                                        <button
-                                            key={p}
-                                            onClick={() => setSelectedPercentile(p)}
-                                            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${selectedPercentile === p ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                        >
-                                            {p}
-                                        </button>
-                                    ))}
-                                </div>
+                                <ToggleGroup
+                                    size="xs"
+                                    options={['P50', 'P90', 'P99'].map((p) => ({ value: p, label: p }))}
+                                    value={selectedPercentile}
+                                    onChange={setSelectedPercentile}
+                                />
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Throughput:</span>
-                                <div className="flex gap-1 bg-slate-950 border border-slate-800 p-1 rounded-lg">
-                                    {[['output', 'Output'], ['input', 'Input'], ['total', 'Total'], ['qps', 'QPS']].map(([key, label]) => (
-                                        <button
-                                            key={key}
-                                            onClick={() => setTableThroughputMode(key)}
-                                            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${tableThroughputMode === key ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'}`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
+                                <ToggleGroup
+                                    size="xs"
+                                    options={[['output', 'Output'], ['input', 'Input'], ['total', 'Total'], ['qps', 'QPS']].map(([value, label]) => ({ value, label }))}
+                                    value={tableThroughputMode}
+                                    onChange={setTableThroughputMode}
+                                />
                             </div>
                         </div>
                     )}
@@ -875,13 +818,14 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                     <tr
                                         key={rIdx}
                                         onClick={() => setSelectedConcurrency(row.concurrency)}
-                                        className={`hover:bg-slate-800/20 transition-colors cursor-pointer ${
-                                            row.isCurrent ? 'bg-slate-800/70 font-bold' : ''
-                                        }`}
+                                        className={cn(
+                                            'hover:bg-slate-800/20 transition-colors cursor-pointer',
+                                            row.isCurrent && 'bg-slate-800/70 font-bold'
+                                        )}
                                     >
                                         <td className="px-3 py-2.5 border-r border-slate-800 font-bold text-white font-sans flex items-center gap-2">
                                             <span>{row.concurrency}</span>
-                                            {row.isCurrent && <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>}
+                                            {row.isCurrent && <Badge tone="info" size="xs" className="font-sans">Active</Badge>}
                                         </td>
                                         <td className="px-3 py-2.5 border-r border-slate-800/50 text-slate-400">
                                             {row.refVal > 0 ? `${row.refVal.toFixed(1)} ms` : 'N/A'}
@@ -895,10 +839,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                         <td className="px-3 py-2.5 border-r border-slate-800 text-cyan-400 font-bold">
                                             {row.optThroughput > 0 ? `${row.optThroughput.toFixed(0)} ${tableThroughputMode === 'qps' ? 'qps' : 'tok/s'}` : 'N/A'}
                                         </td>
-                                        <td className={`px-3 py-2.5 border-r border-slate-800/50 text-center font-bold ${row.latencyGain > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        <td className={cn('px-3 py-2.5 border-r border-slate-800/50 text-center font-bold', row.latencyGain > 0 ? 'text-emerald-400' : 'text-red-400')}>
                                             {row.latencyGain !== 0 ? `${row.latencyGain > 0 ? '-' : '+'}${Math.abs(row.latencyGain).toFixed(1)}%` : 'N/A'}
                                         </td>
-                                        <td className={`px-3 py-2.5 text-center font-bold ${row.throughputGain > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        <td className={cn('px-3 py-2.5 text-center font-bold', row.throughputGain > 0 ? 'text-emerald-400' : 'text-red-400')}>
                                             {row.throughputGain !== 0 ? `${row.throughputGain > 0 ? '+' : ''}${row.throughputGain.toFixed(1)}%` : 'N/A'}
                                         </td>
                                     </tr>
@@ -906,125 +850,130 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </Panel>
             </main>
 
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full shadow-[0_0_50px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden max-h-[90vh]">
-                        <header className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/80">
-                            <div className="flex items-center">
-                                <div className="p-2 bg-cyan-500/20 text-cyan-400 rounded-lg mr-3">
-                                    <Code className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-bold text-white">Benchmark test configuration</h3>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">View and copy the exact recipes used for this workload replay.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </header>
-
-                        <div className="flex border-b border-slate-800 bg-slate-900/60 px-6 pt-2 gap-1 overflow-x-auto no-scrollbar">
-                            {['Model server flags', 'K8s manifest', 'Traffic YAML', 'Raw benchmark JSON'].map((tab, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => setActiveRecipeTab(idx)}
-                                    className={`px-4 py-2 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
-                                        activeRecipeTab === idx
-                                            ? 'border-cyan-500 text-cyan-400'
-                                            : 'border-transparent text-slate-400 hover:text-slate-200'
-                                    }`}
-                                >
-                                    {tab}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="p-6 flex-1 overflow-y-auto bg-slate-950 font-mono text-[10px] text-slate-300 relative">
-                            {activeRecipeTab === 0 && (
-                                <>
-                                    <button
-                                        onClick={() => handleCopy(RECIPE_VLLM, 'vllm')}
-                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
-                                    >
-                                        {copiedStates['vllm'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
-                                        <span className="text-[9px] font-bold">{copiedStates['vllm'] ? 'Copied!' : 'Copy code'}</span>
-                                    </button>
-                                    <pre className="whitespace-pre-wrap">{RECIPE_VLLM}</pre>
-                                </>
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                closeOnBackdrop={false}
+                closeOnEscape={false}
+                size="lg"
+                className="max-w-3xl"
+                title={
+                    <span className="flex items-center">
+                        <span className="p-2 bg-cyan-500/20 text-cyan-400 rounded-lg mr-3 inline-flex">
+                            <Code className="w-5 h-5" />
+                        </span>
+                        <span>
+                            <span className="block text-base font-bold">Benchmark test configuration</span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5 font-normal">View and copy the exact recipes used for this workload replay.</span>
+                        </span>
+                    </span>
+                }
+                footer={
+                    <Button variant="secondary" size="sm" onClick={() => setIsModalOpen(false)}>
+                        Close
+                    </Button>
+                }
+            >
+                <div className="flex border-b border-slate-800 bg-slate-900/60 px-6 pt-2 gap-1 overflow-x-auto no-scrollbar">
+                    {['Model server flags', 'K8s manifest', 'Traffic YAML', 'Raw benchmark JSON'].map((tab, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => setActiveRecipeTab(idx)}
+                            className={cn(
+                                'px-4 py-2 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer',
+                                activeRecipeTab === idx
+                                    ? 'border-cyan-500 text-cyan-400'
+                                    : 'border-transparent text-slate-400 hover:text-slate-200'
                             )}
-                            {activeRecipeTab === 1 && (
-                                <>
-                                    <button
-                                        onClick={() => handleCopy(RECIPE_K8S, 'k8s')}
-                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
-                                    >
-                                        {copiedStates['k8s'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
-                                        <span className="text-[9px] font-bold">{copiedStates['k8s'] ? 'Copied!' : 'Copy code'}</span>
-                                    </button>
-                                    <pre className="whitespace-pre-wrap">{RECIPE_K8S}</pre>
-                                </>
-                            )}
-                            {activeRecipeTab === 2 && (
-                                <>
-                                    <button
-                                        onClick={() => handleCopy(RECIPE_TRAFFIC, 'traffic')}
-                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
-                                    >
-                                        {copiedStates['traffic'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
-                                        <span className="text-[9px] font-bold">{copiedStates['traffic'] ? 'Copied!' : 'Copy code'}</span>
-                                    </button>
-                                    <pre className="whitespace-pre-wrap">{RECIPE_TRAFFIC}</pre>
-                                </>
-                            )}
-                            {activeRecipeTab === 3 && (
-                                <>
-                                    <button
-                                        onClick={() => {
-                                            const jsonData = {};
-                                            data.forEach(d => {
-                                                const key = `${d.scenario}_c${d.concurrency}`;
-                                                jsonData[key] = {
-                                                    scenario: d.scenario,
-                                                    concurrency: d.concurrency,
-                                                    throughput: d.throughput,
-                                                    ttft_p50_ms: d.ttft.p50,
-                                                    tpot_p50_ms: d.tpot.p50,
-                                                };
-                                            });
-                                            handleCopy(JSON.stringify(jsonData, null, 2), 'json');
-                                        }}
-                                        className="absolute top-4 right-4 p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
-                                    >
-                                        {copiedStates['json'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
-                                        <span className="text-[9px] font-bold">{copiedStates['json'] ? 'Copied!' : 'Copy JSON'}</span>
-                                    </button>
-                                    <pre className="whitespace-pre-wrap">
-                                        {JSON.stringify(
-                                            Object.fromEntries(data.map(d => [
-                                                `${d.scenario}_c${d.concurrency}`,
-                                                { scenario: d.scenario, concurrency: d.concurrency, throughput: d.throughput, ttft_p50_ms: d.ttft.p50, tpot_p50_ms: d.tpot.p50 }
-                                            ])),
-                                            null, 2
-                                        )}
-                                    </pre>
-                                </>
-                            )}
-                        </div>
-
-                        <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end">
-                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-xs transition-colors border border-slate-700 cursor-pointer">
-                                Close
-                            </button>
-                        </div>
-                    </div>
+                        >
+                            {tab}
+                        </button>
+                    ))}
                 </div>
-            )}
+
+                <div className="p-6 flex-1 overflow-y-auto bg-slate-950 font-mono text-[10px] text-slate-300 relative">
+                    {activeRecipeTab === 0 && (
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="xs"
+                                onClick={() => handleCopy(RECIPE_VLLM, 'vllm')}
+                                className="absolute top-4 right-4"
+                            >
+                                {copiedStates['vllm'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                <span className="text-[9px] font-bold">{copiedStates['vllm'] ? 'Copied!' : 'Copy code'}</span>
+                            </Button>
+                            <pre className="whitespace-pre-wrap">{RECIPE_VLLM}</pre>
+                        </>
+                    )}
+                    {activeRecipeTab === 1 && (
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="xs"
+                                onClick={() => handleCopy(RECIPE_K8S, 'k8s')}
+                                className="absolute top-4 right-4"
+                            >
+                                {copiedStates['k8s'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                <span className="text-[9px] font-bold">{copiedStates['k8s'] ? 'Copied!' : 'Copy code'}</span>
+                            </Button>
+                            <pre className="whitespace-pre-wrap">{RECIPE_K8S}</pre>
+                        </>
+                    )}
+                    {activeRecipeTab === 2 && (
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="xs"
+                                onClick={() => handleCopy(RECIPE_TRAFFIC, 'traffic')}
+                                className="absolute top-4 right-4"
+                            >
+                                {copiedStates['traffic'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                <span className="text-[9px] font-bold">{copiedStates['traffic'] ? 'Copied!' : 'Copy code'}</span>
+                            </Button>
+                            <pre className="whitespace-pre-wrap">{RECIPE_TRAFFIC}</pre>
+                        </>
+                    )}
+                    {activeRecipeTab === 3 && (
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="xs"
+                                onClick={() => {
+                                    const jsonData = {};
+                                    data.forEach(d => {
+                                        const key = `${d.scenario}_c${d.concurrency}`;
+                                        jsonData[key] = {
+                                            scenario: d.scenario,
+                                            concurrency: d.concurrency,
+                                            throughput: d.throughput,
+                                            ttft_p50_ms: d.ttft.p50,
+                                            tpot_p50_ms: d.tpot.p50,
+                                        };
+                                    });
+                                    handleCopy(JSON.stringify(jsonData, null, 2), 'json');
+                                }}
+                                className="absolute top-4 right-4"
+                            >
+                                {copiedStates['json'] ? <Check className="w-3 h-3 text-emerald-400" /> : <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}
+                                <span className="text-[9px] font-bold">{copiedStates['json'] ? 'Copied!' : 'Copy JSON'}</span>
+                            </Button>
+                            <pre className="whitespace-pre-wrap">
+                                {JSON.stringify(
+                                    Object.fromEntries(data.map(d => [
+                                        `${d.scenario}_c${d.concurrency}`,
+                                        { scenario: d.scenario, concurrency: d.concurrency, throughput: d.throughput, ttft_p50_ms: d.ttft.p50, tpot_p50_ms: d.tpot.p50 }
+                                    ])),
+                                    null, 2
+                                )}
+                            </pre>
+                        </>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }

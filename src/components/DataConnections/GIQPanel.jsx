@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import React from "react";
-import { RefreshCw, X, Loader, Plus } from "lucide-react";
+import { RefreshCw, X, Plus } from "lucide-react";
+import { Input, Spinner } from "../ui";
 
 export const GIQPanel = ({
     apiConfigs, setApiConfigs, setData, setSelectedSources, setAvailableSources,
@@ -78,19 +79,19 @@ export const GIQPanel = ({
                  {/* Use Single Project Connection Form */}
                     <h5 className="text-[10px] font-bold text-slate-500 uppercase">{apiConfigs.length > 0 ? "Switch Connection" : "Google Cloud Project"}</h5>
                     <div className="space-y-2">
-                             <input 
-                                type="text" 
-                                placeholder="Google Cloud Project ID" 
+                             <Input
+                                type="text"
+                                placeholder="Google Cloud Project ID"
                                 value={newProjectId}
                                 onChange={(e) => setNewProjectId(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                className="text-xs"
                              />
-                             <input 
-                                type="password" 
-                                placeholder="Access Token (Optional - defaults to ADC)" 
+                             <Input
+                                type="password"
+                                placeholder="Access Token (Optional - defaults to ADC)"
                                 value={newAuthToken}
                                 onChange={(e) => setNewAuthToken(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-xs px-3 py-2 text-slate-800 dark:text-slate-300 focus:border-blue-500 outline-none"
+                                className="text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddApiSource()}
                              />
                              <button 
@@ -98,7 +99,7 @@ export const GIQPanel = ({
                                   disabled={gcsLoading || !newProjectId}
                                   className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-medium flex items-center justify-center gap-2"
                               >
-                                  {gcsLoading ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
+                                  {gcsLoading ? <Spinner className="w-3 h-3 text-white dark:text-white" /> : <Plus size={12} />}
                                   Connect
                               </button>
                          </div>

@@ -15,6 +15,8 @@
 import React, { useState } from 'react';
 import { Filter, ChevronUp, ChevronDown } from 'lucide-react';
 import { MultiSelectDropdown } from '../common';
+import { Panel } from '../ui';
+import { cn } from '../../utils/cn';
 import { USE_CASE_META, formatOriginLabel } from '../../utils/dashboardHelpers';
 
 export const FilterPanel = ({
@@ -44,10 +46,10 @@ export const FilterPanel = ({
     if (!showFilterPanel) return null;
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm mb-4 transition-colors">
+        <Panel padding="none" className="p-3 mb-4">
             {/* Header & Controls */}
-            <div className={`flex flex-col ${isFiltersExpanded ? 'gap-3 mb-3' : ''}`}>
-                <div className={`flex justify-between items-center ${!isFiltersExpanded ? 'py-1.5' : ''}`}>
+            <div className={cn('flex flex-col', isFiltersExpanded && 'gap-3 mb-3')}>
+                <div className={cn('flex justify-between items-center', !isFiltersExpanded && 'py-1.5')}>
                     <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
                         <Filter size={14} />
                         Benchmark Filter
@@ -246,6 +248,6 @@ export const FilterPanel = ({
             </>
             )}
         </div>
-      </div>
+      </Panel>
     );
 };

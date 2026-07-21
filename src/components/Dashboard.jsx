@@ -28,7 +28,8 @@ import { defaultState } from '../config/defaultState';
 import { CacheManager } from '../utils/cacheManager';
 import { QualityParser, normalizeQualityModelName } from '../utils/qualityParser';
 
-import { CustomLabel, MultiSelectDropdown, Row, CustomChartTooltip, CustomXAxis, CustomYAxis, Card, ChartCard } from './common';
+import { Button, Badge, EmptyState, Modal } from './ui';
+import { cn } from '../utils/cn';
 import { FilterPanel } from './Dashboard/FilterPanel';
 import { UnifiedDataTable } from './Dashboard/UnifiedDataTable';
 import { ThroughputCostChart } from './Dashboard/ThroughputCostChart';
@@ -1601,9 +1602,11 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             {/* Toast Stack */}
             <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
                 {toasts.map(t => (
-                    <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all animate-in slide-in-from-right duration-300 flex items-center justify-between gap-4 ${t.type === 'error' ? 'bg-red-500/90 backdrop-blur' :
-                        t.type === 'success' ? 'bg-green-500/90 backdrop-blur' : 'bg-blue-600/90 backdrop-blur'
-                        }`}>
+                    <div key={t.id} className={cn(
+                        'px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all animate-in slide-in-from-right duration-300 flex items-center justify-between gap-4',
+                        t.type === 'error' ? 'bg-red-500/90 backdrop-blur' :
+                            t.type === 'success' ? 'bg-green-500/90 backdrop-blur' : 'bg-blue-600/90 backdrop-blur'
+                    )}>
                         <span>{t.message}</span>
                         <button onClick={() => removeToast(t.id)} className="hover:bg-white/20 rounded-full p-1 opacity-75 hover:opacity-100">
                             <X size={14} />
@@ -1631,27 +1634,29 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                         <h1 className="text-sm font-semibold text-slate-200 tracking-wide select-none">
                             {mode === 'manager' ? 'Results store' : 'Benchmark browser'}
                         </h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-[10px] font-extrabold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase tracking-wider font-mono">
+                        <Badge tone="info" size="sm" className="ml-3 font-mono">
                             {mode === 'manager' ? 'Results store' : 'Expert mode'}
-                        </span>
+                        </Badge>
                     </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
                     {mode === 'browser' ? (
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => onNavigate && onNavigate('results-store')}
-                            className="px-3.5 py-2 text-xs font-semibold rounded-xl border text-slate-350 bg-slate-900/40 hover:bg-slate-900/80 border-slate-800 hover:border-slate-700 transition-all flex items-center cursor-pointer"
                         >
-                            <Database className="w-4 h-4 mr-2 text-cyan-400" /> Results store
-                        </button>
+                            <Database className="w-4 h-4 text-cyan-400" /> Results store
+                        </Button>
                     ) : (
-                            <button
+                            <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={() => onNavigate && onNavigate('submit-benchmarks', { intent: 'submit-review' })}
-                                className="px-3.5 py-2 text-xs font-semibold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 transition-all flex items-center shadow-lg border border-emerald-500/20 cursor-pointer hover:shadow-emerald-500/20"
                             >
-                                <Upload className="w-4 h-4 mr-2" /> Submit Benchmarks
-                            </button>
+                                <Upload className="w-4 h-4" /> Submit Benchmarks
+                            </Button>
                     )}
 
                     <a 
@@ -1664,29 +1669,34 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                     </a>
 
                     <div className="relative group flex">
-                        <button 
-                            onClick={() => { 
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
                                 if (hasLocalBenchmarks) return;
                                 const shareUrl = generateShareUrl(bucketConfigs, apiConfigs, selectedSources);
                                 navigator.clipboard.writeText(shareUrl).then(() => {
-                                    setShareToast(true); 
-                                    setToastMessage('Link copied to clipboard!'); 
-                                    setTimeout(() => setShareToast(false), 2000); 
+                                    setShareToast(true);
+                                    setToastMessage('Link copied to clipboard!');
+                                    setTimeout(() => setShareToast(false), 2000);
                                 }).catch(err => {
-                                    setShareToast(true); 
-                                    setToastMessage('Failed to copy link'); 
-                                    setTimeout(() => setShareToast(false), 2000); 
+                                    setShareToast(true);
+                                    setToastMessage('Failed to copy link');
+                                    setTimeout(() => setShareToast(false), 2000);
                                 });
-                            }} 
-                            className={`px-3.5 py-2 text-xs font-medium rounded-xl flex items-center border relative transition-all cursor-pointer ${hasLocalBenchmarks ? 'text-slate-500 bg-slate-800 border-slate-700 cursor-not-allowed' : 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700'}`}
+                            }}
+                            className={cn(
+                                'relative',
+                                hasLocalBenchmarks && 'text-slate-500 dark:text-slate-500 cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800'
+                            )}
                         >
-                            <Share2 className="w-4 h-4 mr-2" /> Share view 
+                            <Share2 className="w-4 h-4" /> Share view
                             {shareToast && !hasLocalBenchmarks && (
                                 <div className="absolute -bottom-10 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap">
                                     {toastMessage}
                                 </div>
                             )}
-                        </button>
+                        </Button>
                         {hasLocalBenchmarks && (
                             <div className="absolute -bottom-10 right-0 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium px-3 py-1.5 rounded shadow-lg z-50 flex items-center whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                 Local benchmark results cannot be shared yet.
@@ -1720,17 +1730,16 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                         </div>
 
                         {selectedBenchmarks.size === 0 ? (
-                            <div className="flex flex-col items-center justify-center p-12 bg-slate-900/40 border border-slate-800/80 rounded-2xl text-center space-y-4 backdrop-blur-sm mb-6">
-                                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-full">
-                                    <BarChart2 className="w-8 h-8" />
-                                </div>
-                                <div className="space-y-1.5 max-w-md">
-                                    <h3 className="text-sm font-bold text-white">No Benchmarks Selected</h3>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        Select benchmark runs in the explorer table above to begin plotting and comparing throughput, latency, and cost efficiency metrics.
-                                    </p>
-                                </div>
-                            </div>
+                            <EmptyState
+                                className="bg-slate-900/40 border border-slate-800/80 rounded-2xl backdrop-blur-sm mb-6"
+                                icon={
+                                    <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-full">
+                                        <BarChart2 className="w-8 h-8" />
+                                    </div>
+                                }
+                                title="No Benchmarks Selected"
+                                message="Select benchmark runs in the explorer table above to begin plotting and comparing throughput, latency, and cost efficiency metrics."
+                            />
                         ) : (
                             <div className="space-y-4 mb-6">
                                 <ThroughputCostChart
@@ -1797,43 +1806,39 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
                 {/* Debug Info Modal */}
                 {debugInfo && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                        <div className="bg-slate-900 rounded-xl border border-slate-700 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-                            <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-white font-mono">{debugInfo.title}</h3>
-                                <button onClick={() => setDebugInfo(null)} className="text-slate-400 hover:text-white">
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            {debugInfo.url && (
-                                <div className="bg-slate-800/50 px-4 py-2 border-b border-slate-700 flex items-center gap-2">
-                                    <span className="text-xs text-slate-400">Source:</span>
-                                    <a
-                                        href={debugInfo.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-blue-400 hover:text-blue-300 underline truncate"
-                                    >
-                                        {debugInfo.url}
-                                    </a>
-                                    <ExternalLink size={10} className="text-slate-500" />
-                                </div>
-                            )}
-                            <div className="p-0 overflow-auto flex-1 bg-slate-950">
-                                <pre className="text-xs font-mono text-green-400 p-4 whitespace-pre-wrap">
-                                    {debugInfo.content}
-                                </pre>
-                            </div>
-                            <div className="p-4 border-t border-slate-800 bg-slate-800/50 text-right">
-                                <button
-                                    onClick={() => setDebugInfo(null)}
-                                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
+                    <Modal
+                        isOpen
+                        onClose={() => setDebugInfo(null)}
+                        closeOnEscape={false}
+                        title={debugInfo.title}
+                        size="xl"
+                        closeOnBackdrop={false}
+                        footer={
+                            <Button variant="secondary" size="md" onClick={() => setDebugInfo(null)}>
+                                Close
+                            </Button>
+                        }
+                    >
+                        {debugInfo.url && (
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-xs text-slate-400">Source:</span>
+                                <a
+                                    href={debugInfo.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-400 hover:text-blue-300 underline truncate"
                                 >
-                                    Close
-                                </button>
+                                    {debugInfo.url}
+                                </a>
+                                <ExternalLink size={10} className="text-slate-500" />
                             </div>
+                        )}
+                        <div className="bg-slate-950 rounded-lg overflow-auto">
+                            <pre className="text-xs font-mono text-green-400 p-4 whitespace-pre-wrap">
+                                {debugInfo.content}
+                            </pre>
                         </div>
-                    </div>
+                    </Modal>
                 )}
 
                 {/* Debug Data Inspector */}

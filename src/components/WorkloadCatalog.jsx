@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, MessageCircle, Share2 } from 'lucide-react';
+import { Button } from './ui';
 
 const WorkloadCatalog = ({ onNavigateBack }) => {
     const [copied, setCopied] = useState(false);
@@ -86,12 +87,14 @@ const WorkloadCatalog = ({ onNavigateBack }) => {
                     >
                         <MessageCircle className="w-4 h-4 mr-2" /> Contact us
                     </a>
-                    <button 
+                    <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={handleShare}
-                        className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex items-center border border-slate-800 hover:border-slate-700 relative"
+                        className="relative"
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> {copied ? 'Copied!' : 'Share view'}
-                    </button>
+                        <Share2 className="w-4 h-4" /> {copied ? 'Copied!' : 'Share view'}
+                    </Button>
                 </div>
             </header>
 

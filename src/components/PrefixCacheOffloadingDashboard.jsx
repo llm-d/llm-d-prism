@@ -14,12 +14,14 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+    BarChart, Bar, Cell, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-    ArrowLeft, Menu, Share2, Download,
-    ExternalLink, HardDrive, ChevronDown, ChevronUp, Check, MessageCircle
+    Download,
+    ExternalLink, HardDrive, ChevronDown, ChevronUp, Check
 } from 'lucide-react';
+import { WellLitHeader, Button, Badge, Panel, ToggleGroup, LoadingState, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis, gridProps, seriesColor, CHART_STATUS } from './ui';
+import { cn } from '../utils/cn';
 
 
 const getMachineType = (gpu) => {
@@ -37,15 +39,9 @@ const ThroughputBarTooltip = ({ active, payload, yMetric }) => {
     const yUnit = yMetric === 'qps' ? '' : 'tok/s';
     const formatVal = (v) => typeof v === 'number' ? (yMetric === 'qps' ? v.toFixed(2) : v.toFixed(0)) : v;
     return (
-        <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[180px] backdrop-blur-md text-slate-100 z-[100]">
-            <div className="text-[11px] font-bold text-white mb-1.5">{d.name}</div>
-            <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: d.fill }} />
-                <span className="text-sm font-mono font-bold" style={{ color: d.fill }}>
-                    {formatVal(d.throughput)} {yUnit}
-                </span>
-            </div>
-        </div>
+        <ChartTooltip title={d.name}>
+            <ChartTooltipRow color={d.fill} value={formatVal(d.throughput)} unit={yUnit ? ` ${yUnit}` : ''} />
+        </ChartTooltip>
     );
 };
 
@@ -54,29 +50,25 @@ const LatencyBarTooltip = ({ active, payload, xMetric }) => {
     const d = payload[0].payload;
     const metricLabels = { ntpot: 'NTPOT', tpot: 'TPOT', ttft: 'TTFT', itl: 'ITL', e2e: 'E2E' };
     return (
-        <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg shadow-xl p-3 min-w-[180px] backdrop-blur-md text-slate-100 z-[100]">
-            <div className="text-[11px] font-bold text-white mb-2">{d.name}</div>
-            <div className="text-[10px] text-slate-400 mb-1.5">{metricLabels[xMetric] || 'Latency'}</div>
-            <div className="space-y-1">
-                {payload.map((entry, i) => (
-                    <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: d.fill, opacity: entry.name === 'P50' ? 1 : entry.name === 'P90' ? 0.6 : 0.35 }} />
-                            <span className="text-slate-400 font-medium">{entry.name}</span>
-                        </div>
-                        <span className="font-mono font-bold" style={{ color: d.fill }}>
-                            {typeof entry.value === 'number' ? entry.value.toFixed(0) : entry.value} ms
-                        </span>
+        <ChartTooltip title={d.name}>
+            <div className="text-[10px] text-theme-muted mb-1.5">{metricLabels[xMetric] || 'Latency'}</div>
+            {/* Bespoke rows: the swatch keeps the series color at the percentile's opacity. */}
+            {payload.map((entry, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: d.fill, opacity: entry.name === 'P50' ? 1 : entry.name === 'P90' ? 0.6 : 0.35 }} aria-hidden="true" />
+                        <span className="text-theme-muted font-medium">{entry.name}</span>
                     </div>
-                ))}
-            </div>
-        </div>
+                    <span className="font-mono font-bold text-theme-text whitespace-nowrap">
+                        {typeof entry.value === 'number' ? entry.value.toFixed(0) : entry.value} ms
+                    </span>
+                </div>
+            ))}
+        </ChartTooltip>
     );
 };
 
 export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggleMobileNav }) {
-    const [shareToast, setShareToast] = useState(false);
-
     // Primary Controls State
     const [workloadSize, setWorkloadSize] = useState('50k'); // '30k' | '50k' | '70k'
     const [selectedModel] = useState('qwen3_32b'); // single option; selector rendered as static text
@@ -140,12 +132,6 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
         downloadAnchor.remove();
     };
 
-    const handleShareView = () => {
-        navigator.clipboard.writeText(window.location.href);
-        setShareToast(true);
-        setTimeout(() => setShareToast(false), 2000);
-    };
-
     const { barChartData } = useMemo(() => {
         if (!fetchedData || fetchedData.length === 0) {
             return { barChartData: [] };
@@ -176,13 +162,16 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
             return run.throughput;
         };
 
+        // Palette slots follow the entity (hue-family continuity with the old
+        // per-dashboard hex map): violet=baseline, amber/pink=LMCache tiers,
+        // sky/emerald=LLM-D-FS tiers. Never assigned by rank.
         const getColor = (r) => {
-            if (r.tech === 'pure-vllm' && r.setup === 'hbm') return '#a78bfa';
-            if (r.tech === 'lm-cache' && r.setup === 'cpu') return '#fb923c';
-            if (r.tech === 'lm-cache' && r.setup === 'cpu-lustre') return '#f472b6';
-            if (r.tech === 'llm-d-fs' && r.setup === 'cpu') return '#38bdf8';
-            if (r.tech === 'llm-d-fs' && r.setup === 'cpu-lustre') return '#4ade80';
-            return '#94a3b8';
+            if (r.tech === 'pure-vllm' && r.setup === 'hbm') return seriesColor(3); // violet
+            if (r.tech === 'lm-cache' && r.setup === 'cpu') return seriesColor(2); // amber
+            if (r.tech === 'lm-cache' && r.setup === 'cpu-lustre') return seriesColor(4); // pink
+            if (r.tech === 'llm-d-fs' && r.setup === 'cpu') return seriesColor(1); // sky
+            if (r.tech === 'llm-d-fs' && r.setup === 'cpu-lustre') return seriesColor(0); // emerald
+            return CHART_STATUS.neutral;
         };
 
         const getName = (r) => {
@@ -350,66 +339,23 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
     if (isLoading) {
         return (
             <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center w-full">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-sky-500 mb-4"></div>
-                <p className="text-slate-400 font-mono text-xs animate-pulse">Loading telemetry database...</p>
+                <LoadingState label="Loading telemetry database..." />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full">
-            
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center pt-16 md:pl-24 w-full font-sans relative overflow-hidden bg-[radial-gradient(#334155_1.2px,transparent_1.2px)] bg-[size:24px_24px] bg-repeat">
+            {/* Pulsing Vibrant Neon Glow Background Shapes */}
+            <div className="absolute top-0 -left-1/4 w-1/2 h-1/2 bg-blue-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
+            <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-emerald-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+
             {/* Top Navigation Bar */}
-            <header className="w-full h-16 border-b border-slate-800 flex justify-between items-center px-6 bg-slate-900 fixed top-0 left-0 right-0 z-[9999]">
-                <div className="flex items-center gap-4">
-                    <button onClick={onToggleMobileNav} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden">
-                        <Menu className="h-6 w-6" />
-                    </button>
-
-                    {onNavigateBack && (
-                        <button onClick={onNavigateBack} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                            <ArrowLeft className="h-5 w-5" />
-                        </button>
-                    )}
-
-                    <div className="flex items-center gap-2.5 border-r border-slate-500 pr-4">
-                        <img src="https://llm-d.ai/img/llm-d-logotype-and-icon.png" alt="llm-d Logo" className="h-6 object-contain" />
-                        <span className="text-lg font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hidden sm:inline">
-                            Prism
-                        </span>
-                    </div>
-
-                    <div className="flex items-center">
-                        <h1 className="text-sm sm:text-lg font-bold text-white tracking-wide truncate">Prefix cache offloading</h1>
-                        <span className="ml-3 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden sm:inline">
-                            Guided path
-                        </span>
-                    </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                    <a
-                        href="https://llm-d.ai/docs/community"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 cursor-pointer"
-                        title="Contact us"
-                    >
-                        <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
-                        <span className="hidden sm:inline">Contact us</span>
-                    </a>
-
-                    <button onClick={handleShareView} className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center border border-slate-700 relative cursor-pointer">
-                        <Share2 className="w-3.5 h-3.5 mr-1.5" />
-                        <span>Share link</span>
-                        {shareToast && (
-                            <div className="absolute -bottom-10 right-0 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-lg z-50 whitespace-nowrap animate-in fade-in duration-200">
-                                Link copied!
-                            </div>
-                        )}
-                    </button>
-                </div>
-            </header>
+            <WellLitHeader
+                pageTitle="Prefix cache offloading"
+                onNavigateBack={onNavigateBack}
+                onToggleMobileNav={onToggleMobileNav}
+            />
 
             {/* Main Content */}
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-6">
@@ -441,11 +387,12 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             {/* Baseline (HBM Only) */}
                             <button
                                 onClick={() => setActiveTiers(prev => ({ ...prev, baseline: !prev.baseline }))}
-                                className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer ${
+                                className={cn(
+                                    'w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer',
                                     activeTiers.baseline
                                         ? 'border-violet-500/30 bg-slate-900/60'
                                         : 'border-slate-800/50 bg-slate-900/20 opacity-60'
-                                }`}
+                                )}
                             >
                                 <div>
                                     <div className="text-xs font-semibold text-slate-200">Baseline (HBM only)</div>
@@ -453,21 +400,22 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     {activeTiers.baseline ? (
-                                        <span className="text-[9px] bg-violet-500/20 text-violet-300 border border-violet-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                        <Badge tone="violet" size="xs">Active</Badge>
                                     ) : (
-                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                        <Badge tone="neutral" size="xs">Inactive</Badge>
                                     )}
                                 </div>
                             </button>
 
                             {/* CPU Offloading */}
-                            <button 
+                            <button
                                 onClick={() => setActiveTiers(prev => ({ ...prev, cpu: !prev.cpu }))}
-                                className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer ${
-                                    activeTiers.cpu 
-                                        ? 'border-sky-500/30 bg-slate-900/60' 
+                                className={cn(
+                                    'w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer',
+                                    activeTiers.cpu
+                                        ? 'border-sky-500/30 bg-slate-900/60'
                                         : 'border-slate-800/50 bg-slate-900/20 opacity-60'
-                                }`}
+                                )}
                             >
                                 <div>
                                     <div className="text-xs font-semibold text-slate-200">CPU Offloading (LLM-D-FS)</div>
@@ -485,21 +433,22 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
                                     {activeTiers.cpu ? (
-                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                        <Badge tone="info" size="xs">Active</Badge>
                                     ) : (
-                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                        <Badge tone="neutral" size="xs">Inactive</Badge>
                                     )}
                                 </div>
                             </button>
 
                             {/* CPU + Lustre */}
-                            <button 
+                            <button
                                 onClick={() => setActiveTiers(prev => ({ ...prev, cpuLustre: !prev.cpuLustre }))}
-                                className={`w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer ${
-                                    activeTiers.cpuLustre 
-                                        ? 'border-emerald-500/30 bg-slate-900/60' 
+                                className={cn(
+                                    'w-full text-left border rounded-lg p-2 flex items-center justify-between transition-all cursor-pointer',
+                                    activeTiers.cpuLustre
+                                        ? 'border-emerald-500/30 bg-slate-900/60'
                                         : 'border-slate-800/50 bg-slate-900/20 opacity-60'
-                                }`}
+                                )}
                             >
                                 <div>
                                     <div className="text-xs font-semibold text-slate-200">CPU + Lustre Offloading</div>
@@ -517,9 +466,9 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
                                     {activeTiers.cpuLustre ? (
-                                        <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Active</span>
+                                        <Badge tone="brand" size="xs">Active</Badge>
                                     ) : (
-                                        <span className="text-[9px] bg-slate-800 text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider select-none">Inactive</span>
+                                        <Badge tone="neutral" size="xs">Inactive</Badge>
                                     )}
                                 </div>
                             </button>
@@ -542,7 +491,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Specs</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
+                                    <Badge tone="warning" size="xs">Coming soon</Badge>
                                 </div>
                             </div>
 
@@ -557,7 +506,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                         <span className="text-[10px]">Specs</span>
                                         <ExternalLink className="w-3 h-3" />
                                     </a>
-                                    <span className="text-[9px] font-extrabold text-amber-600/70 uppercase tracking-widest border border-amber-600/30 px-1.5 py-0.5 rounded">Coming soon</span>
+                                    <Badge tone="warning" size="xs">Coming soon</Badge>
                                 </div>
                             </div>
                         </div>
@@ -656,7 +605,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                     </div>
 
                     {/* CARD 2: Primary Outcomes */}
-                    <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+                    <Panel padding="sm" className="lg:col-span-3 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-500/30 transition-all">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none transition-all group-hover:bg-emerald-500/10" />
                         <div>
                             <div className="text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-widest mb-1 flex justify-between items-center">
@@ -694,7 +643,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     return (
                                         <div className="grid grid-cols-1 gap-2 font-sans text-xs">
                                             {/* Throughput Box */}
-                                            <div className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all ${opt.hoverBorderClass}`}>
+                                            <div className={cn('bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all', opt.hoverBorderClass)}>
                                                 <div>
                                                     <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
                                                         Throughput increase
@@ -703,13 +652,13 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                         (output tokens/sec)
                                                     </div>
                                                 </div>
-                                                <h4 className={`text-base font-black font-mono ${outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass}`}>
+                                                <h4 className={cn('text-base font-black font-mono', outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass)}>
                                                     {outcomes.throughput}
                                                 </h4>
                                             </div>
 
                                             {/* Latency Box */}
-                                            <div className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all ${opt.hoverBorderClass}`}>
+                                            <div className={cn('bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center transition-all', opt.hoverBorderClass)}>
                                                 <div>
                                                     <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
                                                         Latency reduction
@@ -718,7 +667,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                         (TTFT P50)
                                                     </div>
                                                 </div>
-                                                <h4 className={`text-base font-black font-mono ${outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400'}`}>
+                                                <h4 className={cn('text-base font-black font-mono', outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400')}>
                                                     {outcomes.latency}
                                                 </h4>
                                             </div>
@@ -734,12 +683,12 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                 <span>Throughput increase</span>
                                                 <span className="text-[8px] text-slate-500 lowercase font-normal">(output tokens/sec)</span>
                                             </div>
-                                            <div className={`grid gap-2 ${activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                            <div className={cn('grid gap-2', activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
                                                 {activeOpts.map(opt => {
                                                     const outcomes = derivedOutcomesMap[workloadSize]?.[opt.id] || { throughput: 'N/A' };
                                                     return (
-                                                        <div key={opt.id} className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all ${opt.hoverBorderClass}`}>
-                                                            <h4 className={`text-base font-black font-mono ${outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass}`}>
+                                                        <div key={opt.id} className={cn('bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all', opt.hoverBorderClass)}>
+                                                            <h4 className={cn('text-base font-black font-mono', outcomes.throughput === 'OOM' ? 'text-red-500' : opt.colorClass)}>
                                                                 {outcomes.throughput}
                                                             </h4>
                                                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate max-w-full">
@@ -757,12 +706,12 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                 <span>Latency reduction</span>
                                                 <span className="text-[8px] text-slate-500 lowercase font-normal">(TTFT P50)</span>
                                             </div>
-                                            <div className={`grid gap-2 ${activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                            <div className={cn('grid gap-2', activeOpts.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
                                                 {activeOpts.map(opt => {
                                                     const outcomes = derivedOutcomesMap[workloadSize]?.[opt.id] || { latency: 'N/A' };
                                                     return (
-                                                        <div key={opt.id} className={`bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all ${opt.hoverBorderClass}`}>
-                                                            <h4 className={`text-base font-black font-mono ${outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400'}`}>
+                                                        <div key={opt.id} className={cn('bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5 flex flex-col justify-center items-center transition-all', opt.hoverBorderClass)}>
+                                                            <h4 className={cn('text-base font-black font-mono', outcomes.latency === 'OOM' ? 'text-red-500' : 'text-amber-400')}>
                                                                 {outcomes.latency}
                                                             </h4>
                                                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate max-w-full">
@@ -777,10 +726,10 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 );
                             })()}
                         </div>
-                    </div>
+                    </Panel>
 
                     {/* CARD 3: Action */}
-                    <div className="lg:col-span-3 border border-slate-800 rounded-xl bg-slate-900 p-4 flex flex-col justify-between shadow-lg relative overflow-hidden">
+                    <Panel padding="sm" className="lg:col-span-3 flex flex-col justify-between relative overflow-hidden">
                         <div>
                             <p className="text-[11px] font-extrabold text-cyan-400 uppercase tracking-widest mb-2">
                                 Action
@@ -802,7 +751,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             <span>View instructions</span>
                             <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-80" />
                         </a>
-                    </div>
+                    </Panel>
                 </div>
 
                 {/* Detailed Interactive Chart Container (Inference Scheduling Pattern) */}
@@ -847,21 +796,23 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={handleExportData} 
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={handleExportData}
                                     title="Export Raw Telemetry JSON"
-                                    className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer"
                                 >
                                     <Download className="w-3.5 h-3.5" />
                                     <span>Export</span>
-                                </button>
-                                <button 
-                                    onClick={() => setShowChartFilters(!showChartFilters)} 
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-[10px] font-extrabold uppercase tracking-widest border border-slate-700/50 cursor-pointer"
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setShowChartFilters(!showChartFilters)}
                                 >
                                     Filters
                                     {showChartFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                </button>
+                                </Button>
                             </div>
                         </div>
 
@@ -869,26 +820,17 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             <div className="bg-slate-800/40 border-b border-slate-700/50 px-6 py-3 flex items-center overflow-hidden">
                                 <div className="flex items-center gap-4">
                                     <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest shrink-0">Throughput:</span>
-                                    <div className="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5 whitespace-nowrap">
-                                        {[
-                                            { id: 'output', label: 'Output' },
-                                            { id: 'input', label: 'Input' },
-                                            { id: 'total', label: 'Total' },
-                                            { id: 'qps', label: 'QPS' },
-                                        ].map(metric => (
-                                            <button
-                                                key={metric.id}
-                                                onClick={() => setYMetric(metric.id)}
-                                                className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer shrink-0 ${
-                                                    yMetric === metric.id
-                                                        ? 'bg-indigo-600 text-white shadow'
-                                                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                                }`}
-                                            >
-                                                {metric.label}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <ToggleGroup
+                                        options={[
+                                            { value: 'output', label: 'Output' },
+                                            { value: 'input', label: 'Input' },
+                                            { value: 'total', label: 'Total' },
+                                            { value: 'qps', label: 'QPS' },
+                                        ]}
+                                        value={yMetric}
+                                        onChange={setYMetric}
+                                        className="whitespace-nowrap"
+                                    />
                                 </div>
                             </div>
                         )}
@@ -902,17 +844,13 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 <div className="relative w-full h-[280px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={barChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} vertical={false} />
-                                            <XAxis
+                                            <CartesianGrid {...gridProps()} opacity={0.5} vertical={false} />
+                                            <ChartXAxis
                                                 dataKey="name"
-                                                tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 600 }}
-                                                axisLine={{ stroke: '#334155' }}
                                                 tickLine={false}
                                                 interval={0}
                                             />
-                                            <YAxis
-                                                tick={{ fill: '#64748b', fontSize: 10 }}
-                                                axisLine={{ stroke: '#334155' }}
+                                            <ChartYAxis
                                                 tickLine={false}
                                                 width={60}
                                             />
@@ -939,27 +877,18 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     <div className="bg-slate-800/40 border-y border-slate-700/50 px-6 py-3 mb-4 -mx-4 flex flex-wrap items-center gap-x-6 gap-y-2">
                                         <div className="flex items-center gap-4">
                                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest shrink-0">Latency:</span>
-                                            <div className="flex items-center bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 gap-0.5 whitespace-nowrap overflow-x-auto no-scrollbar">
-                                                {[
-                                                    { id: 'ntpot', label: 'NTPOT' },
-                                                    { id: 'tpot', label: 'TPOT' },
-                                                    { id: 'ttft', label: 'TTFT' },
-                                                    { id: 'itl', label: 'ITL' },
-                                                    { id: 'e2e', label: 'E2E Latency' },
-                                                ].map(mode => (
-                                                    <button
-                                                        key={mode.id}
-                                                        onClick={() => setXMetric(mode.id)}
-                                                        className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer shrink-0 ${
-                                                            xMetric === mode.id
-                                                                ? 'bg-teal-600 text-white shadow-sm'
-                                                                : 'text-slate-400 hover:text-slate-250 hover:bg-slate-900'
-                                                        }`}
-                                                    >
-                                                        {mode.label}
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            <ToggleGroup
+                                                options={[
+                                                    { value: 'ntpot', label: 'NTPOT' },
+                                                    { value: 'tpot', label: 'TPOT' },
+                                                    { value: 'ttft', label: 'TTFT' },
+                                                    { value: 'itl', label: 'ITL' },
+                                                    { value: 'e2e', label: 'E2E Latency' },
+                                                ]}
+                                                value={xMetric}
+                                                onChange={setXMetric}
+                                                className="whitespace-nowrap overflow-x-auto no-scrollbar"
+                                            />
                                         </div>
                                         <div className="flex items-center gap-2 ml-auto">
                                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest shrink-0">Percentiles:</span>
@@ -968,7 +897,10 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                     <button
                                                         key={p}
                                                         onClick={() => setVisiblePercentiles(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
-                                                        className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer ${visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                                        className={cn(
+                                                            'px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer',
+                                                            visiblePercentiles.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                                        )}
                                                     >
                                                         {p}
                                                     </button>
@@ -983,17 +915,13 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 <div className="relative w-full h-[250px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={barChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} vertical={false} />
-                                            <XAxis
+                                            <CartesianGrid {...gridProps()} opacity={0.5} vertical={false} />
+                                            <ChartXAxis
                                                 dataKey="name"
-                                                tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 600 }}
-                                                axisLine={{ stroke: '#334155' }}
                                                 tickLine={false}
                                                 interval={0}
                                             />
-                                            <YAxis
-                                                tick={{ fill: '#64748b', fontSize: 10 }}
-                                                axisLine={{ stroke: '#334155' }}
+                                            <ChartYAxis
                                                 tickLine={false}
                                                 width={60}
                                                 unit=" ms"
@@ -1060,7 +988,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                 </div>
 
                 {/* Secondary View: Context Length vs Storage Tier Heatmap (Deploy Planner) */}
-                <div id="summary-table" className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <Panel id="summary-table" padding="none" className="rounded-2xl shadow-xl overflow-hidden">
                     <div className="p-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-4">
                         <div>
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1089,20 +1017,21 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 {derivedHeatmapData.map((row, idx) => {
                                     const isCurrent = workloadSize === row.context;
                                     return (
-                                        <tr 
-                                            key={idx} 
+                                        <tr
+                                            key={idx}
                                             onClick={() => setWorkloadSize(row.context)}
-                                            className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${
-                                                isCurrent ? 'bg-slate-800/70' : ''
-                                            }`}
+                                            className={cn(
+                                                'hover:bg-slate-800/30 transition-colors cursor-pointer',
+                                                isCurrent && 'bg-slate-800/70'
+                                            )}
                                         >
                                             <td className="p-4 text-white font-sans flex items-center gap-2">
                                                 <span>{row.context} Tokens</span>
-                                                {isCurrent && <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wider">Active</span>}
+                                                {isCurrent && <Badge tone="info" size="xs">Active</Badge>}
                                             </td>
-                                            <td className={`p-4 font-mono ${row.baseline.color}`}>{row.baseline.value}</td>
-                                            <td className={`p-4 font-mono ${row.fsCpu.color}`}>{row.fsCpu.value}</td>
-                                            <td className={`p-4 font-mono ${row.fsLustre.color}`}>{row.fsLustre.value}</td>
+                                            <td className={cn('p-4 font-mono', row.baseline.color)}>{row.baseline.value}</td>
+                                            <td className={cn('p-4 font-mono', row.fsCpu.color)}>{row.fsCpu.value}</td>
+                                            <td className={cn('p-4 font-mono', row.fsLustre.color)}>{row.fsLustre.value}</td>
                                             <td className="p-4 bg-slate-950/30 text-white font-sans flex items-center gap-1.5">
                                                 <Check className="w-4 h-4 text-emerald-400" /> {row.sweetSpot}
                                             </td>
@@ -1112,7 +1041,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </Panel>
 
             </main>
 
