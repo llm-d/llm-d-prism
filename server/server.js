@@ -366,6 +366,142 @@ app.get('/api/prefix-cache/data', async (req, res) => {
     }
 });
 
+// --- API: P/D Disaggregation well-lit path data ---
+// Reads llm-d-benchmark BRv0.2.x reports from
+// gs://llm-d-benchmarks/pd-disaggregation/pd-ratio-<P>-<D>/reports-<timestamp>/
+// and returns one normalized run object per P:D ratio (see
+// specs/changes/pd-disaggregation-dashboard/proposal.md).
+app.get('/api/pd-disaggregation/data', async (req, res) => {
+    try {
+        let client;
+        const adcPath = process.env.GOOGLE_APPLICATION_DEFAULT_CREDENTIALS;
+        if (adcPath && fs.existsSync(adcPath)) {
+            try {
+                const creds = JSON.parse(fs.readFileSync(adcPath, 'utf8'));
+                if (creds.type === 'authorized_user') {
+                    client = new UserRefreshClient({
+                        clientId: creds.client_id,
+                        clientSecret: creds.client_secret,
+                        refreshToken: creds.refresh_token
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse ADC file:', e);
+            }
+        }
+
+        if (!client) {
+            client = await auth.getClient();
+        }
+        const token = await client.getAccessToken();
+        const accessToken = token.token;
+
+        let allItems = [];
+        let pageToken = '';
+        let hasMore = true;
+
+        while (hasMore) {
+            const listUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o?prefix=pd-disaggregation/` +
+                (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+            const response = await fetch(listUrl, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to list GCS bucket: ${response.status}`);
+            }
+            const data = await response.json();
+            if (data.items) {
+                allItems = allItems.concat(data.items);
+            }
+            if (data.nextPageToken) {
+                pageToken = data.nextPageToken;
+            } else {
+                hasMore = false;
+            }
+        }
+
+        // Object layout: pd-disaggregation/pd-ratio-<P>-<D>/reports-<timestamp>/<file>.yaml
+        // Per ratio dir, keep only the lexicographically latest reports-<timestamp>
+        // directory (timestamps are sortable YYYYMMDD-HHMMSS) so re-published runs
+        // supersede older ones.
+        const latestByRatio = new Map();
+        for (const item of allItems) {
+            if (!item.name.endsWith('.yaml')) continue;
+            const parts = item.name.split('/');
+            if (parts.length < 4 || !parts[1].startsWith('pd-ratio-') || !parts[2].startsWith('reports-')) continue;
+            const current = latestByRatio.get(parts[1]);
+            if (!current || parts[2] > current.reportsDir) {
+                latestByRatio.set(parts[1], { reportsDir: parts[2], item });
+            }
+        }
+
+        const results = [];
+
+        await Promise.all([...latestByRatio.values()].map(async ({ item }) => {
+            try {
+                const reportUrl = `https://storage.googleapis.com/storage/v1/b/llm-d-benchmarks/o/${encodeURIComponent(item.name)}?alt=media`;
+                const response = await fetch(reportUrl, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                if (!response.ok) return;
+
+                const doc = yaml.load(await response.text());
+
+                // Replica counts come from the stack components, not the path.
+                const stack = doc.scenario?.stack || [];
+                const prefillComp = stack.find(c => c.standardized?.role === 'prefill');
+                const decodeComp = stack.find(c => c.standardized?.role === 'decode');
+                const prefill = prefillComp?.standardized?.replicas || 0;
+                const decode = decodeComp?.standardized?.replicas || 0;
+
+                const aggregate = doc.results?.request_performance?.aggregate || {};
+                const latency = aggregate.latency || {};
+                const throughput = aggregate.throughput || {};
+                const std = prefillComp?.standardized || {};
+
+                results.push({
+                    ratio: `${prefill}:${decode}`,
+                    prefill,
+                    decode,
+                    // Latencies stay in ms as reported; the frontend converts
+                    // TTFT/E2E to seconds for display.
+                    ttft: {
+                        mean: latency.time_to_first_token?.mean || 0,
+                        p90: latency.time_to_first_token?.p90 || 0
+                    },
+                    e2e: {
+                        mean: latency.request_latency?.mean || 0,
+                        p90: latency.request_latency?.p90 || 0
+                    },
+                    itl: {
+                        mean: latency.inter_token_latency?.mean || 0
+                    },
+                    throughput: {
+                        output: throughput.output_token_rate?.mean || 0,
+                        input: throughput.input_token_rate?.mean || 0,
+                        total: throughput.total_token_rate?.mean || 0
+                    },
+                    requests: aggregate.requests?.total || 0,
+                    model: std.model?.name || 'unknown',
+                    accelerator: std.accelerator?.model || 'unknown',
+                    tp: std.accelerator?.parallelism?.tp || 1,
+                    totalReplicas: prefill + decode,
+                    uid: doc.run?.uid || item.name,
+                    reportPath: item.name
+                });
+            } catch (e) {
+                console.error(`Error loading P/D disaggregation report ${item.name} from GCS:`, e);
+            }
+        }));
+
+        results.sort((a, b) => a.prefill - b.prefill);
+        res.json(results);
+    } catch (err) {
+        console.error("Error loading P/D disaggregation GCS reports", err);
+        res.status(500).json({ error: "Failed to load P/D disaggregation reports" });
+    }
+});
+
 app.post('/api/local/submit', async (req, res) => {
     const fs = await import('fs');
     const payload = req.body;

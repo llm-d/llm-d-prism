@@ -43,3 +43,14 @@ export function getChartTheme() {
 export function gridProps() {
     return { stroke: getChartTheme().grid, strokeDasharray: '3 3' };
 }
+
+// Spread into recharts <Tooltip {...tooltipProps()} content={<... />} />:
+// the standard hover cursor wash, no animation, and a wrapper that beats
+// the chart chrome's stacking context.
+export function tooltipProps() {
+    return {
+        isAnimationActive: false,
+        wrapperStyle: { outline: 'none', zIndex: 100 },
+        cursor: { fill: 'rgba(148, 163, 184, 0.08)' },
+    };
+}

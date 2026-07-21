@@ -43,11 +43,13 @@ export function ChartTooltip({ title, className, children }) {
     );
 }
 
-export function ChartTooltipRow({ color, label, value, unit = '' }) {
+// `opacity` lets stat rows (Mean/P50/P90/P99) keep the series color at the
+// stat's bar opacity — see the stat-bars rule in skills/style.md.
+export function ChartTooltipRow({ color, opacity = 1, label, value, unit = '' }) {
     return (
         <div className="flex items-center justify-between gap-4 text-[11px]">
             <div className="flex items-center gap-1.5 min-w-0">
-                {color && <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} aria-hidden="true" />}
+                {color && <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color, opacity }} aria-hidden="true" />}
                 <span className="text-theme-muted font-medium truncate">{label}</span>
             </div>
             <span className="font-mono font-bold text-theme-text whitespace-nowrap">
