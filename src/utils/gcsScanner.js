@@ -496,6 +496,7 @@ export const parseAgenticWorkloadReport = (content, filePath) => {
             accelerator: stack.accelerator?.type || 'Unknown',
             machineType: stack.machine_type || 'Unknown',
             replicas: stack.replicas || 0,
+            acceleratorCount: stack.accelerator?.count || stack.replicas || 1,
             inputLengthMean: requests.input_length?.mean || 0,
             outputLengthMean: requests.output_length?.mean || 0,
             ttft: {

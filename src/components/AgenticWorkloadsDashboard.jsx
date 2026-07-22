@@ -207,8 +207,6 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                 if (combinedReports.length > 0) {
                     const concurrencies = [...new Set(combinedReports.map(r => r.concurrency))].sort((a, b) => a - b);
                     setSelectedConcurrency(concurrencies[concurrencies.length - 1]);
-                    const maxLatency = Math.max(...combinedReports.flatMap(r => [r.ttft.p99, r.tpot.p99, r.ntpot.p99, r.itl.p99, r.e2e.p99]));
-                    setZoomXMax(Math.ceil(maxLatency / 1000) * 1000);
                 }
             } catch (e) {
                 console.error('Failed to load agentic workloads data:', e);
@@ -268,7 +266,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
 
                 const points = scenarioData.map(d => ({
                     x: d[xMetric]?.[pKey] || 0,
-                    y: getThroughputValue(d, yMetric),
+                    y: getThroughputValue(d, yMetric) / (zoomPerChip ? Math.max(Number(d.acceleratorCount || d.replicas) || 1, 1) : 1),
                     concurrency: d.concurrency,
                     scenarioName: s.name,
                 })).filter(pt => pt.x > 0 && pt.y > 0);
@@ -285,7 +283,41 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             });
         });
         return lines;
-    }, [data, activeTiers, visiblePercentiles, zoomXAxis, zoomYAxis]);
+    }, [data, activeTiers, visiblePercentiles, zoomXAxis, zoomYAxis, zoomPerChip]);
+
+    const chartDataMax = useMemo(() => {
+        const values = buildChartLines.flatMap(line => line.data.map(point => point.x));
+        return values.length ? Math.max(...values) : 100;
+    }, [buildChartLines]);
+
+    const chartDataMin = useMemo(() => {
+        const values = buildChartLines
+            .flatMap(line => line.data.map(point => point.x))
+            .filter(value => value > 0);
+        return values.length ? Math.min(...values) : 1;
+    }, [buildChartLines]);
+
+    const capStep = Math.max(1, Math.ceil(chartDataMax / 1000));
+    const effectiveXMax = zoomXMax === null
+        ? chartDataMax
+        : Math.max(chartDataMin, Math.min(zoomXMax, chartDataMax));
+
+    const visibleChartLines = useMemo(() => buildChartLines.map(line => ({
+        ...line,
+        data: line.data.filter(point => point.x <= effectiveXMax),
+    })), [buildChartLines, effectiveXMax]);
+
+    const chartDomains = useMemo(() => {
+        const visiblePoints = visibleChartLines.flatMap(line => line.data);
+        const yValues = visiblePoints.map(point => point.y);
+
+        const yMax = yValues.length ? Math.max(...yValues) : 1;
+
+        return {
+            x: [zoomLogScale ? chartDataMin : 'auto', effectiveXMax],
+            y: [0, Math.max(1, Math.ceil(yMax * 1.05))],
+        };
+    }, [chartDataMin, effectiveXMax, visibleChartLines, zoomLogScale]);
 
     const outcomes = useMemo(() => {
         if (!data.length || selectedConcurrency === null) return null;
@@ -354,7 +386,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
     };
 
     const xAxisLabel = X_LABELS[zoomXAxis] || 'Latency';
-    const yAxisLabel = Y_LABELS[zoomYAxis] || 'Throughput';
+    const yAxisLabel = `${Y_LABELS[zoomYAxis] || 'Throughput'}${zoomPerChip ? ' per Chip' : ''}`;
 
     if (loading) {
         return (
@@ -422,7 +454,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                 size="xs"
                                 options={[['ntpot', 'NTPOT'], ['tpot', 'TPOT'], ['ttft', 'TTFT'], ['itl', 'ITL'], ['e2e', 'E2E Latency']].map(([value, label]) => ({ value, label }))}
                                 value={zoomXAxis}
-                                onChange={setZoomXAxis}
+                                onChange={(value) => {
+                                    setZoomXAxis(value);
+                                    setZoomXMax(null);
+                                }}
                             />
                         </div>
                         <div className="flex items-center gap-2">
@@ -452,8 +487,8 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 px-3 py-1 rounded-lg">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Cap:</span>
-                                <input type="range" min={100} max={zoomXMax || 200000} step={100} value={zoomXMax || 200000} onChange={(e) => setZoomXMax(Number(e.target.value))} className="w-28 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
-                                <input type="number" value={zoomXMax || ''} onChange={(e) => setZoomXMax(Number(e.target.value))} className="w-16 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all" />
+                                <input type="range" min={chartDataMin} max={chartDataMax} step={capStep} value={effectiveXMax} onChange={(e) => setZoomXMax(Number(e.target.value))} className="w-28 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
+                                <input type="number" min={chartDataMin} max={chartDataMax} value={effectiveXMax} onChange={(e) => setZoomXMax(e.target.value === '' ? null : Math.max(chartDataMin, Number(e.target.value)))} className="w-16 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all" />
                                 <span className="text-[9px] text-slate-500 font-mono font-bold">ms</span>
                             </div>
                         </div>
@@ -466,18 +501,18 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                     <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
                             <CartesianGrid {...gridProps()} opacity={0.4} />
-                            <ChartXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={['auto', 'auto']} scale={zoomLogScale ? 'log' : 'auto'} />
-                            <ChartYAxis dataKey="y" type="number" name="Throughput" label={yAxisLabel} domain={['auto', 'auto']} />
+                            <ChartXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={chartDomains.x} scale={zoomLogScale ? 'log' : 'auto'} allowDataOverflow />
+                            <ChartYAxis dataKey="y" type="number" name="Throughput" label={yAxisLabel} domain={chartDomains.y} allowDataOverflow />
                             <Tooltip
                                 content={<RichAgentWorkloadTooltip metadata={metadata} />}
                                 wrapperStyle={{ outline: 'none', zIndex: 100 }}
                                 cursor={{ stroke: getChartTheme().tick, strokeWidth: 1, strokeDasharray: '4 4' }}
                             />
-                            {buildChartLines.map(line => (
+                            {visibleChartLines.map(line => (
                                 <Scatter
                                     key={line.id}
                                     name={line.name}
-                                    data={zoomXMax ? line.data.filter(pt => pt.x <= zoomXMax) : line.data}
+                                    data={line.data}
                                     fill={line.color}
                                     line={{ stroke: line.color, strokeWidth: line.id.includes('-p50') ? 3 : 2, strokeDasharray: line.dash === 'none' ? undefined : line.dash }}
                                     isAnimationActive={false}
