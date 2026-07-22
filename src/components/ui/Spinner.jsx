@@ -32,12 +32,19 @@ export function Spinner({ size = 'sm', className }) {
     );
 }
 
-// Centered spinner + label for section/page level loading.
-export function LoadingState({ label = 'Loading…', size = 'lg', className }) {
-    return (
+// Centered spinner + label for section/page level loading. fullPage renders
+// the well-lit dark full-viewport shell around it (pre-data dashboard state).
+export function LoadingState({ label = 'Loading…', size = 'lg', fullPage = false, className }) {
+    const body = (
         <div className={cn('flex-1 flex flex-col items-center justify-center gap-4 py-16', className)}>
             <Spinner size={size} />
             {label && <div className="text-sm font-semibold text-theme-muted">{label}</div>}
+        </div>
+    );
+    if (!fullPage) return body;
+    return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center w-full">
+            {body}
         </div>
     );
 }

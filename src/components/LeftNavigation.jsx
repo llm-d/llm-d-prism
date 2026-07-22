@@ -61,6 +61,11 @@ const ITEM_THEMES = {
         activeIcon: 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.35)]',
         indicator: 'bg-gradient-to-b from-cyan-400 to-blue-500 shadow-[0_0_8px_rgba(6,182,212,0.6)]'
     },
+    'pd-disaggregation': {
+        activeBg: 'bg-gradient-to-r from-violet-950/20 via-purple-950/10 to-slate-950/20 border-violet-500/20 text-violet-300',
+        activeIcon: 'bg-gradient-to-br from-violet-500 to-purple-500 text-white shadow-[0_0_15px_rgba(139,92,246,0.35)]',
+        indicator: 'bg-gradient-to-b from-violet-400 to-purple-500 shadow-[0_0_8px_rgba(139,92,246,0.6)]'
+    },
     'agentic-serving': {
         activeBg: 'bg-gradient-to-r from-emerald-950/20 via-teal-950/10 to-slate-950/20 border-emerald-500/20 text-emerald-300',
         activeIcon: 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.35)]',

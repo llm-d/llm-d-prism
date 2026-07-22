@@ -80,10 +80,12 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
 | `Panel` | `title, actions, padding: none\|sm\|md` | `bg-white dark:bg-slate-800 rounded-xl border …` shells |
 | `StatCard` | `icon, title, value, details[], onClick, active` | KPI cards (clickable = filter card) |
 | `EmptyState` | `icon, title, message, action` | "No data" markup |
-| `Spinner` / `LoadingState` | `size` / `label` | inline `animate-spin` loaders |
+| `Spinner` / `LoadingState` | `size` / `label, fullPage` | inline `animate-spin` loaders; `fullPage` = pre-data dashboard shell |
 | `PageHeader` | `title, subtitle, badge, onNavigateBack, onToggleMobileNav, actions` | dashboard header chrome |
 | `ShareLinkButton` | — (copies URL + "Link copied!" toast) | per-dashboard share buttons |
-| `ToggleGroup` | `options[{value,label}], value, onChange, fullWidth` | metric/mode pill selectors |
+| `ToggleGroup` | `options[{value,label}], value, onChange, fullWidth` | metric/mode pill selectors (single-select) |
+| `StatPills` | `options[], active[], onToggle` | stat/percentile visibility multi-toggles |
+| `FactCell` | `label, value, title` | scenario-card label + mono value cells |
 
 ## Chart rules
 
@@ -110,16 +112,27 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
   Omit options the data lacks — never render a selectable metric that can't be
   plotted — but keep the canonical order and labels for the ones present. Do
   not invent synonyms ("Request latency" → `E2E`; "tok/s" variants → the
-  canonical four). When a metric supports only one stat (e.g. mean-only ITL),
-  render static text ("Mean — only stat reported") in place of the stat
-  selector for that metric, per the no-single-option-filter rule.
+  canonical four).
+- **Stat bars are opacity-encoded, not single-select.** On latency bar charts,
+  render the available stats SIMULTANEOUSLY as grouped bars in the SAME series
+  color at fixed opacities — `P50`/`Mean` = 1, `P90` = 0.6, `P99` = 0.35 (per
+  `<Cell fillOpacity>`; see the Prefix cache latency chart). Visibility is
+  controlled by the `StatPills` primitive in the Filters row ("Stats:" /
+  "Percentiles:"), and tooltip swatches keep the series color at the stat's
+  opacity (`ChartTooltipRow opacity`). When a metric reports only one stat (e.g. mean-only ITL), hide the
+  stat control entirely for that metric — no placeholder text.
 - **Collapsible chart filters.** When a chart has more than one control group,
   put a `Filters` toggle (Button with a ChevronUp/ChevronDown suffix, default
   open) in the `ChartContainer` actions and collapse the control row behind
   it — see the Prefix cache dashboard's `showChartFilters` pattern. A single
   ToggleGroup does not need the collapse.
-- Tooltips: build on `ChartTooltip` + `ChartTooltipRow`. The swatch carries
-  series identity; text wears text tokens, never the series color.
+- **Bar marks**: `radius={[6, 6, 0, 0]}`, `isAnimationActive={false}`,
+  `barCategoryGap="25%"`; `maxBarSize` 80 for single-stat bars, 50 for grouped
+  stat bars. recharts `<Tooltip>` gets `{...tooltipProps()}` (standard hover
+  cursor wash, no animation, correct z-order) — never inline rgba cursors.
+- Tooltips: build on `ChartTooltip` + `ChartTooltipRow` (`opacity` for stat
+  rows). The swatch carries series identity; text wears text tokens, never
+  the series color.
 - ≥2 series → render a `ChartLegend` (entries of `{label, color}`, colors from
   the palette), placed directly below the plot inside the `ChartContainer`;
   a single series needs none (the title names it).
@@ -166,12 +179,29 @@ flat black, it is off-blueprint.
      bg-gradient-to-br from-slate-900/90 via-slate-900/50 to-slate-950/90 p-5
      shadow-2xl backdrop-blur-xl group hover:border-<hue>-500/30`, containing a
      3-column grid: `Overview` (tone cyan — what this path is and why it
-     matters), `Active configuration` / `Selectable optimizations` (the
-     deployment facts or toggleable overlays), and a third column (roadmap,
-     caveats — tone slate).
-   - **Benchmark scenario** (tone sky) — the workload shape and data caveats.
-   - **Primary outcomes** (tone emerald) — the KPI `StatCard` row: 3-4 cards
-     answering "which config wins and by how much".
+     matters), a `Selectable …` column (tone cyan — INTERACTIVE toggles that
+     filter the charts below: optimizations, tiers, or swept configs; active =
+     `border-<hue>-500/30 bg-slate-900/60`, inactive = `opacity-60`; prefer
+     this over static config facts, and never duplicate what the Benchmark
+     scenario card already shows), and a third column (tone slate) of
+     roadmap "Coming soon" chips — data caveats belong in the design spec,
+     not as UI bullet lists.
+   - **Scenario/outcomes row** — ONE `lg:grid-cols-12` row, cards side by
+     side (never stacked full-width sections). Spans: scenario 6 / outcomes 3
+     / action 3 when an Action card is present; scenario 8 / outcomes 4 when
+     it is not.
+     - **Benchmark scenario** (tone sky): gradient card with three internal
+       columns (Infra layer / Model serving / Workload), each a stack of tiny
+       label + `font-mono font-bold text-white` value pairs.
+     - **Primary outcomes** (tone emerald, in a `Panel`): 2-3 SUCCINCT boxes
+       (`bg-slate-800/40 border-slate-700/50 rounded-lg p-2.5`) — one number
+       per outcome, no multi-row KPI cards. Overflow discipline: the left
+       label block gets `min-w-0 pr-2` (so `truncate` works in flex), the
+       value gets `shrink-0`, and unit sub-lines stay terse ("(total tok/s)",
+       "(mean, s)").
+     - **Action** (tone cyan, in a `Panel`, optional): title, one-line blurb,
+       and a full-width hue-colored CTA link (guide/reproduction). Include it
+       when there is a real guide to link; otherwise omit and rebalance.
    - **Charts** — `ChartContainer`s per the chart rules above.
    - **Results table** — every well-lit dashboard ends with the full per-run
      matrix in a `ChartContainer`: charts summarize, the table is the record.
@@ -181,8 +211,10 @@ flat black, it is off-blueprint.
      row/cells highlighted `bg-emerald-900/20` + `text-emerald-300` with a
      success Badge. Units stated in the subtitle.
 5. **PrismHome card** — every well-lit path gets a card in the "Well-lit
-   paths" rail of `src/components/PrismHome.jsx`, in nav order. Copy an
-   existing card's shell (290px, `bg-slate-900/95`, hover lift + hue glow) and
+   paths" rail of `src/components/PrismHome.jsx`, in nav order. The rail is
+   `max-w-6xl`; cards are `w-[246px]` so the row fits with minimal horizontal
+   scroll. Copy an existing card's shell (`bg-slate-900/95`, hover lift + hue
+   glow) and
    fill in: title, 2 hue-tinted tag pills, 1-2 sentence description, a metrics
    preview box (`bg-slate-950/60` with two label/value rows + a small
    hue-tinted visualization), and the gradient `Launch` CTA. These cards are

@@ -26,11 +26,13 @@ export { EmptyState } from './EmptyState';
 export { PageHeader, ShareLinkButton } from './PageHeader';
 export { WellLitHeader } from './WellLitHeader';
 export { ToggleGroup } from './ToggleGroup';
+export { StatPills } from './StatPills';
 export { SectionLabel } from './SectionLabel';
+export { FactCell } from './FactCell';
 
 export { ChartContainer } from './charts/ChartContainer';
 export { ChartTooltip, ChartTooltipRow } from './charts/ChartTooltip';
 export { ChartLegend } from './charts/ChartLegend';
 export { ChartXAxis, ChartYAxis } from './charts/Axis';
 export { CHART_SERIES, seriesColor, CHART_STATUS } from './charts/palette';
-export { getChartTheme, gridProps } from './charts/theme';
+export { getChartTheme, gridProps, tooltipProps } from './charts/theme';

@@ -83,6 +83,12 @@ Requested by refactor agents but deliberately not added in the migration pass:
   (the results-matrix style), and the **PrismHome path card shell** — each now
   has 3+ copy-paste instances; extraction candidates surfaced by the second
   clean-run agent.
+- **Hero selectable toggle buttons** (3 dashboards) and **primary-outcome
+  boxes** (3 dashboards) — extraction candidates from the P/D iteration.
+  Shared **number formatters** (tok/s, ms→s) are still per-dashboard.
+  (`StatPills`, `FactCell`, `tooltipProps()`, `ChartTooltipRow opacity`, and
+  `LoadingState fullPage` graduated from this list during the P/D audit;
+  existing dashboards migrate onto them opportunistically.)
 - **Gradient hero CTAs and hue-matched tag pills** (PrismHome, wizard CTAs) —
   intentionally bespoke brand flourishes, not primitives.
 

@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Zap, BarChart2, ArrowRight, Server, Cpu, CheckCircle, Shield, TrendingUp, HelpCircle, FileCode, Link, Database, Sliders, Layers, ChevronDown, ChevronUp, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../utils/cn';
 
-const PrismHome = ({ onNavigate }) => {
-    const [currentRoadmapIndex, setCurrentRoadmapIndex] = useState(0);
-    const [isHoveringRoadmap, setIsHoveringRoadmap] = useState(false);
-
-    const roadmapItems = [
+const roadmapItems = [
         {
             title: "Prefix Cache Offloading",
             description: "Tiered KV cache offloading to host CPU memory, expanding accelerator context capacity bounds.",
@@ -15,15 +11,6 @@ const PrismHome = ({ onNavigate }) => {
             bgClass: "bg-emerald-500/10",
             borderClass: "border-emerald-500/20",
             badge: "KV-cache"
-        },
-        {
-            title: "Prefill/Decode Disagg",
-            description: "Separating prefill and decode nodes to eliminate queue interference for multi-tenant pipelines.",
-            icon: Activity,
-            colorClass: "text-purple-400",
-            bgClass: "bg-purple-500/10",
-            borderClass: "border-purple-500/20",
-            badge: "Large models"
         },
         {
             title: "Wide Expert Parallelism",
@@ -43,12 +30,16 @@ const PrismHome = ({ onNavigate }) => {
             borderClass: "border-cyan-500/20",
             badge: "Cost/TCO"
         }
-    ];
+];
+
+const PrismHome = ({ onNavigate }) => {
+    const [currentRoadmapIndex, setCurrentRoadmapIndex] = useState(0);
+    const [isHoveringRoadmap, setIsHoveringRoadmap] = useState(false);
 
     useEffect(() => {
         if (isHoveringRoadmap) return;
         const timer = setInterval(() => {
-            setCurrentRoadmapIndex((prev) => (prev + 1) % 4);
+            setCurrentRoadmapIndex((prev) => (prev + 1) % roadmapItems.length);
         }, 3500);
         return () => clearInterval(timer);
     }, [isHoveringRoadmap]);
@@ -79,7 +70,7 @@ const PrismHome = ({ onNavigate }) => {
                 </header>
 
                 {/* Well-lit paths */}
-                <section className="mb-10 w-full max-w-5xl bg-slate-900/15 border border-slate-900 rounded-2xl relative overflow-hidden backdrop-blur-xl shadow-2xl">
+                <section className="mb-10 w-full max-w-6xl bg-slate-900/15 border border-slate-900 rounded-2xl relative overflow-hidden backdrop-blur-xl shadow-2xl">
                     {/* Grid mesh backdrop decorative lines */}
                     <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1.5px,transparent_1.5px),linear-gradient(to_bottom,#1e293b_1.5px,transparent_1.5px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-25 pointer-events-none" />
                     <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -98,7 +89,7 @@ const PrismHome = ({ onNavigate }) => {
                         {/* Path 1: Intelligent routing */}
                         <div 
                             onClick={() => onNavigate('inference-scheduling')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-cyan-500/50 w-[290px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-cyan-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
                         >
                             <div>
                                 <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-cyan-400">
@@ -143,7 +134,7 @@ const PrismHome = ({ onNavigate }) => {
                         {/* Path 2: Prefix cache offloading */}
                         <div
                             onClick={() => onNavigate('prefix-cache-offloading')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-emerald-500/50 w-[290px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-emerald-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
                         >
                             <div>
                                 <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-emerald-400">
@@ -186,7 +177,7 @@ const PrismHome = ({ onNavigate }) => {
                         {/* Path 3: Agentic serving */}
                         <div 
                             onClick={() => onNavigate('agentic-serving')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-purple-500/50 w-[290px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-purple-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
                         >
                             <div>
                                 <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-purple-400">
@@ -239,7 +230,7 @@ const PrismHome = ({ onNavigate }) => {
                         <div 
                             onMouseEnter={() => setIsHoveringRoadmap(true)}
                             onMouseLeave={() => setIsHoveringRoadmap(false)}
-                            className="group relative bg-gradient-to-br from-purple-950/20 via-slate-950/80 to-slate-950 backdrop-blur-xl border border-dashed border-purple-900/40 hover:border-purple-500/40 rounded-xl p-4 transition-all duration-300 flex flex-col justify-between w-[290px] shrink-0 min-h-[320px] overflow-hidden hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+                            className="group relative bg-gradient-to-br from-purple-950/20 via-slate-950/80 to-slate-950 backdrop-blur-xl border border-dashed border-purple-900/40 hover:border-purple-500/40 rounded-xl p-4 transition-all duration-300 flex flex-col justify-between w-[246px] shrink-0 min-h-[320px] overflow-hidden hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
                         >
                             <div>
                                 <h3 className="text-base font-bold text-slate-300 tracking-wide mb-2 transition-colors group-hover:text-purple-400">
@@ -258,7 +249,7 @@ const PrismHome = ({ onNavigate }) => {
                                     <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setCurrentRoadmapIndex((prev) => (prev - 1 + 4) % 4);
+                                            setCurrentRoadmapIndex((prev) => (prev - 1 + roadmapItems.length) % roadmapItems.length);
                                         }}
                                         className="absolute left-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
                                     >
@@ -268,7 +259,7 @@ const PrismHome = ({ onNavigate }) => {
                                     <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setCurrentRoadmapIndex((prev) => (prev + 1) % 4);
+                                            setCurrentRoadmapIndex((prev) => (prev + 1) % roadmapItems.length);
                                         }}
                                         className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
                                     >
@@ -283,7 +274,7 @@ const PrismHome = ({ onNavigate }) => {
                                                 <div className="flex-1 min-w-0 pr-1.5">
                                                     <div className="flex items-center justify-between gap-1">
                                                         <h4 className="text-xs font-bold text-slate-200 truncate">{item.title}</h4>
-                                                        <span className="text-[8px] font-mono text-slate-500 shrink-0">{currentRoadmapIndex + 1}/4</span>
+                                                        <span className="text-[8px] font-mono text-slate-500 shrink-0">{currentRoadmapIndex + 1}/{roadmapItems.length}</span>
                                                     </div>
                                                     <p className="text-[11px] text-slate-400 leading-normal mt-1 line-clamp-3">{item.description}</p>
                                                 </div>
