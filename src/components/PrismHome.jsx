@@ -4,15 +4,6 @@ import { cn } from '../utils/cn';
 
 const roadmapItems = [
         {
-            title: "Prefix Cache Offloading",
-            description: "Tiered KV cache offloading to host CPU memory, expanding accelerator context capacity bounds.",
-            icon: Database,
-            colorClass: "text-emerald-400",
-            bgClass: "bg-emerald-500/10",
-            borderClass: "border-emerald-500/20",
-            badge: "KV-cache"
-        },
-        {
             title: "Wide Expert Parallelism",
             description: "Scaling Mixture-of-Experts (MoE) workloads across large multi-node GPU clusters dynamically.",
             icon: Layers,
@@ -85,27 +76,25 @@ const PrismHome = ({ onNavigate }) => {
                             </p>
                         </div>
                         
-                        <div className="flex flex-row overflow-x-auto gap-5 pt-4 pb-5 px-2 w-full items-stretch scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950/20">
+                        <div className="flex flex-row overflow-x-auto gap-4 pt-4 pb-5 px-2 w-full items-stretch scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950/20">
                         {/* Path 1: Intelligent routing */}
                         <div 
                             onClick={() => onNavigate('inference-scheduling')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-cyan-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl pt-6 px-4 pb-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(34,211,238,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-cyan-500/50 w-[196px] shrink-0 min-h-[340px] overflow-hidden"
                         >
                             <div>
-                                <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-cyan-400">
-                                    Intelligent routing
-                                </h3>
-                                <div className="flex flex-wrap gap-1 mb-2.5">
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/15 text-cyan-400 rounded-full font-medium border border-cyan-500/30 whitespace-nowrap">Prefix-cache</span>
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/15 text-cyan-400 rounded-full font-medium border border-cyan-500/30 whitespace-nowrap">Load balance</span>
+                                <div className="h-[40px] flex flex-col justify-start mb-2">
+                                    <h3 className="text-sm font-bold text-slate-200 tracking-wide transition-colors group-hover:text-cyan-400">
+                                        Intelligent routing
+                                    </h3>
                                 </div>
-                                <p className="text-slate-400 text-xs leading-relaxed mb-3">
+                                <p className="text-slate-400 text-xs leading-relaxed mb-3 h-[96px] overflow-hidden">
                                     Optimize request routing to maximize performance. Leverage GKE Inference Gateway and cache introspection to reduce tail latency.
                                 </p>
                                 
                                 {/* Visual Preview / Metrics */}
-                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 mb-3">
-                                    <div className="space-y-0.5 mb-1.5">
+                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 h-[92px] flex flex-col justify-between mb-3">
+                                    <div className="space-y-0.5">
                                         <div className="flex justify-between text-[10px]">
                                             <span className="text-slate-400">SLA compliance</span>
                                             <span className="text-cyan-400 font-mono font-bold">98.5%</span>
@@ -134,22 +123,20 @@ const PrismHome = ({ onNavigate }) => {
                         {/* Path 2: Prefix cache offloading */}
                         <div
                             onClick={() => onNavigate('prefix-cache-offloading')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-emerald-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl pt-6 px-4 pb-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-emerald-500/50 w-[196px] shrink-0 min-h-[340px] overflow-hidden"
                         >
                             <div>
-                                <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-emerald-400">
-                                    Prefix cache offloading
-                                </h3>
-                                <div className="flex flex-wrap gap-1 mb-2.5">
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full font-medium border border-emerald-500/30 whitespace-nowrap">KV-cache</span>
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full font-medium border border-emerald-500/30 whitespace-nowrap">Tiered storage</span>
+                                <div className="h-[40px] flex flex-col justify-start mb-2">
+                                    <h3 className="text-sm font-bold text-slate-200 tracking-wide transition-colors group-hover:text-emerald-400">
+                                        Prefix cache offloading
+                                    </h3>
                                 </div>
-                                <p className="text-slate-400 text-xs leading-relaxed mb-3">
-                                    Offload KV cache to CPU memory to extend accelerator capacity limit.
+                                <p className="text-slate-400 text-xs leading-relaxed mb-3 h-[96px] overflow-hidden">
+                                    Offload KV cache to CPU memory to extend accelerator capacity limit. Evict and restore cache blocks on-demand.
                                 </p>
  
-                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 mb-3">
-                                    <div className="space-y-0.5 mb-1.5">
+                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 h-[92px] flex flex-col justify-between mb-3">
+                                    <div className="space-y-0.5">
                                         <div className="flex justify-between text-[10px]">
                                             <span className="text-slate-400">Capacity wall</span>
                                             <span className="text-emerald-400 font-mono font-bold">OOM Avoided</span>
@@ -160,11 +147,11 @@ const PrismHome = ({ onNavigate }) => {
                                         </div>
                                     </div>
                                     <div className="flex justify-center space-x-0.5 h-6 items-center">
-                                         <div className="w-8 h-5 bg-emerald-500/20 rounded border border-emerald-500/30 flex items-center justify-center text-[8px] font-bold text-emerald-400">HBM</div>
-                                         <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                         <div className="w-8 h-5 bg-emerald-500/30 rounded border border-emerald-500/30 flex items-center justify-center text-[8px] font-bold text-emerald-400">CPU</div>
-                                         <div className="text-[8px] text-slate-600 font-mono">{"->"}</div>
-                                         <div className="w-8 h-5 bg-emerald-500/10 rounded border border-emerald-500/20 flex items-center justify-center text-[8px] font-bold text-emerald-400">Disk</div>
+                                         <div className="w-8 h-4.5 bg-emerald-500/20 rounded border border-emerald-500/30 flex items-center justify-center text-[7px] font-bold text-emerald-400">HBM</div>
+                                         <div className="text-[8px] text-slate-650 font-mono">{"->"}</div>
+                                         <div className="w-8 h-4.5 bg-emerald-500/30 rounded border border-emerald-500/30 flex items-center justify-center text-[7px] font-bold text-emerald-400">CPU</div>
+                                         <div className="text-[8px] text-slate-650 font-mono">{"->"}</div>
+                                         <div className="w-8 h-4.5 bg-emerald-500/10 rounded border border-emerald-500/20 flex items-center justify-center text-[7px] font-bold text-emerald-400">Disk</div>
                                      </div>
                                 </div>
                             </div>
@@ -177,26 +164,24 @@ const PrismHome = ({ onNavigate }) => {
                         {/* Path 3: Agentic serving */}
                         <div 
                             onClick={() => onNavigate('agentic-serving')}
-                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl p-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-purple-500/50 w-[246px] shrink-0 min-h-[320px] overflow-hidden"
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl pt-6 px-4 pb-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-purple-500/50 w-[196px] shrink-0 min-h-[340px] overflow-hidden"
                         >
                             <div>
-                                <h3 className="text-base font-bold text-slate-200 tracking-wide mb-2 transition-colors group-hover:text-purple-400">
-                                    Agentic serving
-                                </h3>
-                                <div className="flex flex-wrap gap-1 mb-2.5">
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded-full font-medium border border-purple-500/30 whitespace-nowrap">Multi-turn</span>
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded-full font-medium border border-purple-500/30 whitespace-nowrap">Tool use</span>
+                                <div className="h-[40px] flex flex-col justify-start mb-2">
+                                    <h3 className="text-sm font-bold text-slate-200 tracking-wide transition-colors group-hover:text-purple-400">
+                                        Agentic serving
+                                    </h3>
                                 </div>
-                                <p className="text-slate-400 text-xs leading-relaxed mb-3">
+                                <p className="text-slate-400 text-xs leading-relaxed mb-3 h-[96px] overflow-hidden">
                                     Optimize multi-turn conversations using prefix-aware routing, KV-offloading, and queue depth load balancing.
                                 </p>
                                 
                                 {/* Visual Preview / Metrics */}
-                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 mb-3">
-                                    <div className="space-y-0.5 mb-1.5">
+                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 h-[92px] flex flex-col justify-between mb-3">
+                                    <div className="space-y-0.5">
                                         <div className="flex justify-between text-[10px]">
                                             <span className="text-slate-400">Workload</span>
-                                            <span className="text-purple-400 font-mono font-bold">Code Generation</span>
+                                            <span className="text-purple-400 font-mono font-bold">Code Gen</span>
                                         </div>
                                         <div className="flex justify-between text-[10px]">
                                             <span className="text-slate-400">Num Turns</span>
@@ -223,35 +208,79 @@ const PrismHome = ({ onNavigate }) => {
                             </button>
                         </div>
 
+                        {/* Path 4: PD disaggregated serving */}
+                        <div 
+                            onClick={() => onNavigate('pd-disaggregation')}
+                            className="group relative bg-slate-900/95 backdrop-blur-xl shadow-lg hover:shadow-2xl rounded-xl pt-6 px-4 pb-4 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(245,158,11,0.25)] transition-all duration-300 cursor-pointer flex flex-col justify-between border border-slate-800/80 hover:border-amber-500/50 w-[196px] shrink-0 min-h-[340px] overflow-hidden"
+                        >
+                            {/* Prototype Banner */}
+                            <div className="absolute top-0 left-0 right-0 bg-amber-500/10 text-amber-400/80 border-b border-amber-500/20 text-[9px] font-black tracking-wider uppercase text-center py-0.5 z-10">
+                                Prototype
+                            </div>
+
+                            <div>
+                                <div className="h-[40px] flex flex-col justify-start mb-2">
+                                    <h3 className="text-sm font-bold text-slate-200 tracking-wide transition-colors group-hover:text-amber-400">
+                                        PD disaggregation
+                                    </h3>
+                                </div>
+                                <p className="text-slate-400 text-xs leading-relaxed mb-3 h-[96px] overflow-hidden">
+                                    Split prefill and decode phases to eliminate head-of-line blocking and optimize GPU resource utilization.
+                                </p>
+                                
+                                {/* Visual Preview / Metrics */}
+                                <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 h-[92px] flex flex-col justify-between mb-3">
+                                    <div className="space-y-0.5">
+                                        <div className="flex justify-between text-[10px]">
+                                            <span className="text-slate-400">TTFT speedup</span>
+                                            <span className="text-amber-400 font-mono font-bold">4.2x faster</span>
+                                        </div>
+                                        <div className="flex justify-between text-[10px]">
+                                             <span className="text-slate-400">Decode Tput</span>
+                                             <span className="text-amber-400 font-mono font-bold">+85%</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-center space-x-1.5 h-6 items-center">
+                                         <div className="w-12 h-4.5 bg-amber-500/20 rounded border border-amber-500/30 flex items-center justify-center text-[7px] font-bold text-amber-400">Prefill (P)</div>
+                                         <div className="text-[8px] text-slate-650 font-mono">||</div>
+                                         <div className="w-12 h-4.5 bg-cyan-500/20 rounded border border-cyan-500/30 flex items-center justify-center text-[7px] font-bold text-cyan-400">Decode (D)</div>
+                                     </div>
+                                </div>
+                            </div>
+ 
+                            <button className="w-full py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg font-medium text-[10px] flex items-center justify-center hover:from-amber-400 hover:to-orange-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] transform group-hover:scale-[1.02] transition-all cursor-pointer mt-auto">
+                                Launch <ArrowRight className="ml-1 h-3 w-3" />
+                            </button>
+                        </div>
+
                         {/* Divider */}
                         <div className="w-px bg-slate-800/60 self-stretch my-4 shrink-0" />
 
-                        {/* Card 3: Consolidated Roadmap */}
+                        {/* Card 5: Consolidated Roadmap */}
                         <div 
                             onMouseEnter={() => setIsHoveringRoadmap(true)}
                             onMouseLeave={() => setIsHoveringRoadmap(false)}
-                            className="group relative bg-gradient-to-br from-purple-950/20 via-slate-950/80 to-slate-950 backdrop-blur-xl border border-dashed border-purple-900/40 hover:border-purple-500/40 rounded-xl p-4 transition-all duration-300 flex flex-col justify-between w-[246px] shrink-0 min-h-[320px] overflow-hidden hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+                            className="group relative bg-gradient-to-br from-purple-950/20 via-slate-950/80 to-slate-950 backdrop-blur-xl border border-dashed border-purple-900/40 hover:border-purple-500/40 rounded-xl pt-6 px-4 pb-4 transition-all duration-300 flex flex-col justify-between w-[196px] shrink-0 min-h-[340px] overflow-hidden hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
                         >
                             <div>
-                                <h3 className="text-base font-bold text-slate-300 tracking-wide mb-2 transition-colors group-hover:text-purple-400">
-                                    Coming soon
-                                </h3>
-                                <div className="flex flex-wrap gap-1 mb-2.5">
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded-full font-medium border border-purple-500/30 whitespace-nowrap">Roadmap</span>
+                                <div className="h-[40px] flex flex-col justify-start mb-2">
+                                    <h3 className="text-sm font-bold text-slate-200 tracking-wide transition-colors group-hover:text-purple-400">
+                                        Coming soon
+                                    </h3>
                                 </div>
-                                <p className="text-slate-400 text-xs leading-relaxed mb-4">
-                                    Upcoming performance optimizations and architectural templates on the Prism roadmap.
+                                <p className="text-slate-400 text-xs leading-relaxed mb-3 h-[96px] overflow-hidden">
+                                    Upcoming performance optimizations and architectural templates on the Prism roadmap. Track MoE and cost analysis.
                                 </p>
 
                                 {/* Slideshow Item Container */}
-                                <div className="relative p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl flex items-start gap-2.5 mt-2 min-h-[110px] group/item transition-all duration-300">
+                                <div className="relative p-2 bg-slate-950/40 border border-slate-900/60 rounded-xl flex items-start gap-2.5 h-[92px] group/item transition-all duration-300">
                                     {/* Left/Right manual controls inside the carousel */}
                                     <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setCurrentRoadmapIndex((prev) => (prev - 1 + roadmapItems.length) % roadmapItems.length);
                                         }}
-                                        className="absolute left-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
+                                        className="absolute left-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-450 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
                                     >
                                         <ChevronLeft className="w-3.5 h-3.5" />
                                     </button>
@@ -261,7 +290,7 @@ const PrismHome = ({ onNavigate }) => {
                                             e.stopPropagation();
                                             setCurrentRoadmapIndex((prev) => (prev + 1) % roadmapItems.length);
                                         }}
-                                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-900 border border-slate-800/60 text-slate-455 hover:text-white hover:bg-slate-800 opacity-0 group-hover/item:opacity-100 transition-opacity z-10 cursor-pointer"
                                     >
                                         <ChevronRight className="w-3.5 h-3.5" />
                                     </button>

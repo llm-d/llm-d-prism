@@ -29,6 +29,7 @@ export function WellLitHeader({
     onNavigateBack,
     onToggleMobileNav,
     extraActions,
+    isPrototype = false,
 }) {
     return (
         <PageHeader
@@ -53,9 +54,16 @@ export function WellLitHeader({
                 </span>
             }
             badge={
-                <Badge tone="brand" size="sm" className="hidden sm:inline-flex font-mono">
-                    {badgeLabel}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <Badge tone="brand" size="sm" className="hidden sm:inline-flex font-mono">
+                        {badgeLabel}
+                    </Badge>
+                    {isPrototype && (
+                        <Badge tone="warning" size="sm" className="hidden sm:inline-flex font-mono">
+                            Prototype
+                        </Badge>
+                    )}
+                </div>
             }
             actions={
                 <>

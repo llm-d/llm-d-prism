@@ -204,9 +204,18 @@ export default function PdDisaggregationDashboard({ onNavigateBack, onToggleMobi
                 pageTitle="Prefill/Decode Disaggregation"
                 onNavigateBack={onNavigateBack}
                 onToggleMobileNav={onToggleMobileNav}
+                isPrototype={true}
             />
 
             <main className="w-full max-w-7xl px-6 py-8 flex flex-col space-y-6">
+                {/* Prototype Banner Alert */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-200 text-xs">
+                    <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span>
+                        <strong>Prototype Notice:</strong> Prefill/Decode Disaggregation is currently in prototype phase. Benchmark data and analysis have not been validated.
+                    </span>
+                </div>
+
                 {runs.length === 0 ? (
                     <ChartContainer>
                         <EmptyState
