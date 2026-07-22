@@ -536,10 +536,11 @@ export const getLocalDashboardRuns = (brv02Runs, targetDashboard) => {
                     scenario: scenarioName,
                     scenarioId: scenarioId,
                     concurrency: scenario.rateQps || 40,
-                    model: scenario.model || metadata.model || 'Unknown',
-                    accelerator: scenario.hardware || metadata.accelerator || 'Unknown',
+                    model: scenario.model || run.model_name || 'Unknown',
+                    accelerator: scenario.hardware || run.hardware?.hardware_name || 'Unknown',
                     machineType: config.machine_type || 'local-instance',
                     replicas: config.replicas || 4,
+                    acceleratorCount: scenario.acceleratorCount || run.hardware?.accelerator_count || config.accelerator_count || config.replicas || 1,
                     inputLengthMean: scenario.isl || 163000,
                     outputLengthMean: scenario.osl || 425,
                     ttft: {
