@@ -278,6 +278,10 @@ export const UnifiedDataTable = (props) => {
         return stagedList;
     }, [brv02Runs, selectedBenchmarks]);
 
+    const drawerFilteredData = React.useMemo(() => {
+        return (filteredBySource || []).filter(d => selectedBenchmarks.has(getBenchmarkKey(d)));
+    }, [filteredBySource, selectedBenchmarks]);
+
     const buildBundleForRun = React.useCallback((run) => {
         const stageFiles = run.stages.map(stage => {
             const content = typeof stage.rawReport === 'object' 
@@ -1531,7 +1535,7 @@ export const UnifiedDataTable = (props) => {
                                     qualityMetrics={qualityMetrics}
                                     allModels={modelStats.map(m => m.model)}
                                     selectedModels={selectedModels}
-                                    filteredData={filteredBySource}
+                                    filteredData={drawerFilteredData}
                                     getBenchmarkKey={getBenchmarkKey}
                                     theme="dark"
                                     isZoomEnabled={drawerIsZoomEnabled}
@@ -1545,7 +1549,7 @@ export const UnifiedDataTable = (props) => {
                                     chartColorMode={drawerChartColorMode}
                                     setChartColorMode={setDrawerChartColorMode}
                                     metricAvailability={drawerMetricAvailability}
-                                    filteredBySource={filteredBySource}
+                                    filteredBySource={drawerFilteredData}
                                     xAxisMax={drawerXAxisMax}
                                     setXAxisMax={setDrawerXAxisMax}
                                     isLogScaleX={drawerIsLogScaleX}
