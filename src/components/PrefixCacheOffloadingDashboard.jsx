@@ -423,7 +423,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <a 
-                                        href="https://llm-d.ai/docs/well-lit-paths/foundations/tiered-prefix-cache" 
+                                        href="https://github.com/llm-d/llm-d/tree/main/guides/tiered-prefix-cache" 
                                         target="_blank" 
                                         rel="noreferrer" 
                                         onClick={e => e.stopPropagation()}
@@ -456,7 +456,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <a
-                                        href="https://llm-d.ai/docs/well-lit-paths/foundations/tiered-prefix-cache"
+                                        href="https://github.com/llm-d/llm-d/tree/main/guides/tiered-prefix-cache"
                                         target="_blank"
                                         rel="noreferrer"
                                         onClick={e => e.stopPropagation()}
@@ -743,7 +743,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                         </div>
 
                         <a 
-                            href="https://llm-d.ai/docs/well-lit-paths/foundations/tiered-prefix-cache"
+                            href="https://github.com/llm-d/llm-d/tree/main/guides/tiered-prefix-cache"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full mt-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg shadow transition-all flex items-center justify-center gap-1.5 truncate cursor-pointer no-underline"
