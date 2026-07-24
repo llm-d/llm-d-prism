@@ -25,6 +25,7 @@ import { useAWS } from './useAWS';
 import { useGitHubAuth } from './useGitHubAuth';
 import { v4 as uuidv4 } from 'uuid';
 import { getBenchmarkKey } from '../utils/dashboardHelpers';
+import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs } from '../utils/bucketUtils';
 
 const getPrefixForBucket = (bucketName) => {
     if (bucketName === 'llm-d-benchmarks' || bucketName === 'llm-d-benchmarks-staging') {
@@ -200,14 +201,16 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [bucketConfigs, setBucketConfigs] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem('prism_saved_sources') || '{}');
-            return saved.buckets || initialState?.buckets || [];
-        } catch { return initialState?.buckets || []; }
+            const raw = saved.buckets || initialState?.buckets || [];
+            return dedupeBucketConfigs(raw);
+        } catch { return dedupeBucketConfigs(initialState?.buckets || []); }
     });
     const [awsBucketConfigs, setAwsBucketConfigs] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem('prism_saved_sources') || '{}');
-            return saved.awsBuckets || initialState?.awsBuckets || [];
-        } catch { return initialState?.awsBuckets || []; }
+            const raw = saved.awsBuckets || initialState?.awsBuckets || [];
+            return dedupeBucketConfigs(raw);
+        } catch { return dedupeBucketConfigs(initialState?.awsBuckets || []); }
     });
     const [apiConfigs, setApiConfigs] = useState(() => {
         try {
@@ -252,14 +255,17 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     useEffect(() => {
         if (!isRestored.current) return;
-        localStorage.setItem('bucketConfigs', JSON.stringify(bucketConfigs));
+        const cleanBuckets = dedupeBucketConfigs(bucketConfigs);
+        localStorage.setItem('bucketConfigs', JSON.stringify(cleanBuckets));
     }, [bucketConfigs]);
 
     useEffect(() => {
         if (!isRestored.current) return;
+        const cleanBuckets = dedupeBucketConfigs(bucketConfigs);
+        const cleanAws = dedupeBucketConfigs(awsBucketConfigs);
         const toSave = {
-            buckets: bucketConfigs,
-            awsBuckets: awsBucketConfigs,
+            buckets: cleanBuckets,
+            awsBuckets: cleanAws,
             giqProjects: apiConfigs.map(c => typeof c === 'string' ? c : c.projectId),
             qualityScoresEnabled: selectedSources.has('quality_scores')
         };
@@ -331,15 +337,11 @@ export const useDashboardData = (initialState, dashboardState) => {
                 }
 
                 if (buckets && buckets.length > 0) {
-                    setBucketConfigs(prev => {
-                        const newSet = new Set(prev);
-                        buckets.forEach(b => newSet.add(b));
-                        return Array.from(newSet);
-                    });
+                    setBucketConfigs(prev => dedupeBucketConfigs([...prev, ...buckets]));
                     // Auto-select these default buckets
                     setSelectedSources(prev => {
                         const next = new Set(prev);
-                        buckets.forEach(b => next.add(`gcs:${b}`));
+                        buckets.forEach(b => next.add(`gcs:${getCanonicalBucketName(b)}`));
                         return next;
                     });
                 }
@@ -433,16 +435,37 @@ export const useDashboardData = (initialState, dashboardState) => {
 
             try {
                 const saved = JSON.parse(savedJson);
-                const restoredBuckets = saved.buckets || [];
-                const restoredAwsBuckets = saved.awsBuckets || [];
-                const restoredApis = saved.giqProjects || saved.apis || [];
+                const restoredBuckets = dedupeBucketConfigs(saved.buckets || []);
+                const restoredAwsBuckets = dedupeBucketConfigs(saved.awsBuckets || []);
+                const restoredApis = Array.from(new Set((saved.giqProjects || saved.apis || []).map(p => typeof p === 'string' ? p.trim() : p).filter(Boolean)));
+
+                // Re-save localStorage if deduplication logic made changes
+                const rawBucketsStr = JSON.stringify(saved.buckets || []);
+                const rawAwsStr = JSON.stringify(saved.awsBuckets || []);
+                const rawApisStr = JSON.stringify(saved.giqProjects || saved.apis || []);
+
+                if (
+                    rawBucketsStr !== JSON.stringify(restoredBuckets) ||
+                    rawAwsStr !== JSON.stringify(restoredAwsBuckets) ||
+                    rawApisStr !== JSON.stringify(restoredApis)
+                ) {
+                    console.log('[Deduplication] Cleaned duplicate or unnormalized entries in localStorage. Re-saving...');
+                    const cleanedSaved = {
+                        ...saved,
+                        buckets: restoredBuckets,
+                        awsBuckets: restoredAwsBuckets,
+                        giqProjects: restoredApis
+                    };
+                    localStorage.setItem('prism_saved_sources', JSON.stringify(cleanedSaved));
+                    localStorage.setItem('bucketConfigs', JSON.stringify(restoredBuckets));
+                }
 
                 setGcsProgress({});
                 if (restoredBuckets.length === 0 && restoredAwsBuckets.length === 0 && restoredApis.length === 0 && !saved.qualityScoresEnabled) return;
 
                 const initialTasks = {};
                 restoredBuckets.forEach(b => {
-                    const bName = typeof b === 'string' ? b : b.bucket;
+                    const bName = getCanonicalBucketName(b);
                     initialTasks[`gcs:${bName}`] = {
                         id: `gcs:${bName}`,
                         name: `gs://${bName}`,
@@ -454,7 +477,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                     };
                 });
                 restoredAwsBuckets.forEach(b => {
-                    const bName = typeof b === 'string' ? b : b.bucket;
+                    const bName = getCanonicalBucketName(b);
                     initialTasks[`aws:${bName}`] = {
                         id: `aws:${bName}`,
                         name: `aws://${bName}`,
@@ -479,8 +502,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                 setLoadingTasks(initialTasks);
                 
                 // 1. Instant Feedback: Render Cards in Loading State
-                setBucketConfigs(prev => Array.from(new Set([...prev, ...restoredBuckets])));
-                setAwsBucketConfigs(prev => Array.from(new Set([...prev, ...restoredAwsBuckets])));
+                setBucketConfigs(prev => dedupeBucketConfigs([...prev, ...restoredBuckets]));
+                setAwsBucketConfigs(prev => dedupeBucketConfigs([...prev, ...restoredAwsBuckets]));
                 setApiConfigs(prev => {
                     const existingIds = new Set(prev.map(c => typeof c === 'string' ? c : c.projectId));
                     const newConfigs = [...prev];
@@ -498,8 +521,18 @@ export const useDashboardData = (initialState, dashboardState) => {
                     const existingGiq = new Set(prev.filter(p => p.type === 'giq').map(p => p.bucketName));
 
                     const newProfiles = [
-                        ...restoredBuckets.filter(b => !existingGcs.has(typeof b === 'string' ? b : b.bucket)).map(b => ({ bucketName: typeof b === 'string' ? b : b.bucket, loading: true, type: 'gcs' })),
-                        ...restoredAwsBuckets.filter(b => !existingAws.has(typeof b === 'string' ? b : b.bucket)).map(b => ({ bucketName: typeof b === 'string' ? b : b.bucket, loading: true, type: 'aws' })),
+                        ...restoredBuckets.filter(b => !existingGcs.has(getCanonicalBucketName(b))).map(b => ({
+                            bucketName: getCanonicalBucketName(b),
+                            alias: getBucketAlias(b) || undefined,
+                            loading: true,
+                            type: 'gcs'
+                        })),
+                        ...restoredAwsBuckets.filter(b => !existingAws.has(getCanonicalBucketName(b))).map(b => ({
+                            bucketName: getCanonicalBucketName(b),
+                            alias: getBucketAlias(b) || undefined,
+                            loading: true,
+                            type: 'aws'
+                        })),
                         ...restoredApis.filter(pid => !existingGiq.has(pid)).map(pid => ({ bucketName: pid, loading: true, type: 'giq' }))
                     ];
                     return [...prev, ...newProfiles];
@@ -509,12 +542,12 @@ export const useDashboardData = (initialState, dashboardState) => {
 
                 // Fetch Buckets
                 for (const b of restoredBuckets) {
-                    const bName = typeof b === 'string' ? b : b.bucket;
+                    const bName = getCanonicalBucketName(b);
                     try {
                         const prefix = getPrefixForBucket(bName);
                         const res = await fetchBucketData(bName, false, prefix, handleProgress);
                         if (!res.profile.error) {
-                            allResults.push({ type: 'gcs', id: bName, ...res });
+                            allResults.push({ type: 'gcs', id: bName, alias: getBucketAlias(b), ...res });
                         } else {
                             updateTaskProgress(`gcs:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             // Update individual profile error
@@ -536,11 +569,11 @@ export const useDashboardData = (initialState, dashboardState) => {
 
                 // Fetch AWS Buckets
                 for (const b of restoredAwsBuckets) {
-                    const bName = typeof b === 'string' ? b : b.bucket;
+                    const bName = getCanonicalBucketName(b);
                     try {
                         const res = await fetchAWSBucketData(bName);
                         if (!res.profile.error) {
-                            allResults.push({ type: 'aws', id: bName, ...res });
+                            allResults.push({ type: 'aws', id: bName, alias: getBucketAlias(b), ...res });
                         } else {
                             updateTaskProgress(`aws:${bName}`, { status: 'failed', currentAction: res.profile.error });
                             setGcsProfiles(prev => prev.map(p =>
@@ -618,15 +651,31 @@ export const useDashboardData = (initialState, dashboardState) => {
                         return next.map((d, i) => ({ ...d, id: i }));
                     });
 
-                    // Update Profiles with Success
+                    // Update Profiles with Success (preserving any custom aliases)
                     setGcsProfiles(prev => {
                         const updated = [...prev];
                         allResults.forEach(r => {
                             const idx = updated.findIndex(p => p.bucketName === r.id && p.type === r.type);
+                            const effectiveAlias = r.alias || updated[idx]?.alias || r.profile?.alias;
                             if (idx !== -1) {
-                                updated[idx] = { ...updated[idx], ...r.profile, rawResponse: r.rawResponse, loading: false, type: r.type, bucketName: r.id };
+                                updated[idx] = {
+                                    ...updated[idx],
+                                    ...r.profile,
+                                    alias: effectiveAlias,
+                                    rawResponse: r.rawResponse,
+                                    loading: false,
+                                    type: r.type,
+                                    bucketName: r.id
+                                };
                             } else {
-                                updated.push({ ...r.profile, rawResponse: r.rawResponse, loading: false, type: r.type, bucketName: r.id });
+                                updated.push({
+                                    ...r.profile,
+                                    alias: effectiveAlias,
+                                    rawResponse: r.rawResponse,
+                                    loading: false,
+                                    type: r.type,
+                                    bucketName: r.id
+                                });
                             }
                         });
                         return updated;
@@ -734,12 +783,9 @@ export const useDashboardData = (initialState, dashboardState) => {
     const handleAddGCSBucket = async (alias = null, bucketNameOverride = null) => {
         const nameToUse = bucketNameOverride || newBucketName;
         if (!nameToUse) return;
-        const cleanName = nameToUse.replace(/^gs:\/\//, '').replace(/\/$/, '');
+        const cleanName = getCanonicalBucketName(nameToUse);
 
-        const exists = bucketConfigs.some(b => {
-            const bName = typeof b === 'string' ? b : b.bucket;
-            return bName === cleanName;
-        });
+        const exists = bucketConfigs.some(b => getCanonicalBucketName(b) === cleanName);
 
         if (exists) {
             setGcsError('Bucket already configured.');
@@ -755,14 +801,15 @@ export const useDashboardData = (initialState, dashboardState) => {
         if (result.profile.error) {
             setGcsError(`GCS Error: ${result.profile.error}`);
         } else {
-            const newEntry = alias ? { bucket: cleanName, alias } : cleanName;
-            setBucketConfigs(prev => [...prev, newEntry]);
+            const cleanAlias = alias ? alias.trim() : null;
+            const newEntry = cleanAlias ? { bucket: cleanName, alias: cleanAlias } : cleanName;
+            setBucketConfigs(prev => dedupeBucketConfigs([...prev, newEntry]));
 
-            const finalProfile = { ...result.profile, alias: alias || cleanName, type: 'gcs' };
+            const finalProfile = { ...result.profile, alias: cleanAlias || cleanName, type: 'gcs' };
             updateSourceData(`gcs:${cleanName}`, result.entries, finalProfile);
 
             setNewBucketName('');
-            setGcsSuccess(`Added bucket: ${alias || cleanName}`);
+            setGcsSuccess(`Added bucket: ${cleanAlias || cleanName}`);
             setTimeout(() => setGcsSuccess(null), 3000);
         }
     };
@@ -770,12 +817,9 @@ export const useDashboardData = (initialState, dashboardState) => {
     const handleAddAWSBucket = async (alias = null, bucketNameOverride = null) => {
         const nameToUse = bucketNameOverride || newBucketName;
         if (!nameToUse) return;
-        const cleanName = nameToUse.replace(/^s3:\/\//, '').replace(/\/$/, '');
+        const cleanName = getCanonicalBucketName(nameToUse);
 
-        const exists = awsBucketConfigs.some(b => {
-            const bName = typeof b === 'string' ? b : b.bucket;
-            return bName === cleanName;
-        });
+        const exists = awsBucketConfigs.some(b => getCanonicalBucketName(b) === cleanName);
 
         if (exists) {
             setGcsError('AWS Bucket already configured.');
@@ -789,14 +833,15 @@ export const useDashboardData = (initialState, dashboardState) => {
         if (result.profile.error) {
             setGcsError(`AWS Error: ${result.profile.error}`);
         } else {
-            const newEntry = alias ? { bucket: cleanName, alias } : cleanName;
+            const cleanAlias = alias ? alias.trim() : null;
+            const newEntry = cleanAlias ? { bucket: cleanName, alias: cleanAlias } : cleanName;
 
-            setAwsBucketConfigs(prev => [...prev, newEntry]);
+            setAwsBucketConfigs(prev => dedupeBucketConfigs([...prev, newEntry]));
 
             setSelectedSources(prev => new Set([...prev, `aws:${cleanName}`]));
             setAvailableSources(prev => new Set([...prev, `aws:${cleanName}`]));
 
-            const finalProfile = { ...result.profile, alias: alias || cleanName, type: 'aws' };
+            const finalProfile = { ...result.profile, alias: cleanAlias || cleanName, type: 'aws' };
 
             updateSourceData(`aws:${cleanName}`, result.entries, finalProfile);
 
@@ -811,7 +856,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             });
 
             setNewBucketName('');
-            setGcsSuccess(`Added AWS bucket: ${alias || cleanName}`);
+            setGcsSuccess(`Added AWS bucket: ${cleanAlias || cleanName}`);
             setTimeout(() => setGcsSuccess(null), 3000);
         }
     };
@@ -821,7 +866,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         const tokenToUse = tokenOverride || newAuthToken;
         if (!idToUse) return;
 
-        const exists = apiConfigs.some(c => c.projectId === idToUse);
+        const exists = apiConfigs.some(c => (typeof c === 'string' ? c : c.projectId) === idToUse);
         if (exists) {
             setGcsError('Project ID already configured.');
             return;
@@ -848,13 +893,11 @@ export const useDashboardData = (initialState, dashboardState) => {
     };
 
     const removeGCSBucket = (bucketName) => {
-        const newConfigs = bucketConfigs.filter(b => {
-            const bName = typeof b === 'string' ? b : b.bucket;
-            return bName !== bucketName;
-        });
+        const cleanTarget = getCanonicalBucketName(bucketName);
+        const newConfigs = bucketConfigs.filter(b => getCanonicalBucketName(b) !== cleanTarget);
         setBucketConfigs(newConfigs);
 
-        const sourceKey = `gcs:${bucketName}`;
+        const sourceKey = `gcs:${cleanTarget}`;
         const newSources = new Set(selectedSources);
         newSources.delete(sourceKey);
         setSelectedSources(newSources);
@@ -869,13 +912,11 @@ export const useDashboardData = (initialState, dashboardState) => {
     };
 
     const removeAWSBucket = (bucketName) => {
-        const newConfigs = awsBucketConfigs.filter(b => {
-            const bName = typeof b === 'string' ? b : b.bucket;
-            return bName !== bucketName;
-        });
+        const cleanTarget = getCanonicalBucketName(bucketName);
+        const newConfigs = awsBucketConfigs.filter(b => getCanonicalBucketName(b) !== cleanTarget);
         setAwsBucketConfigs(newConfigs);
 
-        const sourceKey = `aws:${bucketName}`;
+        const sourceKey = `aws:${cleanTarget}`;
         const newSources = new Set(selectedSources);
         newSources.delete(sourceKey);
         setSelectedSources(newSources);
