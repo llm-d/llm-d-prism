@@ -20,7 +20,8 @@ export function validateFormat(fileContent, filename) {
         return { format: false, error: "Empty document" };
     }
 
-    if (parsedDoc.version === "0.2" || parsedDoc.schema === "v0.2" || (parsedDoc.run && parsedDoc.scenario && (parsedDoc.metrics || parsedDoc.results))) {
+    const ver = String(parsedDoc.version || '').trim();
+    if (ver === "0.2" || ver.startsWith("0.2.") || ver === "v0.2" || ver.startsWith("v0.2.") || parsedDoc.schema === "v0.2" || (parsedDoc.run && parsedDoc.scenario && (parsedDoc.metrics || parsedDoc.results))) {
         return { format: "brv02", parsedData: parsedDoc };
     }
 
