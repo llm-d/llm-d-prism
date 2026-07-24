@@ -38,6 +38,7 @@ import DataInspector from './DataInspector';
 import { useDashboardState } from '../hooks/useDashboardState';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { INTEGRATIONS, getBucket, getRatioType, getEffectiveTp, sortBuckets, findParetoPoint, getNodesAndType, getBenchmarkKey } from '../utils/dashboardHelpers';
+import { getCanonicalBucketName, dedupeBucketConfigs } from '../utils/bucketUtils';
 
 const getCleanModelName = (name) => {
     if (!name) return '';
@@ -300,7 +301,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
 
     useEffect(() => {
-        localStorage.setItem('bucketConfigs', JSON.stringify(bucketConfigs));
+        localStorage.setItem('bucketConfigs', JSON.stringify(dedupeBucketConfigs(bucketConfigs)));
     }, [bucketConfigs]);
 
 
@@ -454,13 +455,10 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
     const handleAddBucket = async (alias = null, bucketNameOverride = null) => {
         const nameToUse = bucketNameOverride || newBucketName;
         if (!nameToUse) return;
-        const cleanName = nameToUse.replace(/^gs:\/\//, '');
+        const cleanName = getCanonicalBucketName(nameToUse);
 
         // Check duplicates (by name)
-        const exists = bucketConfigs.some(b => {
-            const bName = typeof b === 'string' ? b : b.bucket;
-            return bName === cleanName;
-        });
+        const exists = bucketConfigs.some(b => getCanonicalBucketName(b) === cleanName);
 
         if (exists) {
             setGcsError('Bucket already configured.');
@@ -474,12 +472,10 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         if (result.profile.error) {
             setGcsError(result.profile.error);
         } else {
-            // Store as object if alias provided, or string for back-compat/simplicity
-            // Actually, let's normalize to objects internally if we can, OR keep mix.
-            // Mix is safest for now.
-            const newEntry = alias ? { bucket: cleanName, alias } : cleanName;
+            const cleanAlias = alias ? alias.trim() : null;
+            const newEntry = cleanAlias ? { bucket: cleanName, alias: cleanAlias } : cleanName;
 
-            const newConfigs = [...bucketConfigs, newEntry];
+            const newConfigs = dedupeBucketConfigs([...bucketConfigs, newEntry]);
             setBucketConfigs(newConfigs);
 
             // Add to selected sources
@@ -487,33 +483,29 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             setAvailableSources(prev => new Set([...prev, `gcs:${cleanName}`]));
 
             // Inject alias into profile if needed for UI
-            const finalProfile = { ...result.profile, alias: alias || cleanName, type: 'gcs' };
+            const finalProfile = { ...result.profile, alias: cleanAlias || cleanName, type: 'gcs' };
 
-            // Update source data call needs to know about the profile alias? 
-            // updateSourceData updates gcsProfiles.
             updateSourceData(`gcs:${cleanName}`, result.entries, finalProfile);
 
             // Update models
             const newModels = [...new Set(result.entries.map(d => d.model).filter(m => m !== 'Unknown'))];
             setSelectedBenchmarks(prev => {
                 const next = new Set(prev);
-                // If user has no models selected, select just one to show *something* is working
                 if (prev.size === 0 && newModels.length > 0) {
-                    // Try to pick a reasonable default (e.g. Llama 3 or 70b) if possible, else first
                     const candidate = newModels.find(m => m.toLowerCase().includes('llama')) || newModels[0];
                     next.add(candidate);
                 }
-                // If user already has selections, do NOT add new ones to avoid clutter
                 return next;
             });
 
             setNewBucketName('');
-            setGcsSuccess(`Added bucket: ${alias || cleanName}`);
+            setGcsSuccess(`Added bucket: ${cleanAlias || cleanName}`);
             setTimeout(() => setGcsSuccess(null), 3000);
         }
     };
 
     const removeBucket = (bucketName) => {
+        const cleanTarget = getCanonicalBucketName(bucketName);
         // Check if it's an API config (projectId)
         const apiConfigMatch = apiConfigs.find(c => (typeof c === 'string' ? c : c.projectId) === bucketName);
         if (apiConfigMatch) {
@@ -533,13 +525,10 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             setGcsProfiles(prev => prev.filter(p => `giq:${p.bucketName}` !== sourceKey));
         } else {
             // Bucket
-            const newConfigs = bucketConfigs.filter(b => {
-                const bName = typeof b === 'string' ? b : b.bucket;
-                return bName !== bucketName;
-            });
+            const newConfigs = bucketConfigs.filter(b => getCanonicalBucketName(b) !== cleanTarget);
             setBucketConfigs(newConfigs);
 
-            const sourceKey = `gcs:${bucketName}`;
+            const sourceKey = `gcs:${cleanTarget}`;
             const newSources = new Set(selectedSources);
             newSources.delete(sourceKey);
             setSelectedSources(newSources);
