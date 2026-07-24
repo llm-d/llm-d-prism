@@ -232,7 +232,8 @@ export function parseReportV02(yamlText, filename) {
     if (!parseResult.success) return null;
 
     const doc = parseResult.data;
-    if (doc.version !== '0.2') return null;
+    const ver = String(doc.version || '').trim();
+    if (ver !== '0.2' && !ver.startsWith('0.2.') && ver !== 'v0.2' && !ver.startsWith('v0.2.')) return null;
 
     // --- Scenario ---
     const stack = doc.scenario?.stack || [];
