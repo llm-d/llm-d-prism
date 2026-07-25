@@ -287,7 +287,8 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
 
     const chartDataMax = useMemo(() => {
         const values = buildChartLines.flatMap(line => line.data.map(point => point.x));
-        return values.length ? Math.max(...values) : 100;
+        const rawMax = values.length ? Math.max(...values) : 100;
+        return Math.ceil(rawMax * 1.2);
     }, [buildChartLines]);
 
     const chartDataMin = useMemo(() => {
@@ -298,9 +299,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
     }, [buildChartLines]);
 
     const capStep = Math.max(1, Math.ceil(chartDataMax / 1000));
-    const effectiveXMax = zoomXMax === null
+    const deferredZoomXMax = React.useDeferredValue(zoomXMax);
+    const effectiveXMax = deferredZoomXMax === null
         ? chartDataMax
-        : Math.max(chartDataMin, Math.min(zoomXMax, chartDataMax));
+        : Math.max(chartDataMin, Math.min(deferredZoomXMax, chartDataMax));
 
     const visibleChartLines = useMemo(() => buildChartLines.map(line => ({
         ...line,
@@ -470,7 +472,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                 size="xs"
                                 options={[['output', 'Output'], ['input', 'Input'], ['total', 'Total'], ['qps', 'QPS']].map(([value, label]) => ({ value, label }))}
                                 value={zoomYAxis}
-                                onChange={setZoomYAxis}
+                                onChange={(value) => {
+                                    setZoomYAxis(value);
+                                    setZoomXMax(null);
+                                }}
                             />
                         </div>
                     </div>
@@ -491,8 +496,20 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 px-3 py-1 rounded-lg">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Cap:</span>
-                                <input type="range" min={chartDataMin} max={chartDataMax} step={capStep} value={effectiveXMax} onChange={(e) => setZoomXMax(Number(e.target.value))} className="w-28 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
-                                <input type="number" min={chartDataMin} max={chartDataMax} value={effectiveXMax} onChange={(e) => setZoomXMax(e.target.value === '' ? null : Math.max(chartDataMin, Number(e.target.value)))} className="w-16 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all" />
+                                <button 
+                                    type="button"
+                                    onClick={() => setZoomXMax(zoomXMax === null ? Math.round(chartDataMax * 0.8) : null)}
+                                    className={cn(
+                                        'px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wider rounded transition-all cursor-pointer',
+                                        zoomXMax === null 
+                                            ? 'bg-cyan-600 text-white shadow' 
+                                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                                    )}
+                                >
+                                    Auto
+                                </button>
+                                <input type="range" min={chartDataMin} max={chartDataMax} step={capStep} value={effectiveXMax} onChange={(e) => setZoomXMax(Number(e.target.value))} className={cn("w-28 h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400", zoomXMax === null ? "bg-slate-800/40 opacity-40" : "bg-slate-700")} />
+                                <input type="number" min={chartDataMin} max={chartDataMax} value={zoomXMax === null ? '' : effectiveXMax} placeholder={zoomXMax === null ? 'Auto' : effectiveXMax.toString()} onChange={(e) => setZoomXMax(e.target.value === '' ? null : Math.max(chartDataMin, Number(e.target.value)))} className={cn("w-16 bg-transparent text-[10px] focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all", zoomXMax === null ? "text-slate-500" : "text-slate-200")} />
                                 <span className="text-[9px] text-slate-500 font-mono font-bold">ms</span>
                             </div>
                         </div>

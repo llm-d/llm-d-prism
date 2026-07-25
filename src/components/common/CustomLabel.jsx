@@ -22,7 +22,7 @@ export const CustomLabel = (props) => {
 
     // 1. Data Point Label (TP)
     if (showDataLabels && item) {
-        let tp = item.tp || item.metadata?.tensor_parallelism || item.tensor_parallelism || '1';
+        let tp = item.tp || item.metadata?.tensor_parallelism || item.tensor_parallelism || item.metadata?.tp || '1';
         if (tp) {
              if (!String(tp).startsWith('TP')) tp = `TP${tp}`;
              content.push(

@@ -224,10 +224,12 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
         .filter(d => !isNaN(d.dynamic_x) && !isNaN(d.dynamic_y))
         .sort((a, b) => a.dynamic_x - b.dynamic_x);
 
-    const dataMax = derivedZoomData.length > 0 ? Math.max(...derivedZoomData.map(d => d.dynamic_x)) : 100;
+    const rawDataMax = derivedZoomData.length > 0 ? Math.max(...derivedZoomData.map(d => d.dynamic_x)) : 100;
+    const dataMax = Math.ceil(rawDataMax * 1.2);
     const dataMin = derivedZoomData.length > 0 ? Math.min(...derivedZoomData.filter(d => d.dynamic_x > 0).map(d => d.dynamic_x)) : 1;
     const step = Math.max(0.01, dataMax / 100);
-    const currentMax = zoomXMax === Infinity ? dataMax : zoomXMax;
+    const deferredZoomXMax = React.useDeferredValue(zoomXMax);
+    const currentMax = deferredZoomXMax === Infinity ? dataMax : deferredZoomXMax;
     const isPercentileAxis = ['ttft', 'tpot', 'itl', 'ntpot', 'e2e'].includes(zoomXAxis);
     const visibleZoomData = derivedZoomData.filter(d => d.dynamic_x <= currentMax && (!isPercentileAxis || visiblePercentiles.includes(d.percentile)));
 
@@ -340,7 +342,10 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                     { value: 'e2e', label: 'E2E Latency' },
                                 ]}
                                 value={zoomXAxis}
-                                onChange={setZoomXAxis}
+                                onChange={(val) => {
+                                    setZoomXAxis(val);
+                                    setZoomXMax(Infinity);
+                                }}
                             />
                         </div>
 
@@ -356,7 +361,10 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                         { value: 'qps', label: 'QPS' },
                                     ]}
                                     value={zoomYAxis}
-                                    onChange={setZoomYAxis}
+                                    onChange={(val) => {
+                                        setZoomYAxis(val);
+                                        setZoomXMax(Infinity);
+                                    }}
                                 />
                             </div>
                         </div>
@@ -378,8 +386,20 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
 
                             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 px-3 py-1 rounded-lg">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Cap:</span>
-                                <input type="range" min={0} max={dataMax} step={step} value={currentMax} onChange={(e) => { const val = parseFloat(e.target.value); if (val >= dataMax * 0.99) setZoomXMax(Infinity); else setZoomXMax(val); }} className="w-28 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
-                                <input type="number" value={zoomXMax === Infinity ? '' : zoomXMax} placeholder={dataMax.toFixed(1)} onChange={(e) => { const val = parseFloat(e.target.value); if (!val || isNaN(val)) setZoomXMax(Infinity); else setZoomXMax(val); }} className="w-16 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all" />
+                                <button 
+                                    type="button"
+                                    onClick={() => setZoomXMax(zoomXMax === Infinity ? Math.round(dataMax * 0.8) : Infinity)}
+                                    className={cn(
+                                        'px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wider rounded transition-all cursor-pointer',
+                                        zoomXMax === Infinity 
+                                            ? 'bg-cyan-600 text-white shadow' 
+                                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                                    )}
+                                >
+                                    Auto
+                                </button>
+                                <input type="range" min={0} max={dataMax} step={step} value={currentMax} onChange={(e) => setZoomXMax(parseFloat(e.target.value))} className={cn("w-28 h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400", zoomXMax === Infinity ? "bg-slate-800/40 opacity-40" : "bg-slate-700")} />
+                                <input type="number" value={zoomXMax === Infinity ? '' : zoomXMax} placeholder={zoomXMax === Infinity ? 'Auto' : dataMax.toFixed(1)} onChange={(e) => { const val = parseFloat(e.target.value); if (!val || isNaN(val)) setZoomXMax(Infinity); else setZoomXMax(val); }} className={cn("w-16 bg-transparent text-[10px] focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all", zoomXMax === Infinity ? "text-slate-500" : "text-slate-200")} />
                                 <span className="text-[9px] text-slate-500 font-mono font-bold">ms</span>
                             </div>
                         </div>
@@ -398,9 +418,10 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                     type="number"
                                     dataKey="dynamic_x"
                                     label={xLabels[zoomXAxis] || 'Queries Per Second'}
-                                    domain={zoomLogScale ? [logTicks[0] || 1, 'auto'] : ['auto', 'auto']}
+                                    domain={zoomLogScale ? [logTicks[0] || 1, zoomXMax === Infinity ? 'auto' : zoomXMax] : [0, zoomXMax === Infinity ? 'auto' : zoomXMax]}
                                     scale={zoomLogScale ? 'log' : 'auto'}
                                     ticks={zoomLogScale ? logTicks : undefined}
+                                    allowDataOverflow
                                 />
                                 <ChartYAxis
                                     label={yLabels[zoomYAxis] || 'Tokens/sec'}

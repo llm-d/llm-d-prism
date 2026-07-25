@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line } from 'recharts';
 import { RotateCcw, Maximize, Minimize, ChevronUp, ChevronDown } from 'lucide-react';
 import { CustomLabel, CustomChartTooltip } from '../common';
@@ -179,80 +179,62 @@ export const ThroughputCostChart = (props) => {
             };
 
             // 1. Calculate Data Bounds (getVal already defined above)
-            
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            const visibleDataPoints = []; // Flattened
-            
-            // Directly iterate filteredData (already filtered by selectedBenchmarks)
-            // This avoids the brittle allModels × filteredData double-loop where
-            // d.model === model matching could fail due to normalization differences.
-            filteredData.forEach(d => {
-                if (config.filterFn(d)) {
-                    const vx = Number(getVal(d, config.xKey));
-                    const vy = Number(getVal(d, config.yKey));
-                    if (!isNaN(vx) && !isNaN(vy)) {
-                        const benchmarkKey = getBenchmarkKey(d);
-                        const model = d.model_name || d.model || 'Unknown';
-                        visibleDataPoints.push({ ...d, vx, vy, model, benchmarkKey });
-                        if (vx < minX) minX = vx;
-                        if (vx > maxX) maxX = vx;
-                        if (vy < minY) minY = vy;
-                        if (vy > maxY) maxY = vy;
+            const { visibleDataPoints, uniqueBenchmarks, baselineSeries, paretoData, autoX, autoY } = useMemo(() => {
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                const visibleDataPoints = []; // Flattened
+                
+                filteredData.forEach(d => {
+                    if (config.filterFn(d)) {
+                        const vx = Number(getVal(d, config.xKey));
+                        const vy = Number(getVal(d, config.yKey));
+                        if (!isNaN(vx) && !isNaN(vy)) {
+                            const benchmarkKey = getBenchmarkKey(d);
+                            const model = d.model_name || d.model || 'Unknown';
+                            visibleDataPoints.push({ ...d, vx, vy, model, benchmarkKey });
+                            if (vx < minX) minX = vx;
+                            if (vx > maxX) maxX = vx;
+                            if (vy < minY) minY = vy;
+                            if (vy > maxY) maxY = vy;
+                        }
                     }
+                });
+                
+                const uniqueBenchmarks = [...new Set(visibleDataPoints.map(d => d.benchmarkKey))];
+
+                const baselineSeries = (baselineBenchmarkKey
+                    ? visibleDataPoints
+                          .filter(d => d.benchmarkKey === baselineBenchmarkKey)
+                          .map(d => ({ vx: d.vx, vy: d.vy }))
+                          .sort((a, b) => a.vx - b.vx)
+                    : []);
+
+                let paretoData = [];
+                if (showPareto && visibleDataPoints.length > 0) {
+                     const maximizeY = tputType !== 'cost';
+                     const minimizeX = true;
+                     paretoData = getParetoFrontier(visibleDataPoints, minimizeX, maximizeY);
                 }
-            });
-            
-            // Get unique benchmark keys (each upload becomes a distinct line)
-            const uniqueBenchmarks = [...new Set(visibleDataPoints.map(d => d.benchmarkKey))];
 
-            // Baseline series — used to compute %diff in the tooltip. Built only
-            // when a baseline is set and that benchmark is currently visible.
-            const baselineSeries = (baselineBenchmarkKey
-                ? visibleDataPoints
-                      .filter(d => d.benchmarkKey === baselineBenchmarkKey)
-                      .map(d => ({ vx: d.vx, vy: d.vy }))
-                      .sort((a, b) => a.vx - b.vx)
-                : []);
+                if (minX === Infinity) { minX=0; maxX=100; minY=0; maxY=100; }
+                
+                const xPad = (maxX - minX) * 0.05 || (isLogScaleX ? minX*0.1 : 1);
+                const yPad = (maxY - minY) * 0.05 || 1;
+                
+                let minXBound = Math.max(0, minX - xPad);
+                let maxXBound = maxX + xPad;
 
-            // Calculate Pareto Frontier if enabled
-            let paretoData = [];
-            if (showPareto && visibleDataPoints.length > 0) {
-                 // Determine optimization directions
-                 // Y-Axis:
-                 // Tput/QPS -> Maximize
-                 // Cost -> Minimize
-                 const maximizeY = tputType !== 'cost';
-                 
-                 // X-Axis:
-                 // Time/Latency -> Minimize
-                 // (Currently all X modes are time-based)
-                 const minimizeX = true;
+                if (isLogScaleX) {
+                      const logMin = Math.floor(Math.log10(minX > 0 ? minX : 0.1));
+                      const logMax = Math.ceil(Math.log10(maxX > 0 ? maxX : 100));
+                      minXBound = Math.pow(10, logMin);
+                      maxXBound = Math.pow(10, logMax);
+                }
+                const upperX = xAxisMax !== Infinity ? xAxisMax : maxXBound;
+                const autoX = [minXBound, upperX]; 
+                const autoY = [Math.max(0, minY - yPad), maxY + yPad];
 
-                 paretoData = getParetoFrontier(visibleDataPoints, minimizeX, maximizeY);
-            }
-
-            // Handle empty data case
-            if (minX === Infinity) { minX=0; maxX=100; minY=0; maxY=100; }
-            
-            // Add padding if using auto-bounds
-            // Add padding if using auto-bounds
-            const xPad = (maxX - minX) * 0.05 || (isLogScaleX ? minX*0.1 : 1);
-            const yPad = (maxY - minY) * 0.05 || 1;
-            
-            let minXBound = Math.max(0, minX - xPad);
-            let maxXBound = maxX + xPad;
-
-            if (isLogScaleX) {
-                  // Snap to powers of 10 for cleaner log scale
-                  // Example: 12 -> 10, 856 -> 1000
-                  const logMin = Math.floor(Math.log10(minX > 0 ? minX : 0.1));
-                  const logMax = Math.ceil(Math.log10(maxX > 0 ? maxX : 100));
-                  
-                  minXBound = Math.pow(10, logMin);
-                  maxXBound = Math.pow(10, logMax);
-            }
-            const autoX = [minXBound, maxXBound]; 
-            const autoY = [Math.max(0, minY - yPad), maxY + yPad];
+                return { visibleDataPoints, uniqueBenchmarks, baselineSeries, paretoData, autoX, autoY };
+            }, [filteredData, config, getBenchmarkKey, baselineBenchmarkKey, showPareto, tputType, isLogScaleX, xAxisMax]);
 
             const curX = zoomDomain?.x || autoX;
             const curY = zoomDomain?.y || autoY;
@@ -681,9 +663,20 @@ export const ThroughputCostChart = (props) => {
             }
 
             if (theme === 'dark') {
-                const dataMax = validData.length > 0 ? Math.max(...validData.map(d => Number(getVal(d, xKey)) || 0)) : (Math.max(...filteredBySource.map(d => Number(getVal(d, xKey)) || 0)) || 100);
+                const rawDataMax = validData.length > 0 ? Math.max(...validData.map(d => Number(getVal(d, xKey)) || 0)) : (Math.max(...filteredBySource.map(d => Number(getVal(d, xKey)) || 0)) || 100);
+                const dataMax = Math.ceil(rawDataMax * 1.2);
                 const step = Math.max(0.01, dataMax / 100);
                 const currentMax = xAxisMax === Infinity ? dataMax : xAxisMax;
+
+                const switchMode = (mode) => {
+                    setChartMode(mode);
+                    setXAxisMax(Infinity);
+                };
+
+                const switchTput = (type) => {
+                    setTputType(type);
+                    setXAxisMax(Infinity);
+                };
 
                 return (
                     <div className="bg-slate-900/80 border border-slate-700/60 rounded-2xl shadow-2xl flex flex-col w-full min-h-[550px] overflow-visible backdrop-blur-sm relative">
@@ -715,11 +708,11 @@ export const ThroughputCostChart = (props) => {
                                         <div className="flex items-center gap-3">
                                              <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">X-Axis:</span>
                                              <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
-                                                 <button onClick={() => setChartMode('tpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'tpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TPOT</button>
-                                                 <button onClick={() => setChartMode('ntpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ntpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>NTPOT</button>
-                                                 <button onClick={() => setChartMode('ttft')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ttft' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TTFT</button>
-                                                 <button onClick={() => setChartMode('itl')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'itl' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>ITL</button>
-                                                 <button onClick={() => setChartMode('lat')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'lat' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>E2E Latency</button>
+                                                 <button onClick={() => switchMode('tpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'tpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TPOT</button>
+                                                 <button onClick={() => switchMode('ntpot')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ntpot' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>NTPOT</button>
+                                                 <button onClick={() => switchMode('ttft')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'ttft' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>TTFT</button>
+                                                 <button onClick={() => switchMode('itl')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'itl' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>ITL</button>
+                                                 <button onClick={() => switchMode('lat')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', chartMode === 'lat' ? 'bg-indigo-650 text-white shadow' : 'text-slate-400 hover:text-white')}>E2E Latency</button>
                                              </div>
                                          </div>
 
@@ -727,11 +720,11 @@ export const ThroughputCostChart = (props) => {
                                         <div className="flex items-center gap-3">
                                              <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider w-16">Y-Axis:</span>
                                              <div className="flex flex-wrap bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 gap-0.5">
-                                                 <button onClick={() => setTputType('output')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', tputType === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Output</button>
-                                                 <button onClick={() => metricAvailability.input && setTputType('input')} disabled={!metricAvailability.input} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.input ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Input</button>
-                                                 <button onClick={() => metricAvailability.total && setTputType('total')} disabled={!metricAvailability.total} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.total ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Total</button>
-                                                 <button onClick={() => metricAvailability.qps && setTputType('qps')} disabled={!metricAvailability.qps} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.qps ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>QPS</button>
-                                                 <button onClick={() => metricAvailability.cost && setTputType('cost')} disabled={!metricAvailability.cost} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.cost ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Cost</button>
+                                                 <button onClick={() => switchTput('output')} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', tputType === 'output' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Output</button>
+                                                 <button onClick={() => metricAvailability.input && switchTput('input')} disabled={!metricAvailability.input} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.input ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'input' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Input</button>
+                                                 <button onClick={() => metricAvailability.total && switchTput('total')} disabled={!metricAvailability.total} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.total ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Total</button>
+                                                 <button onClick={() => metricAvailability.qps && switchTput('qps')} disabled={!metricAvailability.qps} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.qps ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'qps' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>QPS</button>
+                                                 <button onClick={() => metricAvailability.cost && switchTput('cost')} disabled={!metricAvailability.cost} className={cn('px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wider rounded-md transition-all', !metricAvailability.cost ? 'text-slate-700 cursor-not-allowed opacity-40' : tputType === 'cost' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white')}>Cost</button>
                                              </div>
                                              {tputType === 'cost' && (
                                                  <select 
@@ -767,6 +760,18 @@ export const ThroughputCostChart = (props) => {
                                              {/* Cap Input */}
                                              <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800/80 px-3 py-1 rounded-lg">
                                                  <span className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider">Cap:</span>
+                                                 <button 
+                                                     type="button"
+                                                     onClick={() => setXAxisMax(xAxisMax === Infinity ? Math.round(dataMax * 0.8) : Infinity)}
+                                                     className={cn(
+                                                         'px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-wider rounded transition-all cursor-pointer',
+                                                         xAxisMax === Infinity 
+                                                             ? 'bg-cyan-600 text-white shadow' 
+                                                             : 'bg-slate-800 text-slate-400 hover:text-white'
+                                                     )}
+                                                 >
+                                                     Auto
+                                                 </button>
                                                  <input 
                                                      type="range" 
                                                      min={0} 
@@ -775,21 +780,26 @@ export const ThroughputCostChart = (props) => {
                                                      value={currentMax} 
                                                      onChange={(e) => {
                                                          const val = parseFloat(e.target.value);
-                                                         if (val >= dataMax * 0.99) setXAxisMax(Infinity);
-                                                         else setXAxisMax(val);
+                                                         setXAxisMax(val);
                                                      }} 
-                                                     className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
+                                                     className={cn(
+                                                         "w-24 h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400",
+                                                         xAxisMax === Infinity ? "bg-slate-850 opacity-40" : "bg-slate-800"
+                                                     )} 
                                                  />
                                                  <input 
                                                      type="number" 
                                                      value={xAxisMax === Infinity ? '' : xAxisMax} 
-                                                     placeholder={dataMax.toFixed(0)} 
+                                                     placeholder={xAxisMax === Infinity ? 'Auto' : dataMax.toFixed(0)} 
                                                      onChange={(e) => {
                                                          const val = parseFloat(e.target.value);
                                                          if (!val || isNaN(val)) setXAxisMax(Infinity);
                                                          else setXAxisMax(val);
                                                      }} 
-                                                     className="w-14 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-extrabold transition-all" 
+                                                     className={cn(
+                                                         "w-14 bg-transparent text-[10px] focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-extrabold transition-all",
+                                                         xAxisMax === Infinity ? "text-slate-500" : "text-slate-200"
+                                                     )} 
                                                  />
                                                  <span className="text-[9px] text-slate-500 font-mono font-bold">ms</span>
                                              </div>
@@ -909,10 +919,25 @@ export const ThroughputCostChart = (props) => {
                                                          strokeWidth={isBaseline ? 2.5 : 2} 
                                                          strokeDasharray={isBaseline ? "4 4" : "0"}
                                                          dot={showDataLabels ? { r: 3, fill: color, strokeWidth: 0 } : false} 
+                                                         label={(props) => <CustomLabel {...props} lastIndex={lineData.length - 1} text={smartLabels[benchmarkKey] || displayName} stroke={color} showLineLabel={showLabels} showDataLabels={showDataLabels} dataPoint={lineData[props.index]} />}
                                                          isAnimationActive={false}
-                                                    />
+                                                     />
                                                 );
                                             })}
+
+                                            {showPareto && paretoData.length > 1 && (
+                                                <Line 
+                                                    data={paretoData}
+                                                    type="monotone"
+                                                    dataKey="vy"
+                                                    stroke="#f59e0b"
+                                                    strokeWidth={2}
+                                                    strokeDasharray="5 5"
+                                                    dot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }}
+                                                    name="Pareto Frontier"
+                                                    isAnimationActive={false}
+                                                />
+                                            )}
                                         </LineChart>
                                     </ResponsiveContainer>
                                 </div>

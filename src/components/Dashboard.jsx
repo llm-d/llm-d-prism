@@ -1233,18 +1233,22 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         return models;
     }, [selectedBenchmarks, filteredBySource]);
 
+    const deferredXAxisMax = React.useDeferredValue(xAxisMax);
+
     // Filter data based on selected sources, models (via benchmarks), and x-axis filter
-    let filteredData = filteredBySource
-        .filter(d => selectedBenchmarks.has(getBenchmarkKey(d)))
-        .filter(d => {
-            if (xAxisMax === Infinity) return true;
-            if (chartMode === 'tpot') return d.time_per_output_token <= xAxisMax;
-            if (chartMode === 'qps') return (d.qps || d.metrics?.request_rate || 0) <= xAxisMax;
-            if (chartMode === 'ntpot') return (d.metrics?.ntpot || 0) <= xAxisMax;
-            if (chartMode === 'ttft') return (d.metrics?.ttft?.mean || 0) <= xAxisMax;
-            if (chartMode === 'itl') return (d.metrics?.itl || 0) <= xAxisMax;
-            return (d.latency?.mean || 0) <= xAxisMax;
-        });
+    const filteredData = React.useMemo(() => {
+        return filteredBySource
+            .filter(d => selectedBenchmarks.has(getBenchmarkKey(d)))
+            .filter(d => {
+                if (deferredXAxisMax === Infinity) return true;
+                if (chartMode === 'tpot') return d.time_per_output_token <= deferredXAxisMax;
+                if (chartMode === 'qps') return (d.qps || d.metrics?.request_rate || 0) <= deferredXAxisMax;
+                if (chartMode === 'ntpot') return (d.metrics?.ntpot || 0) <= deferredXAxisMax;
+                if (chartMode === 'ttft') return (d.metrics?.ttft?.mean || 0) <= deferredXAxisMax;
+                if (chartMode === 'itl') return (d.metrics?.itl || 0) <= deferredXAxisMax;
+                return (d.latency?.mean || 0) <= deferredXAxisMax;
+            });
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey, deferredXAxisMax, chartMode]);
 
     const toggleBenchmark = (key) => {
         console.log("[toggleBenchmark] Toggling key:", key);
