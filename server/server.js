@@ -27,6 +27,11 @@ import { storage } from './results/gcs.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Local benchmark reports dir (e.g. a mounted PVC). Falls back to the dev path.
+const LOCAL_DIR = path.resolve(
+    process.env.PRISM_LOCAL_DIR || path.join(__dirname, '../private/benchmarks')
+);
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -65,7 +70,8 @@ app.get('/api/config', (req, res) => {
         hostProject: process.env.GOOGLE_CLOUD_PROJECT || null,
         siteName: process.env.SITE_NAME || null,
         gaTrackingId: process.env.GA_TRACKING_ID || null,
-        contactUrl: process.env.CONTACT_US_URL || null
+        contactUrl: process.env.CONTACT_US_URL || null,
+        localDir: !!process.env.PRISM_LOCAL_DIR
     });
 });
 
@@ -159,7 +165,7 @@ app.all('/api/giq/*', async (req, res) => {
 // --- API: Local Benchmarks (Dev Mode) ---
 app.get('/api/local/list', async (req, res) => {
     const fs = await import('fs');
-    const dir = path.join(__dirname, '../private/benchmarks');
+    const dir = LOCAL_DIR;
     if (!fs.existsSync(dir)) {
         return res.json({ items: [] });
     }
@@ -191,10 +197,11 @@ app.get('/api/local/file/*', async (req, res) => {
     const fs = await import('fs');
     const relPath = req.params[0];
 
-    const baseDir = path.resolve(__dirname, '../private/benchmarks');
+    const baseDir = LOCAL_DIR;
     const filepath = path.resolve(baseDir, relPath);
 
-    if (!filepath.startsWith(baseDir)) {
+    const rel = path.relative(baseDir, filepath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
         return res.status(403).send('Forbidden');
     }
 
@@ -509,7 +516,7 @@ app.post('/api/local/submit', async (req, res) => {
         return res.status(400).json({ error: 'Missing runId' });
     }
     
-    const baseDir = path.resolve(__dirname, '../private/benchmarks');
+    const baseDir = LOCAL_DIR;
     const runDir = path.join(baseDir, payload.runId);
     
     try {

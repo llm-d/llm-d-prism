@@ -1,5 +1,6 @@
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
+import { parseReportV02, stageToEntry } from './benchmarkReportV02Parser';
 
 const generateUUID = () => {
     return uuidv4();
@@ -297,6 +298,46 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
     } catch (e) {
         console.warn(`YAML Parsing failed for ${filePath}:`, e);
         return null;
+    }
+};
+
+/**
+ * Scans a local directory (served by /api/local/*) for v0.2 benchmark
+ * reports and normalizes them through the shared brv02 pipeline.
+ */
+export const scanLocalBenchmarks = async () => {
+    try {
+        const response = await fetch('/api/local/list');
+        if (!response.ok) {
+            throw new Error(`Failed to list local benchmarks: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.items) return [];
+
+        const entries = [];
+
+        await Promise.all(data.items.map(async (item) => {
+            if (!item.name.endsWith('.yaml')) return;
+            if (!item.name.includes('benchmark_report_v0.2')) return;
+
+            try {
+                const fileRes = await fetch(item.mediaLink);
+                if (!fileRes.ok) return;
+
+                const content = await fileRes.text();
+                const stage = parseReportV02(content, item.name);
+                if (stage) entries.push(stageToEntry(stage));
+            } catch (e) {
+                console.warn(`Failed to parse local report ${item.name}:`, e);
+            }
+        }));
+
+        return entries;
+
+    } catch (e) {
+        console.error('Local benchmarks scan error:', e);
+        return [];
     }
 };
 

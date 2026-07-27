@@ -18,6 +18,7 @@ import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
 import { parseReportV02, groupStagesIntoRuns, stageToEntry } from '../utils/benchmarkReportV02Parser';
+import { scanLocalBenchmarks } from '../utils/gcsScanner';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
@@ -1335,6 +1336,19 @@ export const useDashboardData = (initialState, dashboardState) => {
             } catch (e) {
                 console.error("Failed to load local data", e);
                 failedSources.push(`Sample Data (${e.message})`);
+            }
+
+            // 1b. Fetch local/PVC benchmark reports (no-op unless PRISM_LOCAL_DIR is set)
+            try {
+                const localBench = await scanLocalBenchmarks();
+                if (localBench.length > 0) {
+                    const sourceKey = 'local:benchmarks';
+                    allData = [...allData, ...localBench.map(e => ({ ...e, source: sourceKey }))];
+                    setAvailableSources(prev => new Set([...prev, sourceKey]));
+                    setSelectedSources(prev => new Set([...prev, sourceKey]));
+                }
+            } catch (e) {
+                console.warn("Failed to load local/PVC benchmarks", e);
             }
 
             // 1c. Fetch Archived Drive Data
