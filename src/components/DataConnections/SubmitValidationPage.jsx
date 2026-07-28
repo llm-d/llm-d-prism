@@ -1343,13 +1343,13 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     model_name: bundle.payload.model_name || "Custom Model",
                     hardware: {
                         hardware_name: bundle.payload.hardware?.hardware_name || "Unknown Hardware",
-                        accelerator_count: bundle.payload.hardware?.accelerator_count || null
+                        accelerator_count: bundle.payload.hardware?.accelerator_count
                     },
-                    well_lit_path: bundle.payload.well_lit_path || null,
-                    inference_tool: bundle.payload.inference_tool || null,
-                    inference_tool_version: bundle.payload.inference_tool_version || null,
-                    run_metadata: bundle.payload.run_metadata || null,
-                    metadata: bundle.payload.metadata || null,
+                    well_lit_path: bundle.payload.well_lit_path,
+                    inference_tool: bundle.payload.inference_tool,
+                    inference_tool_version: bundle.payload.inference_tool_version,
+                    run_metadata: bundle.payload.run_metadata,
+                    metadata: bundle.payload.metadata,
                     manifests: {
                         ...(bundle.payload.manifests || {}),
                         ...(bundle.attachedManifests ? Object.fromEntries(
@@ -1387,6 +1387,13 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     }))
                 };
 
+                const preflight = validatePrismUploadStructure(payload, { isUpload: true });
+                if (!preflight.isValid) {
+                    const errorMsg = `Pre-flight validation failed for "${payload.runLabel}": ${preflight.errors.join('; ')}`;
+                    if (addToast) addToast(errorMsg, "error");
+                    throw new Error(errorMsg);
+                }
+
                 const res = await fetch('/api/results', {
                     method: 'POST',
                     headers: {
@@ -1398,7 +1405,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
-                    throw new Error(errorData.error || `Submit failed with HTTP ${res.status}`);
+                    const detailsStr = Array.isArray(errorData.details) ? `: ${errorData.details.join('; ')}` : (errorData.details ? `: ${errorData.details}` : '');
+                    throw new Error((errorData.error || `Submit failed with HTTP ${res.status}`) + detailsStr);
                 }
 
                 const responseData = await res.json();

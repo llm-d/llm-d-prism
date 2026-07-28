@@ -77,19 +77,19 @@ export const PrismResultPayloadSchema = z.object({
     /** Selected "Well-Lit Path" optimization and deployment classification. Example: "optimized-baseline" */
     well_lit_path: z.string().nullable().optional(),
     /** Name of the primary backend inference execution engine. Example: "vllm" | "tgi" | "sglang" */
-    inference_tool: z.string().optional(),
+    inference_tool: z.string().nullable().optional(),
     /** Software version of the main inference execution tool. Example: "v0.4.2" */
-    inference_tool_version: z.string().optional(),
+    inference_tool_version: z.string().nullable().optional(),
     /** Flat key-value record mapping secondary software dependencies/tools to their versions. Example: { "guidellm": "v0.1.0" } */
-    other_tools: z.record(z.string(), z.string()).optional(),
+    other_tools: z.record(z.string(), z.string()).nullable().optional(),
     /** Flat key-value record mapping deployment configuration manifest files to their hosted URLs. Example: { "vllm_service": "https://github.com/.../vllm.yaml" } */
-    manifests: z.record(z.string(), z.string()).optional(),
+    manifests: z.record(z.string(), z.string()).nullable().optional(),
     /** Flat key-value record mapping verification run logs/evidence to their storage bucket URLs. Example: { "run_log": "gs://llm-d-benchmarks/regressions/gemma2_9b/run.log" } */
-    evidence: z.record(z.string(), z.string()).optional(),
+    evidence: z.record(z.string(), z.string()).nullable().optional(),
     /** Raw parsed YAML content dictionary harvested from run_metadata.yaml if found. */
-    run_metadata: z.record(z.string(), z.unknown()).optional(),
+    run_metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     /** User custom JSON metadata dictionary editable dynamically within the dashboard inline editor. */
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     /** Feedback reason for rejection or change requests, if any. */
     feedback: z.string().nullable().optional(),
     /** Optional review metadata including reviewer and review status change history. */

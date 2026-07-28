@@ -295,3 +295,20 @@ export async function writeResult(
         throw new Error(`GCS upload failed: ${message}`);
     }
 }
+
+/**
+ * Deletes a benchmark result bundle from Google Cloud Storage by its runId.
+ */
+export async function deleteResult(runId: string): Promise<void> {
+    const bucketName = getPrismResultsBucket();
+    const objectName = `prism-results-store/${runId}.v1.json`;
+    const file = storage.bucket(bucketName).file(objectName);
+    try {
+        await file.delete();
+    } catch (e: unknown) {
+        if (e && typeof e === 'object' && 'code' in e && (e as { code?: number }).code === 404) return;
+        const message = e instanceof Error ? e.message : String(e);
+        throw new Error(`Failed to delete result from GCS: ${message}`);
+    }
+}
+

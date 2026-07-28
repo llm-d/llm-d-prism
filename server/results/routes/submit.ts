@@ -95,10 +95,9 @@ export async function submitResultsHandler(
 
         if (!processingResult.success) {
             return res.status(400).json({
-                error: 'Validation failed during processing.',
+                error: 'Validation failed during processing. Upload dropped.',
                 details: processingResult.errors,
-                warnings: processingResult.warnings,
-                state: processingResult.state
+                warnings: processingResult.warnings
             });
         }
 

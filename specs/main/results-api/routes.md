@@ -108,6 +108,7 @@ Submits a benchmark result bundle to the active results store.
   and nested entry `run_id`s) are regenerated on the server to prevent ID
   collisions. The metadata is also enriched with the author's username and
   submission timestamp.
+- **Validation Failures:** If automated validation fails during processing, the endpoint returns `400 Bad Request` with error details and warnings. The submission is dropped completely and is NOT placed in the `rejected` queue or saved in cloud storage.
 - **Response (201 Created):**
     ```json
     {
@@ -156,7 +157,7 @@ pending benchmark result submission.
     - **Contributor (Owner):** Can only transition state to
       `submitted_pending_processing` or `submitted_pending_review` to promote or
       resubmit their own benchmark. Any attempt to set state to `public` or
-      `rejected` returns `403 Forbidden`.
+      `rejected` returns `403 Forbidden`. Rejections are reserved exclusively for administrators.
     - **Other users:** `403 Forbidden`.
 
 ---

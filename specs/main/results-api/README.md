@@ -170,8 +170,9 @@ environment:
       benchmark results have been included in said well-lit path’s results.
     - Implies additional visibility from just sea of benchmarks.
 - **`rejected`** (Rejected):
-    - Failed any of the above checks (or include reason otherwise).
-    - Deleted off cloud.
+    - Explicitly rejected by an administrator during human review (`submitted_pending_review` -> `rejected`), with optional rejection reason attached.
+    - Deleted off cloud when purged by admin.
+    - **Note:** Automated validation failures on upload do NOT transition items to `rejected`. Instead, invalid uploads are completely dropped/deleted from cloud storage, returning an HTTP 400 validation error to the submitter without populating the rejected queue.
 
 ### 6.2 State Transitions
 
@@ -180,7 +181,7 @@ stateDiagram-v2
     [*] --> staged : Local Upload
     staged --> submitted_pending_processing : Submit (Requires GitHub Auth)
     submitted_pending_processing --> submitted_pending_review : Auto-Validation Pass
-    submitted_pending_processing --> rejected : Auto-Validation Fail
+    submitted_pending_processing --> [*] : Auto-Validation Fail (Dropped)
     submitted_pending_review --> public : Admin Approved
     submitted_pending_review --> rejected : Admin Rejected
     public --> promoted : Selected for Well-Lit Path
@@ -202,8 +203,9 @@ early beta:
    synchronously inside the request lifecycle immediately after the raw upload
    is staged in GCS.
 2. **Immediate Promotion**: If validation passes, the run is directly promoted
-   to `submitted_pending_review` (and if it fails, it is marked as `rejected`).
-   The client receives the final status response immediately.
+   to `submitted_pending_review`. If validation fails, the item is completely
+   dropped/deleted from cloud storage and an HTTP 400 error is returned to
+   the client. The `rejected` queue is reserved exclusively for manual admin rejections.
 3. **Future Decoupling**: The processing wrapper is fully decoupled. In the
    future, the synchronous invocation can be removed in favor of an asynchronous
    background worker (e.g., GCS Object Eventarc trigger or Pub/Sub pull worker

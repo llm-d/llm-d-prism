@@ -140,9 +140,8 @@ export async function reviewResultsHandler(
             const processingResult = await processSubmission(runId);
             if (!processingResult.success) {
                 return res.status(400).json({
-                    error: 'Validation failed during resubmission.',
-                    details: processingResult.errors,
-                    state: processingResult.state
+                    error: 'Validation failed during resubmission. Submission dropped.',
+                    details: processingResult.errors
                 });
             }
             return res.json({

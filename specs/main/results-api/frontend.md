@@ -68,7 +68,7 @@ pipeline status:
   Accelerator Count) to apply seamlessly. KPI cards at the top of the Results
   Store page allow users to quickly filter the table by submission state
   (`Staged`, `Under Review` / `Processing`, `In Review`, `Approved` / `Public`,
-  `Action Required` / `Rejected`).
+  `Action Required` / `Rejected`). The `Rejected` state is reserved for runs explicitly rejected by administrators during review; uploads failing automated validation are dropped directly without populating the rejected queue.
 
 ---
 
