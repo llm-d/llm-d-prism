@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, FileText, ChevronLeft, ChevronRight, ChevronDown, Trash2, Upload, ShieldAlert, Check, ArrowRight, ArrowLeft, GitCompare, Zap, Cpu, Pencil } from 'lucide-react';
+import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, FileText, ChevronLeft, ChevronRight, ChevronDown, Trash2, Upload, ShieldAlert, Check, ArrowRight, ArrowLeft, GitCompare, Zap, Cpu, Pencil, Layers, Split, GripVertical, Sparkles, Info } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure } from '../../utils/benchmarkValidator';
-import { parseReportV02, stageToEntry, canonicalStringify } from '../../utils/benchmarkReportV02Parser';
+import { parseReportV02, stageToEntry, canonicalStringify, mutateRawReportMetadata } from '../../utils/benchmarkReportV02Parser';
 import yaml from 'js-yaml';
-import { getBenchmarkKey } from '../../utils/dashboardHelpers';
 import IntelligentRoutingChart from '../IntelligentRoutingChart';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { Badge, Button, Checkbox, Input, Label, Panel, Select, Spinner } from '../ui';
 import { cn } from '../../utils/cn';
+import CoalesceConflictModal from './CoalesceConflictModal';
 
 const checkStageMetrics = (entry, format) => {
     let parsedStage = null;
@@ -36,7 +36,7 @@ const checkStageMetrics = (entry, format) => {
                 hardware: (parsed?.hardware || parsed?.accelerator) && (parsed.hardware || parsed.accelerator) !== 'Unknown' && (parsed.hardware || parsed.accelerator) !== 'Unknown Hardware' ? (parsed.hardware || parsed.accelerator) : "",
                 inference_tool: (parsed?.inference_tool || parsed?.backend) && (parsed.inference_tool || parsed.backend) !== 'Unknown' ? (parsed.inference_tool || parsed.backend) : ""
             };
-        } catch (e) {
+        } catch {
             // failed
         }
     } else {
@@ -45,16 +45,26 @@ const checkStageMetrics = (entry, format) => {
             if (parsedStage) {
                 normalized = stageToEntry(parsedStage);
             }
-        } catch (e) {
+        } catch {
             // failed
         }
     }
 
     const latencyVal = normalized?.latency && typeof normalized.latency === 'object' ? normalized.latency.mean : normalized?.latency;
+    const rawTimestamp = entry.raw_report?.run?.time?.start || entry.raw_report?.timestamp || entry.timestamp;
+    let formattedTimestamp = 'N/A';
+    if (rawTimestamp) {
+        const d = new Date(rawTimestamp);
+        if (!isNaN(d.getTime())) {
+            formattedTimestamp = d.toLocaleString();
+        }
+    }
 
     return {
-        stageIndex: parsedStage?.stageIndex ?? entry.stage ?? 1,
+        stageIndex: entry.prism_stage_index ?? (parsedStage?.stageIndex ?? entry.stage ?? 0),
         filename: entry.filename,
+        rawTimestamp,
+        timestamp: formattedTimestamp,
         throughput: {
             val: normalized?.throughput,
             isValid: typeof normalized?.throughput === 'number' && normalized.throughput > 0
@@ -84,8 +94,8 @@ const checkStageMetrics = (entry, format) => {
 
 export default function UploadValidationPage({ onNavigateBack, onNavigate, dashboardState, dashboardData, initialIntent }) {
     const {
-        baselineBenchmarkKey,
-        setBaselineBenchmarkKey
+        baselineBenchmarkKey: _baselineBenchmarkKey,
+        setBaselineBenchmarkKey: _setBaselineBenchmarkKey
     } = dashboardState;
 
     const {
@@ -102,7 +112,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         removeBrv02Run
     } = dashboardData;
 
-    const existingRunIds = React.useMemo(() => brv02Runs.map(r => r.runId), [brv02Runs]);
+    const _existingRunIds = React.useMemo(() => brv02Runs.map(r => r.runId), [brv02Runs]);
 
     const [stagedFiles, setStagedFiles] = useState([]);
     const [manifestUrlInputs, setManifestUrlInputs] = useState({});
@@ -127,12 +137,459 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
     const [selectedReviewers, setSelectedReviewers] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [targetVisibility, setTargetVisibility] = useState('submitted_pending_review');
-    const [comparingBundleId, setComparingBundleId] = useState(null);
+    const [_comparingBundleId, _setComparingBundleId] = useState(null);
 
-    const [localModelFilter, setLocalModelFilter] = useState('all');
-    const [localHardwareFilter, setLocalHardwareFilter] = useState('all');
+    const [localModelFilter, _setLocalModelFilter] = useState('all');
+    const [localHardwareFilter, _setLocalHardwareFilter] = useState('all');
     const [isUploadSidebarCollapsed, setIsUploadSidebarCollapsed] = useState(false);
     const prevStagedCountRef = React.useRef(0);
+
+    // Coalescing & Selection states
+    const [selectedBundleIds, setSelectedBundleIds] = useState([]);
+    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [pendingCoalesceBundles, setPendingCoalesceBundles] = useState([]);
+    const [draggedStageIndex, setDraggedStageIndex] = useState(null);
+    const [stageSortConfig, setStageSortConfig] = useState({});
+    const [hoveredFilenameTooltip, setHoveredFilenameTooltip] = useState(null);
+
+    const handleFilenameMouseEnter = (e, filename) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const isNearTop = rect.top < 120;
+        setHoveredFilenameTooltip({
+            filename,
+            x: rect.left + rect.width / 2,
+            y: isNearTop ? rect.bottom + 8 : rect.top - 8,
+            isNearTop
+        });
+    };
+
+    const handleFilenameMouseLeave = () => {
+        setHoveredFilenameTooltip(null);
+    };
+
+    // Selection handlers
+    const toggleSelectBundle = (bundleId) => {
+        setSelectedBundleIds(prev =>
+            prev.includes(bundleId)
+                ? prev.filter(id => id !== bundleId)
+                : [...prev, bundleId]
+        );
+    };
+
+    const toggleSelectAllBundles = () => {
+        const visibleBundles = stagedFiles.filter(b => !b.isSkipped);
+        if (selectedBundleIds.length === visibleBundles.length) {
+            setSelectedBundleIds([]);
+        } else {
+            setSelectedBundleIds(visibleBundles.map(b => b.id));
+        }
+    };
+
+    // Coalescing handler
+    const handleCoalesceSelected = () => {
+        const selectedBundles = stagedFiles.filter(b => selectedBundleIds.includes(b.id));
+        if (selectedBundles.length < 2) {
+            if (addToast) addToast("Select at least 2 staged benchmark runs to coalesce.", "warning");
+            return;
+        }
+
+        // Check if there are metadata conflicts across selected bundles
+        const fieldGetters = [
+            b => b.name || b.payload?.runLabel,
+            b => b.payload?.model_name,
+            b => b.payload?.hardware?.hardware_name,
+            b => b.payload?.hardware?.accelerator_count,
+            b => b.payload?.inference_tool,
+            b => b.payload?.inference_tool_version
+        ];
+
+        let hasConflicts = false;
+        for (const getter of fieldGetters) {
+            const values = new Set();
+            selectedBundles.forEach(b => {
+                const v = getter(b);
+                if (v !== undefined && v !== null && String(v).trim() !== '') {
+                    values.add(String(v).trim());
+                }
+            });
+            if (values.size > 1) {
+                hasConflicts = true;
+                break;
+            }
+        }
+
+        if (hasConflicts) {
+            setPendingCoalesceBundles(selectedBundles);
+            setIsConflictModalOpen(true);
+        } else {
+            // Direct coalesce without conflict modal
+            const resolvedMetadata = {
+                runLabel: selectedBundles[0].name || selectedBundles[0].payload?.runLabel || 'Coalesced Run',
+                model_name: selectedBundles.find(b => b.payload?.model_name)?.payload?.model_name || '',
+                hardware_name: selectedBundles.find(b => b.payload?.hardware?.hardware_name)?.payload?.hardware?.hardware_name || '',
+                accelerator_count: selectedBundles.find(b => b.payload?.hardware?.accelerator_count)?.payload?.hardware?.accelerator_count || 1,
+                inference_tool: selectedBundles.find(b => b.payload?.inference_tool)?.payload?.inference_tool || '',
+                inference_tool_version: selectedBundles.find(b => b.payload?.inference_tool_version)?.payload?.inference_tool_version || ''
+            };
+            executeCoalesce(selectedBundles, resolvedMetadata);
+        }
+    };
+
+    const executeCoalesce = (targetBundles, resolvedMetadata, isAuto = false) => {
+        if (!targetBundles || targetBundles.length < 2) return;
+
+        const coalescedId = uuidv4();
+        const combinedEntries = [];
+        const combinedStageFiles = [];
+        let combinedRunMetadata = null;
+        let combinedConfig = null;
+        let combinedSummary = null;
+
+        let globalStageIndex = 0;
+        targetBundles.forEach(bundle => {
+            if (bundle.stageFiles) {
+                combinedStageFiles.push(...bundle.stageFiles);
+            }
+            if (bundle.metadataFiles?.run_metadata?.parsed) {
+                combinedRunMetadata = bundle.metadataFiles.run_metadata.parsed;
+            }
+            if (bundle.metadataFiles?.config?.parsed) {
+                combinedConfig = bundle.metadataFiles.config.parsed;
+            }
+            if (bundle.metadataFiles?.summary?.parsed) {
+                combinedSummary = bundle.metadataFiles.summary.parsed;
+            }
+
+            const entries = bundle.payload?.entries || [];
+            entries.forEach(entry => {
+                const mutatedRawReport = mutateRawReportMetadata(entry.raw_report, {
+                    model_name: resolvedMetadata.model_name,
+                    hardware_name: resolvedMetadata.hardware_name,
+                    runLabel: resolvedMetadata.runLabel,
+                    inference_tool: resolvedMetadata.inference_tool
+                });
+                combinedEntries.push({
+                    ...entry,
+                    prism_stage_index: globalStageIndex++,
+                    run_description: resolvedMetadata.runLabel || entry.run_description,
+                    raw_report: mutatedRawReport
+                });
+            });
+        });
+
+        const newPayload = {
+            runId: coalescedId,
+            runLabel: resolvedMetadata.runLabel,
+            model_name: resolvedMetadata.model_name,
+            hardware: {
+                hardware_name: resolvedMetadata.hardware_name,
+                accelerator_count: resolvedMetadata.accelerator_count
+            },
+            attribution: targetBundles[0].payload?.attribution || null,
+            manifests: targetBundles.reduce((acc, b) => ({ ...acc, ...(b.payload?.manifests || {}) }), {}),
+            evidence: targetBundles.reduce((acc, b) => ({ ...acc, ...(b.payload?.evidence || {}) }), {}),
+            format: "brv02",
+            run_metadata: combinedRunMetadata || targetBundles[0].payload?.run_metadata || undefined,
+            entries: combinedEntries,
+            well_lit_path: targetBundles[0].payload?.well_lit_path || null,
+            metadata: {},
+            inference_tool: resolvedMetadata.inference_tool,
+            inference_tool_version: resolvedMetadata.inference_tool_version,
+            benchmark_harness: resolvedMetadata.benchmark_harness,
+            benchmark_harness_version: resolvedMetadata.benchmark_harness_version,
+            other_tools: targetBundles[0].payload?.other_tools || {},
+            hardwareInferred: false,
+            modelNameInferred: false,
+            acceleratorCountInferred: false
+        };
+
+        const uploadValidation = validatePrismUploadStructure(newPayload, { isUpload: false });
+        const bundleValidation = {
+            format: 'brv02',
+            hasHardware: !!resolvedMetadata.hardware_name,
+            errors: uploadValidation.errors || [],
+            warnings: uploadValidation.warnings || [],
+            fieldErrors: uploadValidation.fieldErrors || {},
+            entries: combinedEntries
+        };
+
+        const coalescedBundle = {
+            id: coalescedId,
+            dirKey: `coalesced-${coalescedId.slice(0, 8)}`,
+            name: resolvedMetadata.runLabel,
+            stageFiles: combinedStageFiles,
+            metadataFiles: {
+                run_metadata: combinedRunMetadata ? { parsed: combinedRunMetadata } : null,
+                config: combinedConfig ? { parsed: combinedConfig } : null,
+                summary: combinedSummary ? { parsed: combinedSummary } : null
+            },
+            payload: newPayload,
+            validation: bundleValidation,
+            isExpanded: true,
+            isSkipped: false,
+            isCoalesced: true,
+            isAutoCoalesced: isAuto,
+            originalSourceBundles: targetBundles,
+            targetDashboards: targetBundles[0].targetDashboards || ['performance-browser']
+        };
+
+        const targetIds = new Set(targetBundles.map(b => b.id));
+        setStagedFiles(prev => {
+            const firstIdx = prev.findIndex(b => targetIds.has(b.id));
+            const filtered = prev.filter(b => !targetIds.has(b.id));
+            if (firstIdx >= 0) {
+                filtered.splice(firstIdx, 0, coalescedBundle);
+            } else {
+                filtered.push(coalescedBundle);
+            }
+            return filtered;
+        });
+
+        setSelectedBundleIds([]);
+        setIsConflictModalOpen(false);
+        setPendingCoalesceBundles([]);
+
+        if (addToast) {
+            addToast(`Successfully coalesced ${targetBundles.length} runs into '${resolvedMetadata.runLabel}'.`, 'success');
+        }
+    };
+
+    // Ungroup Handler
+    const handleUngroupBundle = (bundleId) => {
+        const bundle = stagedFiles.find(b => b.id === bundleId);
+        if (!bundle || !bundle.originalSourceBundles || bundle.originalSourceBundles.length === 0) return;
+
+        setStagedFiles(prev => {
+            const idx = prev.findIndex(b => b.id === bundleId);
+            if (idx < 0) return prev;
+            const updated = [...prev];
+            updated.splice(idx, 1, ...bundle.originalSourceBundles);
+            return updated;
+        });
+
+        if (addToast) {
+            addToast(`Ungrouped '${bundle.name}' back into ${bundle.originalSourceBundles.length} original runs.`, 'info');
+        }
+    };
+
+    // Helper to get timestamp in epoch ms from a bundle
+    const getBundleTimestamp = (bundle) => {
+        if (bundle.payload?.submitted_at) {
+            const t = new Date(bundle.payload.submitted_at).getTime();
+            if (!isNaN(t) && t > 0) return t;
+        }
+        const firstReport = bundle.payload?.entries?.[0]?.raw_report;
+        if (firstReport?.run?.time?.start) {
+            const t = new Date(firstReport.run.time.start).getTime();
+            if (!isNaN(t) && t > 0) return t;
+        }
+        if (firstReport?.timestamp) {
+            const t = new Date(firstReport.timestamp).getTime();
+            if (!isNaN(t) && t > 0) return t;
+        }
+        if (bundle.timestamp) {
+            const t = new Date(bundle.timestamp).getTime();
+            if (!isNaN(t) && t > 0) return t;
+        }
+        return null;
+    };
+
+    // Auto-Group Heuristic Handler
+    const handleAutoGroup = () => {
+        const uncoalesced = stagedFiles.filter(b => !b.isSkipped && !b.isCoalesced);
+        if (uncoalesced.length < 2) {
+            if (addToast) addToast("At least 2 un-coalesced runs are needed for auto-grouping.", "info");
+            return;
+        }
+
+        // Group by normalized model_name + hardware_name + inference_tool
+        const groupsMap = new Map();
+        uncoalesced.forEach(bundle => {
+            const m = (bundle.payload?.model_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const h = (bundle.payload?.hardware?.hardware_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const tool = (bundle.payload?.inference_tool || '').toLowerCase().trim();
+            const key = `${m}::${h}::${tool}`;
+
+            if (!groupsMap.has(key)) {
+                groupsMap.set(key, [bundle]);
+            } else {
+                groupsMap.get(key).push(bundle);
+            }
+        });
+
+        let autoGroupedCount = 0;
+        let createdRunsCount = 0;
+
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+
+        groupsMap.forEach((bundlesInGroup) => {
+            // Cluster by timestamp proximity (<= 1 hour)
+            const timeClusters = [];
+            bundlesInGroup.forEach(bundle => {
+                const ts = getBundleTimestamp(bundle);
+                if (ts === null) {
+                    let cluster = timeClusters.find(c => c.timestamp === null);
+                    if (!cluster) {
+                        cluster = { timestamp: null, bundles: [] };
+                        timeClusters.push(cluster);
+                    }
+                    cluster.bundles.push(bundle);
+                } else {
+                    let cluster = timeClusters.find(c => c.timestamp !== null && Math.abs(c.timestamp - ts) <= ONE_HOUR_MS);
+                    if (!cluster) {
+                        cluster = { timestamp: ts, bundles: [] };
+                        timeClusters.push(cluster);
+                    }
+                    cluster.bundles.push(bundle);
+                }
+            });
+
+            timeClusters.forEach(cluster => {
+                if (cluster.bundles.length >= 2) {
+                    const bundlesToCoalesce = cluster.bundles;
+                    const resolvedMetadata = {
+                        runLabel: bundlesToCoalesce[0].name || bundlesToCoalesce[0].payload?.runLabel || 'Auto-Grouped Run',
+                        model_name: bundlesToCoalesce.find(b => b.payload?.model_name)?.payload?.model_name || '',
+                        hardware_name: bundlesToCoalesce.find(b => b.payload?.hardware?.hardware_name)?.payload?.hardware?.hardware_name || '',
+                        accelerator_count: bundlesToCoalesce.find(b => b.payload?.hardware?.accelerator_count)?.payload?.hardware?.accelerator_count || 1,
+                        inference_tool: bundlesToCoalesce.find(b => b.payload?.inference_tool)?.payload?.inference_tool || '',
+                        inference_tool_version: bundlesToCoalesce.find(b => b.payload?.inference_tool_version)?.payload?.inference_tool_version || ''
+                    };
+                    executeCoalesce(bundlesToCoalesce, resolvedMetadata, true);
+                    autoGroupedCount += bundlesToCoalesce.length;
+                    createdRunsCount++;
+                }
+            });
+        });
+
+        if (createdRunsCount > 0) {
+            if (addToast) {
+                addToast(`Auto-grouped ${autoGroupedCount} runs into ${createdRunsCount} coalesced benchmark run(s).`, 'success');
+            }
+        } else {
+            if (addToast) {
+                addToast("No matching candidate runs found for auto-grouping.", "info");
+            }
+        }
+    };
+
+    // Stage Re-ordering Handler
+    const handleMoveStage = (bundleId, fromIndex, toIndex) => {
+        setStagedFiles(prev => prev.map(bundle => {
+            if (bundle.id !== bundleId) return bundle;
+            const entries = [...(bundle.payload?.entries || [])];
+            if (fromIndex < 0 || fromIndex >= entries.length || toIndex < 0 || toIndex >= entries.length) return bundle;
+
+            const [moved] = entries.splice(fromIndex, 1);
+            entries.splice(toIndex, 0, moved);
+
+            const reindexedEntries = entries.map((entry, idx) => ({
+                ...entry,
+                prism_stage_index: idx
+            }));
+
+            const updatedPayload = {
+                ...bundle.payload,
+                entries: reindexedEntries
+            };
+
+            const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
+            return {
+                ...bundle,
+                payload: updatedPayload,
+                validation: {
+                    ...bundle.validation,
+                    errors: uploadValidation.errors || [],
+                    warnings: uploadValidation.warnings || [],
+                    fieldErrors: uploadValidation.fieldErrors || {}
+                }
+            };
+        }));
+    };
+
+    // Stage Column Sorting Handler
+    const handleSortStages = (bundleId, column) => {
+        setStagedFiles(prev => prev.map(bundle => {
+            if (bundle.id !== bundleId || !bundle.payload?.entries || bundle.payload.entries.length < 2) {
+                return bundle;
+            }
+
+            const currentConfig = stageSortConfig[bundleId] || { column: null, direction: 'asc' };
+            const newDirection = (currentConfig.column === column && currentConfig.direction === 'asc') ? 'desc' : 'asc';
+
+            setStageSortConfig(prevConfig => ({
+                ...prevConfig,
+                [bundleId]: { column, direction: newDirection }
+            }));
+
+            const entriesWithMetrics = bundle.payload.entries.map(entry => ({
+                entry,
+                check: checkStageMetrics(entry, bundle.payload.format)
+            }));
+
+            entriesWithMetrics.sort((a, b) => {
+                let valA, valB;
+                if (column === 'filename') {
+                    valA = (a.check.filename || '').split('/').pop();
+                    valB = (b.check.filename || '').split('/').pop();
+                    const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+                    return newDirection === 'asc' ? cmp : -cmp;
+                } else if (column === 'timestamp') {
+                    valA = a.check.rawTimestamp ? new Date(a.check.rawTimestamp).getTime() : 0;
+                    valB = b.check.rawTimestamp ? new Date(b.check.rawTimestamp).getTime() : 0;
+                } else if (column === 'throughput') {
+                    valA = a.check.throughput?.val ?? 0;
+                    valB = b.check.throughput?.val ?? 0;
+                } else if (column === 'latency') {
+                    valA = a.check.latency?.val ?? 0;
+                    valB = b.check.latency?.val ?? 0;
+                } else if (column === 'ttft') {
+                    valA = a.check.ttft?.val ?? 0;
+                    valB = b.check.ttft?.val ?? 0;
+                } else if (column === 'tpot') {
+                    valA = a.check.tpot?.val ?? 0;
+                    valB = b.check.tpot?.val ?? 0;
+                } else if (column === 'hardware') {
+                    valA = a.check.hardware?.val || '';
+                    valB = b.check.hardware?.val || '';
+                    const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+                    return newDirection === 'asc' ? cmp : -cmp;
+                } else if (column === 'stack') {
+                    valA = a.check.stack?.val || '';
+                    valB = b.check.stack?.val || '';
+                    const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+                    return newDirection === 'asc' ? cmp : -cmp;
+                } else {
+                    return 0;
+                }
+
+                const diff = valA - valB;
+                return newDirection === 'asc' ? diff : -diff;
+            });
+
+            const sortedEntries = entriesWithMetrics.map(({ entry }, idx) => ({
+                ...entry,
+                prism_stage_index: idx
+            }));
+
+            const updatedPayload = {
+                ...bundle.payload,
+                entries: sortedEntries
+            };
+
+            const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
+            return {
+                ...bundle,
+                payload: updatedPayload,
+                validation: {
+                    ...bundle.validation,
+                    errors: uploadValidation.errors || [],
+                    warnings: uploadValidation.warnings || [],
+                    fieldErrors: uploadValidation.fieldErrors || {}
+                }
+            };
+        }));
+    };
 
     React.useEffect(() => {
         if (stagedFiles.length === 0) {
@@ -193,14 +650,20 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     updatedPayload.acceleratorCountInferred = false;
                 } else if (key === 'runLabel') {
                     updatedPayload.runLabel = value;
-                    if (updatedPayload.entries) {
-                        updatedPayload.entries = updatedPayload.entries.map(entry => ({
-                            ...entry,
-                            run_description: value
-                        }));
-                    }
                 } else {
                     updatedPayload[key] = value;
+                }
+
+                if (updatedPayload.entries && (key === 'model_name' || key === 'hardware_name' || key === 'runLabel')) {
+                    updatedPayload.entries = updatedPayload.entries.map(entry => ({
+                        ...entry,
+                        run_description: updatedPayload.runLabel || entry.run_description,
+                        raw_report: mutateRawReportMetadata(entry.raw_report, {
+                            model_name: updatedPayload.model_name,
+                            hardware_name: updatedPayload.hardware?.hardware_name,
+                            runLabel: updatedPayload.runLabel
+                        })
+                    }));
                 }
                 const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
                 const updatedValidation = {
@@ -586,15 +1049,16 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         setIsDragging(false);
     };
 
+    const getFilePath = (file) => (file && (file.webkitRelativePath || file.name)) || '';
+
     const processFiles = async (files) => {
         let uploadedCount = 0;
-
 
         const groups = {};
         const standaloneFiles = [];
 
         for (const file of files) {
-            const relPath = file.webkitRelativePath || file.name || '';
+            const relPath = getFilePath(file);
             
             // Get parent directory key
             if (relPath.includes('/')) {
@@ -622,7 +1086,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         const standaloneReportFiles = [];
 
         for (const file of standaloneFiles) {
-            const filename = file.name || '';
+            const filename = getFilePath(file);
             let content = '';
             try {
                 content = await file.text();
@@ -664,7 +1128,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         const brv02StandaloneGroups = [];
         for (const item of standaloneReportFiles) {
             if (item.validation.format === 'brv02') {
-                const parsedStage = parseReportV02(item.content, item.file.name);
+                const parsedStage = parseReportV02(item.content, getFilePath(item.file));
                 if (!parsedStage) {
                     const tempId = uuidv4();
                     brv02StandaloneGroups.push({
@@ -847,16 +1311,17 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
             for (const item of filesToValidate) {
                 const file = item.file;
+                const filePath = getFilePath(file);
                 const content = item.content !== null ? item.content : await file.text();
-                const validation = item.validation || validateBenchmark(content, file.name);
+                const validation = item.validation || validateBenchmark(content, filePath);
 
                 if (validation.format) {
                     isFormatValid = true;
                     if (validation.hasHardware) hasHardware = true;
                     entries.push(...validation.entries);
-                    bundleWarnings.push(...validation.warnings.map(w => `[${file.name}] ${w}`));
+                    bundleWarnings.push(...validation.warnings.map(w => `[${filePath}] ${w}`));
                     if (validation.errors.length > 0) {
-                        bundleErrors.push(...validation.errors.map(e => `[${file.name}] ${e}`));
+                        bundleErrors.push(...validation.errors.map(e => `[${filePath}] ${e}`));
                     }
                     parsedStages.push({
                         file,
@@ -866,7 +1331,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 } else {
                     const errStr = validation.errors[0] || 'Invalid report format.';
                     validationFailures.push({
-                        filename: file.name,
+                        filename: filePath,
                         error: errStr,
                         isUnrecognizedFormat: errStr.includes("Unrecognized benchmark format")
                     });
@@ -887,6 +1352,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
             let firstParsedStage = null;
             for (const sf of parsedStages) {
+                const sfPath = getFilePath(sf.file);
                 if (sf.validation && sf.validation.format) {
                     if (sf.validation.format === 'inference-perf') {
                         const parsed = sf.validation.parsedData || {};
@@ -906,14 +1372,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                             hardware: parsed.hardware || parsed.accelerator || "Unknown",
                             throughput,
                             latency: latencyVal,
-                            runUid: sf.validation.prism_cloud?.original_uid || sf.file.name,
+                            runUid: sf.validation.prism_cloud?.original_uid || sfPath,
                             runCid: null,
                             runEid: null,
                             runPid: null
                         };
                         break;
                     } else {
-                        const parsed = parseReportV02(sf.content, sf.file.name);
+                        const parsed = parseReportV02(sf.content, sfPath);
                         if (parsed) {
                             parsed.run_metadata = runMetadata;
                             parsed.config = configParsed;
@@ -973,7 +1439,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             let runLabelFromStage = '';
             if (firstParsedStage) {
                 if (firstParsedStage.validation?.format === 'brv02') {
-                    const stageParsed = parseReportV02(firstParsedStage.content, firstParsedStage.file.name);
+                    const stageParsed = parseReportV02(firstParsedStage.content, getFilePath(firstParsedStage.file));
                     runLabelFromStage = stageParsed?.runLabel || firstParsedStage.runLabel || '';
                 } else {
                     runLabelFromStage = firstParsedStage.runLabel || '';
@@ -990,17 +1456,18 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
             const payloadEntries = [];
             for (const sf of parsedStages) {
+                const sfPath = getFilePath(sf.file);
                 let runUid = 'unknown-uid';
                 if (sf.validation && sf.validation.format === 'inference-perf') {
-                    runUid = sf.validation.prism_cloud?.original_uid || sf.file.name;
+                    runUid = sf.validation.prism_cloud?.original_uid || sfPath;
                 } else {
-                    const stageParsed = parseReportV02(sf.content, sf.file.name);
+                    const stageParsed = parseReportV02(sf.content, sfPath);
                     runUid = stageParsed ? stageParsed.runUid : 'unknown-uid';
                 }
 
                 let rawReportObj = null;
                 try {
-                    rawReportObj = sf.file.name.endsWith('.json') ? JSON.parse(sf.content) : yaml.load(sf.content);
+                    rawReportObj = sfPath.endsWith('.json') ? JSON.parse(sf.content) : yaml.load(sf.content);
                 } catch (e) {
                     console.error("Failed to parse raw report content into JSON object:", e);
                 }
@@ -1009,11 +1476,11 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     run_id: uuidv4(),
                     run_description: groupName,
                     run_uid: runUid,
-                    filename: sf.file.name,
+                    filename: sfPath,
                     raw_report: rawReportObj || {},
                     prism_cloud: {
                         run: {
-                            uid: `${group.dirKey}/${sf.file.name}`
+                            uid: `${group.dirKey}/${sfPath}`
                         }
                     }
                 });
@@ -1021,6 +1488,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
             let initialInferenceTool = "";
             let initialInferenceToolVersion = "";
+            let initialBenchmarkHarness = "";
+            let initialBenchmarkHarnessVersion = "";
             const initialOtherTools = {};
             if (firstParsedStage) {
                 let rawReport = {};
@@ -1034,6 +1503,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     else if (lowerKey.includes('sglang')) initialInferenceTool = 'SGLang';
                     else if (lowerKey.includes('trt') || lowerKey.includes('tensorrt')) initialInferenceTool = 'TensorRT-LLM';
                     initialInferenceToolVersion = '';
+                    initialBenchmarkHarness = 'inference-perf';
                 } else {
                     rawReport = parsedStages.find(sf => sf.validation && sf.validation.format === 'brv02')?.validation?.parsedData || {};
                     stack = rawReport?.scenario?.stack || [];
@@ -1054,10 +1524,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     }
                 }
 
-                const loadTool = rawReport?.scenario?.load?.standardized?.tool;
+                const loadTool = rawReport?.scenario?.load?.standardized?.tool || firstParsedStage.scenario?.harness;
                 const loadVer = rawReport?.scenario?.load?.standardized?.tool_version;
-                if (loadTool && loadTool !== 'unknown' && loadTool.toLowerCase() !== initialInferenceTool.toLowerCase()) {
-                    initialOtherTools[loadTool] = loadVer && loadVer !== 'unknown' ? loadVer : '';
+                if (loadTool && loadTool !== 'unknown') {
+                    initialBenchmarkHarness = loadTool;
+                    initialBenchmarkHarnessVersion = loadVer && loadVer !== 'unknown' ? loadVer : '';
+                    if (loadTool.toLowerCase() !== initialInferenceTool.toLowerCase()) {
+                        initialOtherTools[loadTool] = loadVer && loadVer !== 'unknown' ? loadVer : '';
+                    }
                 }
 
                 stack.forEach(c => {
@@ -1088,6 +1562,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 metadata: {},
                 inference_tool: initialInferenceTool,
                 inference_tool_version: initialInferenceToolVersion,
+                benchmark_harness: initialBenchmarkHarness,
+                benchmark_harness_version: initialBenchmarkHarnessVersion,
                 other_tools: initialOtherTools,
                 hardwareInferred,
                 modelNameInferred,
@@ -1186,7 +1662,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 if (savedBundles) {
                     setStagedFiles(JSON.parse(savedBundles));
                 }
-            } catch {}
+            } catch { /* ignore */ }
         } else if (wizardStepSaved) {
             localStorage.removeItem('prism_upload_wizard_step');
             const stepNum = parseInt(wizardStepSaved, 10);
@@ -1213,7 +1689,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 setStagedFiles([]);
                 try {
                     localStorage.removeItem('prism_active_staged_bundles');
-                } catch (e) {}
+                } catch { /* ignore */ }
             }
         } else {
             const urlParams = new URLSearchParams(window.location.search);
@@ -1227,7 +1703,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     setStagedFiles([]);
                     try {
                         localStorage.removeItem('prism_active_staged_bundles');
-                    } catch (e) {}
+                    } catch { /* ignore */ }
                 }
             } else if (submitIntent) {
                 localStorage.removeItem('prism_submit_intent');
@@ -1237,7 +1713,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     setStagedFiles([]);
                     try {
                         localStorage.removeItem('prism_active_staged_bundles');
-                    } catch (e) {}
+                    } catch { /* ignore */ }
                 }
             } else {
                 resetWizard();
@@ -1267,15 +1743,27 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             return allEntries;
         };
 
-        const traverseEntry = async (entry) => {
+        const traverseEntry = async (entry, path = '') => {
             if (entry.isFile) {
                 const file = await new Promise((resolve) => entry.file(resolve));
+                const fullPath = (entry.fullPath || `${path}/${file.name}`).replace(/^\//, '');
+                if (!file.webkitRelativePath) {
+                    try {
+                        Object.defineProperty(file, 'webkitRelativePath', {
+                            value: fullPath,
+                            writable: true,
+                            configurable: true
+                        });
+                    } catch {
+                        // ignore if read-only
+                    }
+                }
                 files.push(file);
             } else if (entry.isDirectory) {
                 const directoryReader = entry.createReader();
                 const entries = await readAllEntries(directoryReader);
                 for (const subEntry of entries) {
-                    await traverseEntry(subEntry);
+                    await traverseEntry(subEntry, entry.fullPath || path);
                 }
             }
         };
@@ -1489,7 +1977,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             const params = new URLSearchParams(window.location.search);
             params.delete('intent');
             window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-        } catch (e) {}
+        } catch { /* ignore */ }
     };
 
     const handleGithubLoginRedirect = () => {
@@ -1751,7 +2239,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
 
 
-    const renderLocalVisualization = () => {
+    const _renderLocalVisualization = () => {
         const stagesList = [];
         stagedFiles.forEach(bundle => {
             if (Array.isArray(bundle.stageFiles)) {
@@ -1787,8 +2275,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         });
 
         // Unique models and hardware for filters
-        const models = Array.from(new Set(stagesList.map(s => s.model))).filter(Boolean);
-        const hardwares = Array.from(new Set(stagesList.map(s => s.hardware))).filter(Boolean);
+        const _models = Array.from(new Set(stagesList.map(s => s.model))).filter(Boolean);
+        const _hardwares = Array.from(new Set(stagesList.map(s => s.hardware))).filter(Boolean);
 
         // Filter stages
         const filteredStagesList = stagesList.filter(s => {
@@ -2186,18 +2674,70 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                         </div>
                                     </div>
                                 )}
-                                {wizardStep === 1 && (
-                                    <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs mb-1">
-                                        <button 
-                                            onClick={() => setIsUploadSidebarCollapsed(!isUploadSidebarCollapsed)}
-                                            className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800/80 text-slate-400 hover:text-cyan-400 cursor-pointer transition-all flex items-center gap-1 select-none"
-                                            title={isUploadSidebarCollapsed ? "Show Ingestion panel" : "Hide Ingestion panel"}
-                                        >
-                                            {isUploadSidebarCollapsed ? <ChevronRight size={14} className="text-cyan-400" /> : <ChevronLeft size={14} />}
-                                            <span className="text-[9px] font-extrabold uppercase tracking-wider px-0.5">{isUploadSidebarCollapsed ? "Upload Benchmarks" : "Maximize"}</span>
-                                        </button>
+                                <div className="flex flex-wrap items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs mb-3 gap-2">
+                                    <div className="flex items-center gap-3">
+                                        <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-300 select-none">
+                                            <Checkbox
+                                                checked={stagedFiles.length > 0 && selectedBundleIds.length === stagedFiles.filter(b => !b.isSkipped).length}
+                                                onChange={toggleSelectAllBundles}
+                                            />
+                                            <span>Select All ({selectedBundleIds.length}/{stagedFiles.filter(b => !b.isSkipped).length})</span>
+                                        </label>
                                     </div>
-                                )}
+
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative group/auto-group-tooltip inline-block">
+                                            <button
+                                                onClick={handleAutoGroup}
+                                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                            >
+                                                <Zap size={14} className="text-cyan-400" />
+                                                <span>Auto-Group Benchmarks</span>
+                                            </button>
+                                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs font-normal rounded-xl opacity-0 invisible group-hover/auto-group-tooltip:opacity-100 group-hover/auto-group-tooltip:visible transition-all duration-200 shadow-2xl z-[9999] w-72 pointer-events-none leading-relaxed text-left backdrop-blur-md">
+                                                <div className="font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                                                    <Zap size={12} />
+                                                    <span>Heuristic Auto-Grouping</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-300">
+                                                    Automatically scans and groups staged benchmark runs matching on:
+                                                </p>
+                                                <ul className="mt-1 space-y-0.5 text-[11px] text-slate-300 list-disc list-inside">
+                                                    <li>Model name</li>
+                                                    <li>Hardware specification</li>
+                                                    <li>Inference tool / serving stack</li>
+                                                    <li>Execution timestamp (within ±1 hour)</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleCoalesceSelected}
+                                            disabled={selectedBundleIds.length < 2}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm",
+                                                selectedBundleIds.length >= 2
+                                                    ? "bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-500/40 text-cyan-200"
+                                                    : "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-60"
+                                            )}
+                                            title={selectedBundleIds.length >= 2 ? "Coalesce selected benchmark runs into a single run" : "Select at least 2 runs to coalesce"}
+                                        >
+                                            <GitCompare size={14} />
+                                            <span>Coalesce Selected ({selectedBundleIds.length})</span>
+                                        </button>
+
+                                        {wizardStep === 1 && (
+                                            <button 
+                                                onClick={() => setIsUploadSidebarCollapsed(!isUploadSidebarCollapsed)}
+                                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-cyan-400 cursor-pointer transition-all flex items-center gap-1 select-none"
+                                                title={isUploadSidebarCollapsed ? "Show Ingestion panel" : "Hide Ingestion panel"}
+                                            >
+                                                {isUploadSidebarCollapsed ? <ChevronRight size={14} className="text-cyan-400" /> : <ChevronLeft size={14} />}
+                                                <span className="text-[9px] font-extrabold uppercase tracking-wider px-0.5">{isUploadSidebarCollapsed ? "Upload" : "Maximize"}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
 
                                 {stagedFiles.filter(b => !b.isSkipped).map(bundle => {
                                     const rawReport = bundle.payload?.entries?.[0]?.raw_report;
@@ -2248,7 +2788,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                         }
                                     });
 
-                                    const otherToolsStr = otherTools.length > 0 ? otherTools.join(', ') : 'generic/unknown';
+                                    const _otherToolsStr = otherTools.length > 0 ? otherTools.join(', ') : 'generic/unknown';
 
                                     return (
                                         <Panel key={bundle.id} padding="none" className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-none">
@@ -2257,11 +2797,27 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                 onClick={() => toggleExpand(bundle.id)}
                                             >
                                                 <div className="flex items-center gap-3">
+                                                    <div onClick={(e) => e.stopPropagation()} className="flex items-center">
+                                                        <Checkbox
+                                                            checked={selectedBundleIds.includes(bundle.id)}
+                                                            onChange={() => toggleSelectBundle(bundle.id)}
+                                                            className="cursor-pointer"
+                                                        />
+                                                    </div>
+
                                                     {(!bundle.validation.format || bundle.validation.errors.length > 0) && (
                                                         <AlertOctagon size={18} className="text-red-500 shrink-0" />
                                                     )}
                                                     <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.payload.model_name || <span className="text-red-400 italic font-normal">Missing</span>}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200 select-all">{bundle.payload.model_name || <span className="text-red-400 italic font-normal">Missing</span>}</span>
+                                                            {bundle.isCoalesced && !bundle.isAutoCoalesced && (
+                                                                <Badge tone="info" size="xs" className="px-1.5 py-0.5 font-bold flex items-center gap-1 text-[10px]">
+                                                                    <Layers size={10} />
+                                                                    <span>Coalesced ({bundle.payload.entries?.length || 0} stages)</span>
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                         <span className="text-xs text-slate-500 dark:text-slate-400 select-all font-mono opacity-80 mt-0.5">{bundle.dirKey}</span>
                                                         
                                                         {wizardStep === 2 && (() => {
@@ -2280,7 +2836,17 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                         })()}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    {bundle.isCoalesced && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleUngroupBundle(bundle.id); }}
+                                                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs font-semibold text-slate-300 hover:text-cyan-400 flex items-center gap-1 transition-colors cursor-pointer"
+                                                            title="Ungroup benchmarks back into original constituent runs"
+                                                        >
+                                                            <Split size={12} />
+                                                            <span>Ungroup</span>
+                                                        </button>
+                                                    )}
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); removeFile(bundle.id); }}
                                                         className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
@@ -2487,40 +3053,74 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                   </tr>
                                                                  <tr className="hover:bg-slate-900/20">
                                                                      <td className="px-3.5 py-2.5 font-semibold text-slate-400 border-r border-slate-800/45 bg-slate-950/30" style={{ width: '220px', minWidth: '220px' }}>
-                                                                         <span>Serving Stack / Tool</span>
+                                                                         <span>Serving Stack</span>
                                                                      </td>
                                                                      <td className="px-3.5 py-2.5">
                                                                          {wizardStep === 2 ? (
                                                                              <div className="relative flex items-center w-full gap-3 group">
-                                                                          
-                                                                              
-                                                                             <div className="flex-1 flex gap-2">
-                                                                                 <input 
-                                                                                     type="text" 
-                                                                                     value={bundle.payload.inference_tool || ''} 
-                                                                                     onChange={(e) => updateSingleField(bundle.id, 'inference_tool', e.target.value)}
-                                                                                     className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none placeholder-slate-750 transition-all text-xs ${getFieldClassName('inference_tool', false)}`}
-                                                                                     placeholder="vLLM"
-                                                                                 />
-                                                                                 <input 
-                                                                                     type="text" 
-                                                                                     value={bundle.payload.inference_tool_version || ''} 
-                                                                                     onChange={(e) => updateSingleField(bundle.id, 'inference_tool_version', e.target.value)}
-                                                                                     className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-400 focus:ring-0 focus:outline-none placeholder-slate-750 transition-all font-mono text-xs ${getFieldClassName('inference_tool_version', false)}`}
-                                                                                     placeholder="0.4.2"
-                                                                                 />
+                                                                                 <div className="flex-1 flex gap-2">
+                                                                                     <input 
+                                                                                         type="text" 
+                                                                                         value={bundle.payload.inference_tool || ''} 
+                                                                                         onChange={(e) => updateSingleField(bundle.id, 'inference_tool', e.target.value)}
+                                                                                         className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none placeholder-slate-750 transition-all text-xs ${getFieldClassName('inference_tool', false)}`}
+                                                                                         placeholder="vLLM"
+                                                                                     />
+                                                                                     <input 
+                                                                                         type="text" 
+                                                                                         value={bundle.payload.inference_tool_version || ''} 
+                                                                                         onChange={(e) => updateSingleField(bundle.id, 'inference_tool_version', e.target.value)}
+                                                                                         className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-400 focus:ring-0 focus:outline-none placeholder-slate-750 transition-all font-mono text-xs ${getFieldClassName('inference_tool_version', false)}`}
+                                                                                         placeholder="0.4.2"
+                                                                                     />
+                                                                                 </div>
+                                                                                 <div className="flex items-center gap-2 shrink-0 select-none">
+                                                                                     <Pencil size={10} className="text-slate-650 group-focus-within:text-cyan-400 transition-colors" />
+                                                                                 </div>
                                                                              </div>
-                                                                             <div className="flex items-center gap-2 shrink-0 select-none">
-                                                                                 <Pencil size={10} className="text-slate-650 group-focus-within:text-cyan-400 transition-colors" />
+                                                                         ) : (
+                                                                             <span className="text-slate-300 font-semibold select-all text-xs">
+                                                                                 {bundle.payload.inference_tool 
+                                                                                     ? `${bundle.payload.inference_tool}${bundle.payload.inference_tool_version ? ` (${bundle.payload.inference_tool_version})` : ''}` 
+                                                                                     : <span className="text-amber-400 italic font-normal">Missing</span>}
+                                                                             </span>
+                                                                         )}
+                                                                     </td>
+                                                                 </tr>
+                                                                 <tr className="hover:bg-slate-900/20">
+                                                                     <td className="px-3.5 py-2.5 font-semibold text-slate-400 border-r border-slate-800/45 bg-slate-950/30" style={{ width: '220px', minWidth: '220px' }}>
+                                                                         <span>Benchmark Harness</span>
+                                                                     </td>
+                                                                     <td className="px-3.5 py-2.5">
+                                                                         {wizardStep === 2 ? (
+                                                                             <div className="relative flex items-center w-full gap-3 group">
+                                                                                 <div className="flex-1 flex gap-2">
+                                                                                     <input 
+                                                                                         type="text" 
+                                                                                         value={bundle.payload.benchmark_harness || ''} 
+                                                                                         onChange={(e) => updateSingleField(bundle.id, 'benchmark_harness', e.target.value)}
+                                                                                         className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-200 font-semibold focus:ring-0 focus:outline-none placeholder-slate-750 transition-all text-xs ${getFieldClassName('benchmark_harness', false)}`}
+                                                                                         placeholder="inference-perf"
+                                                                                     />
+                                                                                     <input 
+                                                                                         type="text" 
+                                                                                         value={bundle.payload.benchmark_harness_version || ''} 
+                                                                                         onChange={(e) => updateSingleField(bundle.id, 'benchmark_harness_version', e.target.value)}
+                                                                                         className={`w-1/2 bg-slate-900/20 border rounded-lg px-3 py-1.5 text-slate-400 focus:ring-0 focus:outline-none placeholder-slate-750 transition-all font-mono text-xs ${getFieldClassName('benchmark_harness_version', false)}`}
+                                                                                         placeholder="v0.2.0"
+                                                                                     />
+                                                                                 </div>
+                                                                                 <div className="flex items-center gap-2 shrink-0 select-none">
+                                                                                     <Pencil size={10} className="text-slate-650 group-focus-within:text-cyan-400 transition-colors" />
+                                                                                 </div>
                                                                              </div>
-                                                                         </div>
-                                                                     ) : (
-                                                                         <span className="text-slate-300 font-semibold select-all text-xs">
-                                                                             {bundle.payload.inference_tool 
-                                                                                 ? `${bundle.payload.inference_tool}${bundle.payload.inference_tool_version ? ` (${bundle.payload.inference_tool_version})` : ''}` 
-                                                                                 : <span className="text-amber-400 italic font-normal">Missing</span>}
-                                                                         </span>
-                                                                     )}
+                                                                         ) : (
+                                                                             <span className="text-slate-300 font-semibold select-all text-xs">
+                                                                                 {bundle.payload.benchmark_harness 
+                                                                                     ? `${bundle.payload.benchmark_harness}${bundle.payload.benchmark_harness_version ? ` (${bundle.payload.benchmark_harness_version})` : ''}` 
+                                                                                     : <span className="text-slate-500 italic font-normal">N/A</span>}
+                                                                             </span>
+                                                                         )}
                                                                      </td>
                                                                  </tr>
                                                                  <tr className="hover:bg-slate-900/20">
@@ -2720,77 +3320,176 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                 <table className="w-full text-left text-xs border-collapse">
                                                                     <thead className="bg-[#0b101c]/45 text-slate-400 border-b border-slate-900/80 uppercase tracking-widest text-[9px]">
                                                                         <tr>
-                                                                            <th className="px-3 py-2.5 w-16 text-center">Stage</th>
-                                                                            <th className="px-3 py-2.5">File Name</th>
-                                                                            <th className="px-3 py-2.5 text-right">Throughput</th>
-                                                                            <th className="px-3 py-2.5 text-right">E2E Latency</th>
-                                                                            <th className="px-3 py-2.5 text-right">TTFT (Prefill)</th>
-                                                                            <th className="px-3 py-2.5 text-right">TPOT (Decode)</th>
-                                                                            <th className="px-3 py-2.5 text-center">Hardware / Stack</th>
-                                                                            <th className="px-3 py-2.5 text-center">Status</th>
+                                                                            <th className="px-2 py-1.5 w-8 text-center"></th>
+                                                                            <th className="px-3 py-1.5 w-12 text-center">Stage</th>
+                                                                            <th className="px-3 py-1.5 text-center">File</th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'timestamp')}
+                                                                                className="px-3 py-1.5 cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                title="Click to sort by timestamp"
+                                                                            >
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span>Timestamp</span>
+                                                                                    {stageSortConfig[bundle.id]?.column === 'timestamp' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'throughput')}
+                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                title="Click to sort by throughput"
+                                                                            >
+                                                                                <div className="flex items-center justify-end gap-1">
+                                                                                    {stageSortConfig[bundle.id]?.column === 'throughput' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                    <span>Throughput</span>
+                                                                                </div>
+                                                                            </th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'latency')}
+                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                title="Click to sort by E2E latency"
+                                                                            >
+                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                    {stageSortConfig[bundle.id]?.column === 'latency' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                    <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
+                                                                                        Latency
+                                                                                    </span>
+                                                                                    <div className="absolute right-0 top-full mt-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
+                                                                                        <span className="text-[11px] text-slate-300">End-to-End Latency</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'ttft')}
+                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                title="Click to sort by TTFT"
+                                                                            >
+                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                    {stageSortConfig[bundle.id]?.column === 'ttft' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                    <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
+                                                                                        TTFT
+                                                                                    </span>
+                                                                                    <div className="absolute right-0 top-full mt-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
+                                                                                        <span className="text-[11px] text-slate-300">Time to First Token (Prefill)</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'tpot')}
+                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                title="Click to sort by TPOT"
+                                                                            >
+                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                    {stageSortConfig[bundle.id]?.column === 'tpot' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                    <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
+                                                                                        TPOT
+                                                                                    </span>
+                                                                                    <div className="absolute right-0 top-full mt-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
+                                                                                        <span className="text-[11px] text-slate-300">Time per Output Token (Decode)</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </th>
+                                                                            <th className="px-3 py-1.5 text-center">Status</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody className="divide-y divide-slate-900/50">
-                                                                        {bundle.payload.entries
-                                                                            .map((entry) => checkStageMetrics(entry, bundle.payload.format))
-                                                                            .sort((a, b) => a.stageIndex - b.stageIndex)
-                                                                            .map((check, idx) => {
+                                                                        {bundle.payload.entries.map((entry, idx) => {
+                                                                            const check = checkStageMetrics(entry, bundle.payload.format);
                                                                                 const isStageValid = check.throughput.isValid && check.latency.isValid && check.ttft.isValid && check.tpot.isValid;
                                                                                 return (
-                                                                                    <tr key={idx} className="hover:bg-slate-900/30 border-b border-slate-900/10 font-medium transition-colors">
-                                                                                        <td className="px-3 py-2.5 text-center font-bold font-mono text-slate-500">Stage {check.stageIndex}</td>
-                                                                                        <td className="px-3 py-2.5 font-mono text-[10px] text-slate-400 max-w-[120px] truncate" title={check.filename}>{check.filename.split('/').pop()}</td>
+                                                                                    <tr
+                                                                                        key={entry.run_id || idx}
+                                                                                        draggable
+                                                                                        onDragStart={() => setDraggedStageIndex({ bundleId: bundle.id, index: idx })}
+                                                                                        onDragOver={(e) => e.preventDefault()}
+                                                                                        onDrop={() => {
+                                                                                            if (draggedStageIndex && draggedStageIndex.bundleId === bundle.id) {
+                                                                                                handleMoveStage(bundle.id, draggedStageIndex.index, idx);
+                                                                                            }
+                                                                                            setDraggedStageIndex(null);
+                                                                                        }}
+                                                                                        className="hover:bg-slate-900/30 border-b border-slate-900/10 font-medium transition-colors"
+                                                                                    >
+                                                                                        <td className="px-2 py-1.5 text-center">
+                                                                                            <div
+                                                                                                className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-cyan-400 transition-colors inline-block"
+                                                                                                title="Drag to re-order stage"
+                                                                                            >
+                                                                                                <GripVertical size={14} />
+                                                                                            </div>
+                                                                                        </td>
+                                                                                        <td className="px-3 py-1.5 text-center font-bold font-mono text-slate-400">{check.stageIndex}</td>
+                                                                                        <td className="px-3 py-1.5 text-center">
+                                                                                            <div
+                                                                                                onMouseEnter={(e) => handleFilenameMouseEnter(e, check.filename)}
+                                                                                                onMouseLeave={handleFilenameMouseLeave}
+                                                                                                className="p-1 text-slate-400 hover:text-cyan-400 cursor-pointer transition-colors inline-flex items-center justify-center"
+                                                                                            >
+                                                                                                <Info size={15} />
+                                                                                            </div>
+                                                                                        </td>
+                                                                                        <td className="px-3 py-1.5 font-mono text-[10px] text-slate-400 whitespace-nowrap" title={check.timestamp}>{check.timestamp}</td>
                                                                                         
-                                                                                        <td className="px-3 py-2.5 text-right font-mono">
+                                                                                        <td className="px-3 py-1.5 text-right font-mono">
                                                                                             {check.throughput.isValid ? (
-                                                                                                <span className="text-emerald-500">✅ {check.throughput.val.toFixed(2)} t/s</span>
+                                                                                                <span className="text-slate-300">{check.throughput.val.toFixed(2)} t/s</span>
                                                                                             ) : (
                                                                                                 <span className="text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="Throughput must be greater than zero">❌ Absent</span>
                                                                                             )}
                                                                                         </td>
                                                                                         
-                                                                                        <td className="px-3 py-2.5 text-right font-mono">
+                                                                                        <td className="px-3 py-1.5 text-right font-mono">
                                                                                             {check.latency.isValid ? (
-                                                                                                <span className="text-emerald-500">✅ {check.latency.val.toFixed(1)}ms</span>
+                                                                                                <span className="text-slate-300">{check.latency.val.toFixed(1)}ms</span>
                                                                                             ) : (
                                                                                                 <span className="text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="End-to-end latency must be greater than zero">❌ Absent</span>
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-2.5 text-right font-mono">
+                                                                                        <td className="px-3 py-1.5 text-right font-mono">
                                                                                             {check.ttft.isValid ? (
                                                                                                 check.ttft.val !== null ? (
-                                                                                                    <span className="text-emerald-500">✅ {check.ttft.val.toFixed(1)}ms</span>
+                                                                                                    <span className="text-slate-300">{check.ttft.val.toFixed(1)}ms</span>
                                                                                                 ) : (
-                                                                                                    <span className="text-slate-455">N/A (Legacy)</span>
+                                                                                                    <span className="text-slate-400">N/A (Legacy)</span>
                                                                                                 )
                                                                                             ) : (
                                                                                                 <span className="text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="Time to first token (TTFT) is required for V0.2 formats">❌ Absent</span>
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-2.5 text-right font-mono">
+                                                                                        <td className="px-3 py-1.5 text-right font-mono">
                                                                                             {check.tpot.isValid ? (
                                                                                                 check.tpot.val !== null ? (
-                                                                                                    <span className="text-emerald-500">✅ {check.tpot.val.toFixed(2)}ms</span>
+                                                                                                    <span className="text-slate-300">{check.tpot.val.toFixed(2)}ms</span>
                                                                                                 ) : (
-                                                                                                    <span className="text-slate-455">N/A (Legacy)</span>
+                                                                                                    <span className="text-slate-400">N/A (Legacy)</span>
                                                                                                 )
                                                                                             ) : (
                                                                                                 <span className="text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="Time per output token (TPOT) is required for V0.2 formats">❌ Absent</span>
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-2.5 text-center font-mono text-[10px] space-y-1">
-                                                                                            <div className={check.hardware.isValid ? "text-slate-300" : "text-amber-500"} title={check.hardware.val || 'No hardware tag'}>
-                                                                                                {check.hardware.isValid ? `💻 ${check.hardware.val}` : '⚠️ Hw Missing'}
-                                                                                            </div>
-                                                                                            <div className={check.stack.isValid ? "text-slate-400" : "text-amber-500"}>
-                                                                                                {check.stack.isValid ? `⚙️ ${check.stack.val}` : '⚠️ Stack Missing'}
-                                                                                            </div>
-                                                                                        </td>
-
-                                                                                        <td className="px-3 py-2.5 text-center">
+                                                                                        <td className="px-3 py-1.5 text-center">
                                                                                             {isStageValid ? (
                                                                                                 <Badge tone="success">Pass</Badge>
                                                                                             ) : (
@@ -2897,7 +3596,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                                                                     // Compute average performance of staged stages
                                                                     let stagedAvgTput = 0;
-                                                                    let stagedAvgLat = 0;
+                                                                    let _stagedAvgLat = 0;
                                                                     if (bundle.payload.entries && bundle.payload.entries.length > 0) {
                                                                         let tCount = 0;
                                                                         let lCount = 0;
@@ -2909,10 +3608,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                             if (typeof e.raw_report?.latency === 'number') l = e.raw_report.latency;
                                                                             else if (typeof e.raw_report?.latency?.mean === 'number') l = e.raw_report.latency.mean;
                                                                             else if (typeof e.raw_report?.metrics?.latency?.mean === 'number') l = e.raw_report.metrics.latency.mean;
-                                                                            if (l > 0) { stagedAvgLat += l; lCount++; }
+                                                                            if (l > 0) { _stagedAvgLat += l; lCount++; }
                                                                         });
                                                                         if (tCount > 0) stagedAvgTput /= tCount;
-                                                                        if (lCount > 0) stagedAvgLat /= lCount;
+                                                                        if (lCount > 0) _stagedAvgLat /= lCount;
                                                                     }
 
                                                                     return (
@@ -3112,6 +3811,34 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         </button>
                     </div>
                 </div>
+
+                <CoalesceConflictModal
+                    isOpen={isConflictModalOpen}
+                    onClose={() => {
+                        setIsConflictModalOpen(false);
+                        setPendingCoalesceBundles([]);
+                    }}
+                    selectedBundles={pendingCoalesceBundles}
+                    onConfirm={(resolvedMetadata) => {
+                        executeCoalesce(pendingCoalesceBundles, resolvedMetadata);
+                    }}
+                />
+
+                {hoveredFilenameTooltip && (
+                    <div
+                        className={cn(
+                            "fixed px-3 py-2 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-xl shadow-2xl z-[99999] min-w-[320px] w-max max-w-lg break-all pointer-events-none text-left backdrop-blur-md animate-in fade-in duration-100",
+                            hoveredFilenameTooltip.isNearTop ? "-translate-x-1/2" : "-translate-x-1/2 -translate-y-full"
+                        )}
+                        style={{
+                            left: `${hoveredFilenameTooltip.x}px`,
+                            top: `${hoveredFilenameTooltip.y}px`
+                        }}
+                    >
+                        <span className="font-bold text-cyan-400 block mb-0.5 text-[10px] font-sans uppercase tracking-wider">File Name / Path</span>
+                        <span className="text-[11px] text-slate-300 select-all font-mono">{hoveredFilenameTooltip.filename}</span>
+                    </div>
+                )}
 
             </div>
         </div>

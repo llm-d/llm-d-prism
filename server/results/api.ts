@@ -24,6 +24,8 @@ export const PrismStageEntrySchema = z.object({
     run_description: z.string(),
     /** Original filename of the evaluated benchmark stage report. Example: "benchmark_report_v0.2_stage_1.yaml" */
     filename: z.string(),
+    /** Sequential normalized stage index stored in Prism payload structure. Example: 0 */
+    prism_stage_index: z.number().int().nonnegative().optional(),
     /**
      * The parsed content of the stage report. Note that this contains the target parsed/mapped representation used inside the Prism DB context.
      * Must conform to Benchmark Report v0.2 (treated as partial/optional).

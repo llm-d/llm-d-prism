@@ -1,6 +1,6 @@
 # Spec: Manual Benchmark Coalescing during Staging in Prism
 
-- **Status**: Draft
+- **Status**: Implemented
 - **Author**: diamondburned, Jetski
 - **Date**: August 3, 2026
 - **Feature Name**: `manual-benchmark-coalescing`
@@ -36,13 +36,14 @@ From Gemini summary of the Prism Dashboard Walkthrough meeting with the uBench t
 1. **Manual Benchmark Coalescing**: Select $\ge 2$ staged benchmark runs and merge them into a single consolidated benchmark payload.
 2. **Interactive Conflict Resolution UI**:
    - For every mismatched metadata field, present radio choices for each distinct value found across the selected runs.
+   - Automatically compute and provide an **"Auto: <commonPrefix>"** radio option whenever values share a common string prefix.
    - Provide a **"Custom value..."** option as the final choice, revealing an inline text input bar for custom entries.
-   - Provide preset shortcuts (*"Apply All from Run #1"*, *"Apply All from Run #2"*).
-3. **Heuristic "Auto-Group"**: A single-click action that scans all staged benchmarks and automatically groups runs matching on `model_name`, `hardware_name`, serving stack, and execution timestamp proximity.
+3. **Heuristic "Auto-Group"**: A single-click action that scans all staged benchmarks and automatically groups runs matching on `model_name`, `hardware_name`, serving stack (`inference_tool`), and execution timestamp proximity (within $\pm 1$ hour of each other). Hovering over the action displays a tooltip detailing these matching criteria.
 4. **Ungroup / Undo Support**: Any coalesced or auto-grouped benchmark run displays an **"Ungroup Benchmarks"** (Undo) action, allowing users to split a grouped run back into its original constituent source reports before final submission.
 5. **Normalized & Drag-and-Drop Sortable Stages**:
    - All constituent stage runs are **fully preserved without deletion**; duplicate or non-standard stage numbers (e.g. `0, 0, 1, 2, 3`) are re-indexed and normalized sequentially into `0, 1, 2, 3, 4, ...`.
    - Stages in the coalesced run preview/editor are **drag-and-drop sortable**. Dragging a stage reorders the list, and stages immediately adopt their new sequential index (`0, 1, 2, 3, 4, ...`).
-6. **Raw Report Immutability & Prism Payload Separation**:
-   - The raw BRV0.2 report object inside `entries[].raw_report` (including any original `stage: n` field in BRV0.2) remains **completely untouched and unmodified**.
-   - Normalized stage ordering is stored exclusively in the **Prism upload payload structure** via a dedicated `prism_stage_index` property on each `PrismStageEntry`.
+6. **Raw Report Metadata Synchronization & Prism Stage Indexing**:
+   - High-level run metadata (`model_name`, `hardware_name`, and `runLabel`/description) is synchronized across constituent `raw_report` objects (`scenario.stack`, `scenario.load.native`, `run.description`) upon coalescing or metadata edits.
+   - Original BRV0.2 `stage` numbers and stage `run.uid` fields inside `entries[].raw_report` remain **completely untouched and unmodified by design**.
+   - Sequential normalized stage ordering is stored exclusively in the **Prism upload payload structure** via a dedicated `prism_stage_index` property on each `PrismStageEntry`.

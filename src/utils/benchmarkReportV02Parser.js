@@ -582,3 +582,64 @@ export function stageToEntry(stage) {
         _diagnostics: { msg: [], raw_snapshot: {} },
     });
 }
+
+/**
+ * Mutates/synchronizes metadata fields (model_name, hardware_name, runLabel) in a BRV02 raw_report.
+ * Note: Stage numbers / uids are intentionally untouched.
+ */
+export function mutateRawReportMetadata(rawReport, { model_name, hardware_name, runLabel, inference_tool } = {}) {
+    if (!rawReport || typeof rawReport !== 'object') return rawReport;
+
+    const newReport = JSON.parse(JSON.stringify(rawReport));
+
+    // 1. Update run description if provided
+    if (runLabel) {
+        if (!newReport.run) newReport.run = {};
+        newReport.run.description = runLabel;
+    }
+
+    // 2. Update model name in scenario.stack and load.native
+    if (model_name) {
+        if (newReport.scenario) {
+            if (Array.isArray(newReport.scenario.stack)) {
+                newReport.scenario.stack.forEach(comp => {
+                    if (comp.standardized) {
+                        if (!comp.standardized.model) comp.standardized.model = {};
+                        comp.standardized.model.name = model_name;
+                    }
+                });
+            }
+            if (newReport.scenario.load?.native?.config?.server) {
+                newReport.scenario.load.native.config.server.model_name = model_name;
+            }
+        }
+    }
+
+    // 3. Update hardware name in scenario.stack
+    if (hardware_name) {
+        if (newReport.scenario && Array.isArray(newReport.scenario.stack)) {
+            newReport.scenario.stack.forEach(comp => {
+                if (comp.standardized) {
+                    if (!comp.standardized.accelerator) comp.standardized.accelerator = {};
+                    comp.standardized.accelerator.model = hardware_name;
+                }
+            });
+        }
+    }
+
+    // 4. Update inference_tool (serving stack) in scenario.stack
+    if (inference_tool) {
+        if (newReport.scenario && Array.isArray(newReport.scenario.stack)) {
+            const primary = newReport.scenario.stack.find(comp => 
+                comp.standardized?.kind === 'inference_engine' ||
+                ['vllm', 'tgi', 'tensorrt', 'tensorrt_llm', 'sglang', 'ollama'].includes(String(comp.standardized?.tool || '').toLowerCase())
+            ) || newReport.scenario.stack[0];
+            if (primary) {
+                if (!primary.standardized) primary.standardized = {};
+                primary.standardized.tool = inference_tool;
+            }
+        }
+    }
+
+    return newReport;
+}
