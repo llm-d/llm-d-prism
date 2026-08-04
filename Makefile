@@ -1,10 +1,13 @@
 # Project configuration
-# TODO: Replace {{PROJECT_NAME}} with your project name
-PROJECT_NAME ?= {{PROJECT_NAME}}
+PROJECT_NAME ?= llm-d-prism
 REGISTRY ?= ghcr.io/llm-d
 IMAGE ?= $(REGISTRY)/$(PROJECT_NAME)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 PLATFORMS ?= linux/amd64,linux/arm64
+
+# Container engine: docker buildx if present, else podman. Override with
+# CONTAINER_TOOL=podman to force one.
+CONTAINER_TOOL ?= $(shell docker buildx version >/dev/null 2>&1 && echo docker || echo podman)
 
 # Go configuration
 GOFLAGS ?=
@@ -92,14 +95,23 @@ pre-commit: ## Run pre-commit hooks on all files
 
 .PHONY: image-build
 image-build: ## Build multi-arch container image (local only)
+ifeq ($(CONTAINER_TOOL),docker)
 	docker buildx build \
 		--platform $(PLATFORMS) \
 		--tag $(IMAGE):$(VERSION) \
 		--tag $(IMAGE):latest \
 		.
+else
+	podman manifest rm $(IMAGE):$(VERSION) 2>/dev/null || true
+	podman build \
+		--platform $(PLATFORMS) \
+		--manifest $(IMAGE):$(VERSION) \
+		.
+endif
 
 .PHONY: image-push
 image-push: ## Build and push multi-arch container image
+ifeq ($(CONTAINER_TOOL),docker)
 	docker buildx build \
 		--platform $(PLATFORMS) \
 		--push \
@@ -108,6 +120,11 @@ image-push: ## Build and push multi-arch container image
 		--tag $(IMAGE):$(VERSION) \
 		--tag $(IMAGE):latest \
 		.
+else
+	$(MAKE) image-build
+	podman manifest push --all $(IMAGE):$(VERSION) docker://$(IMAGE):$(VERSION)
+	podman manifest push --all $(IMAGE):$(VERSION) docker://$(IMAGE):latest
+endif
 
 ##@ CI Helpers
 
