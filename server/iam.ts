@@ -14,6 +14,7 @@
 
 import { GoogleAuth, UserRefreshClient } from 'google-auth-library';
 import fs from 'fs';
+import { getConfiguredBucketNames } from './buckets.js';
 
 const auth = new GoogleAuth();
 
@@ -24,8 +25,7 @@ export type PermissionLevel = 'none' | 'user' | 'admin';
  * Uses staging bucket if staging is in DEFAULT_BUCKETS, otherwise defaults to production bucket.
  */
 function getIAMBucket(): string {
-    const rawBuckets = process.env.DEFAULT_BUCKETS || 'llm-d-benchmarks-staging,llm-d-benchmarks';
-    const buckets = rawBuckets.split(',').map(b => b.trim());
+    const buckets = getConfiguredBucketNames(process.env.DEFAULT_BUCKETS);
     if (buckets.includes('llm-d-benchmarks-staging')) {
         return 'llm-d-benchmarks-staging';
     }

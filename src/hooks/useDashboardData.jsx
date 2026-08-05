@@ -26,10 +26,16 @@ import { useAWS } from './useAWS';
 import { useGitHubAuth } from './useGitHubAuth';
 import { v4 as uuidv4 } from 'uuid';
 import { getBenchmarkKey } from '../utils/dashboardHelpers';
-import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs } from '../utils/bucketUtils';
+import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs, getBucketBaseName, getBucketPrefix } from '../utils/bucketUtils';
 
-const getPrefixForBucket = (bucketName) => {
-    if (bucketName === 'llm-d-benchmarks' || bucketName === 'llm-d-benchmarks-staging') {
+const getPrefixForBucket = (entry) => {
+    // A "bucket/path" scoped entry restricts the scan to that subdirectory.
+    const explicitPrefix = getBucketPrefix(entry);
+    if (explicitPrefix) {
+        return explicitPrefix;
+    }
+    const baseName = getBucketBaseName(entry);
+    if (baseName === 'llm-d-benchmarks' || baseName === 'llm-d-benchmarks-staging') {
         return 'prism-results-store/';
     }
     return '';

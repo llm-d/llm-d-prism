@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs } from './bucketUtils.js';
+import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs, getBucketBaseName, getBucketPrefix } from './bucketUtils.js';
 import assert from 'node:assert';
 
 console.log('Running bucketUtils unit tests...');
@@ -55,5 +55,34 @@ const sampleOrder2 = [
 const result2 = dedupeBucketConfigs(sampleOrder2);
 assert.strictEqual(result2.length, 1);
 assert.deepStrictEqual(result2[0], { bucket: 'slabe-bucket', alias: 'slabe' });
+
+// 5. Path-scoped entries: canonical name retains the path as identity
+assert.strictEqual(getCanonicalBucketName('gs://slabe-bucket/team-a/results/'), 'slabe-bucket/team-a/results');
+assert.strictEqual(getCanonicalBucketName({ bucket: 'slabe-bucket/team-a' }), 'slabe-bucket/team-a');
+
+// 6. getBucketBaseName strips any path scoping
+assert.strictEqual(getBucketBaseName('slabe-bucket'), 'slabe-bucket');
+assert.strictEqual(getBucketBaseName('gs://slabe-bucket/team-a/results/'), 'slabe-bucket');
+assert.strictEqual(getBucketBaseName({ bucket: 'gs://slabe-bucket/team-a', alias: 'slabe' }), 'slabe-bucket');
+assert.strictEqual(getBucketBaseName(null), '');
+
+// 7. getBucketPrefix extracts a normalized trailing-slash prefix
+assert.strictEqual(getBucketPrefix('slabe-bucket'), '');
+assert.strictEqual(getBucketPrefix('slabe-bucket/team-a'), 'team-a/');
+assert.strictEqual(getBucketPrefix('gs://slabe-bucket/team-a/results/'), 'team-a/results/');
+assert.strictEqual(getBucketPrefix('slabe-bucket//team-a//'), 'team-a/');
+assert.strictEqual(getBucketPrefix({ bucket: 'slabe-bucket/team-a', alias: 'slabe' }), 'team-a/');
+assert.strictEqual(getBucketPrefix(null), '');
+
+// 8. Dedupe treats different prefixes of the same bucket as distinct sources
+const scopedInput = [
+    'slabe-bucket/team-a',
+    'gs://slabe-bucket/team-a/',
+    'slabe-bucket/team-b',
+    'slabe-bucket'
+];
+const scopedResult = dedupeBucketConfigs(scopedInput);
+assert.strictEqual(scopedResult.length, 3);
+assert.deepStrictEqual(scopedResult, ['slabe-bucket/team-a', 'slabe-bucket/team-b', 'slabe-bucket']);
 
 console.log('All bucketUtils unit tests passed successfully!');

@@ -61,8 +61,16 @@ const limitConcurrency = async (tasks, limit, onProgressUpdate) => {
 
 export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
     const fetchBucketData = useCallback(async (bucket, forceRefresh = false, prefix = '', onProgress = null) => {
-        const cleanBucketName = bucket.replace(/^gs:\/\//, '');
-        const cacheKey = prefix ? `${cleanBucketName}:${prefix}` : cleanBucketName;
+        // A bucket may be scoped to a subdirectory via a "bucket/path" name.
+        // The scoped name stays the source identity; only the base name is a
+        // valid GCS bucket for API URLs, with the path applied as list prefix.
+        const scopedBucketName = bucket.replace(/^gs:\/\//, '').replace(/\/+$/, '');
+        const slashIdx = scopedBucketName.indexOf('/');
+        const cleanBucketName = slashIdx === -1 ? scopedBucketName : scopedBucketName.slice(0, slashIdx);
+        const pathParts = slashIdx === -1 ? [] : scopedBucketName.slice(slashIdx + 1).split('/').filter(Boolean);
+        const pathPrefix = pathParts.length ? `${pathParts.join('/')}/` : '';
+        const effectivePrefix = prefix || pathPrefix;
+        const cacheKey = effectivePrefix ? `${cleanBucketName}:${effectivePrefix}` : cleanBucketName;
 
         if (pendingRequests.current.has(`gcs:${cacheKey}`) && !forceRefresh) {
              console.log(`[Dedupe] Already fetching ${cacheKey}, returning shared promise.`);
@@ -73,7 +81,7 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
             const cached = await CacheManager.get('gcs', cacheKey);
             if (cached) {
                 console.log(`[Cache Hit] Loading GCS bucket ${cacheKey} from cache.`);
-                addToast(`[Cache] Loaded ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'success');
+                addToast(`[Cache] Loaded ${cleanBucketName}${effectivePrefix ? ` (${effectivePrefix})` : ''}`, 'success');
                 return cached;
             }
         }
@@ -83,8 +91,8 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
         const fetchPromise = (async () => {
             try {
                 const queryParams = new URLSearchParams();
-                if (prefix) {
-                    queryParams.set('prefix', prefix);
+                if (effectivePrefix) {
+                    queryParams.set('prefix', effectivePrefix);
                 }
                 const queryString = queryParams.toString();
                 const suffix = queryString ? `?${queryString}` : '';
@@ -141,7 +149,7 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
                         try {
                             const jsonContent = JSON.parse(content);
                             if (jsonContent.metrics || jsonContent.load_summary) {
-                                const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${cleanBucketName}` }, file.name);
+                                const entry = parseJsonEntry({ ...jsonContent, source: `gcs:${scopedBucketName}` }, file.name);
                                 entries = [entry];
                             } else if (jsonContent.format === 'brv02' && Array.isArray(jsonContent.entries)) {
                                 for (const stageEntry of jsonContent.entries) {
@@ -183,18 +191,18 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
                         
                         if (entries.length > 0) {
                             entries.forEach(e => {
-                                e.source = `gcs:${cleanBucketName}`; 
+                                e.source = `gcs:${scopedBucketName}`; 
                                 let type = 'storage';
 
                                 if (e.source_info) {
-                                    e.source_info.origin = `gcs:${cleanBucketName}`;
+                                    e.source_info.origin = `gcs:${scopedBucketName}`;
                                     if (e.source_info.type !== 'benchmark_report_v02') {
                                         e.source_info.type = type;
                                     }
                                 } else {
                                     e.source_info = {
                                         type,
-                                        origin: `gcs:${cleanBucketName}`,
+                                        origin: `gcs:${scopedBucketName}`,
                                         file_identifier: file.name,
                                         raw_url: file.mediaLink
                                     };
@@ -226,21 +234,21 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
                 });
 
                 if (onProgress) {
-                    onProgress({ loaded: 0, total: tasks.length, bucketName: cleanBucketName });
+                    onProgress({ loaded: 0, total: tasks.length, bucketName: scopedBucketName });
                 }
 
                 await limitConcurrency(tasks, 6, (loaded, total) => {
                     if (onProgress) {
-                        onProgress({ loaded, total, bucketName: cleanBucketName });
+                        onProgress({ loaded, total, bucketName: scopedBucketName });
                     }
                 });
 
                 const result = {
-                    bucketName: cleanBucketName,
+                    bucketName: scopedBucketName,
                     entries: newEntries,
                     profile: {
-                        bucketName: cleanBucketName,
-                        prefix: prefix || null,
+                        bucketName: scopedBucketName,
+                        prefix: effectivePrefix || null,
                         files: fileMetadata,
                         entryCount: fileMetadata.filter(f => f.entryCount > 0).length, 
                         loadedAt: new Date().toISOString(),
@@ -250,19 +258,19 @@ export const useGCS = ({ pendingRequests, addToast, accessToken }) => {
                 
                 const saved = await CacheManager.set('gcs', cacheKey, result);
                 if (!saved) {
-                    addToast(`[Error] Cache Full - Could not save ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'error');
+                    addToast(`[Error] Cache Full - Could not save ${cleanBucketName}${effectivePrefix ? ` (${effectivePrefix})` : ''}`, 'error');
                 } else {
-                    addToast(`[Network] Fetched ${cleanBucketName}${prefix ? ` (${prefix})` : ''}`, 'info');
+                    addToast(`[Network] Fetched ${cleanBucketName}${effectivePrefix ? ` (${effectivePrefix})` : ''}`, 'info');
                 }
                 return result;
 
             } catch (err) {
                 console.error(`Error fetching bucket ${bucket}:`, err);
                 return {
-                    bucketName: cleanBucketName,
+                    bucketName: scopedBucketName,
                     entries: [],
                     profile: {
-                        bucketName: cleanBucketName,
+                        bucketName: scopedBucketName,
                         files: [],
                         entryCount: 0,
                         loadedAt: new Date().toISOString(),

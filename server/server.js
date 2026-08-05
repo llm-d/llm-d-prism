@@ -24,6 +24,7 @@ import { fileURLToPath } from 'url';
 import { oauthRouter, validateGitHubToken } from './oauth.ts';
 import { resultsRouter } from './results/index.ts';
 import { storage } from './results/gcs.ts';
+import { getConfiguredBucketEntries, getConfiguredBucketNames } from './buckets.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -60,12 +61,11 @@ const auth = new GoogleAuth();
 
 // --- API: Shared Configuration ---
 app.get('/api/config', (req, res) => {
-    const rawBuckets = process.env.DEFAULT_BUCKETS || 'llm-d-benchmarks-staging,llm-d-benchmarks';
-    const defaultBuckets = rawBuckets.split(',');
+    const defaultBuckets = getConfiguredBucketEntries(process.env.DEFAULT_BUCKETS);
     const defaultProjects = process.env.DEFAULT_PROJECTS ? process.env.DEFAULT_PROJECTS.split(',') : [];
 
     res.json({
-        buckets: defaultBuckets.map(b => b.trim()).filter(b => b),
+        buckets: defaultBuckets,
         projects: defaultProjects.map(p => p.trim()).filter(p => p),
         hostProject: process.env.GOOGLE_CLOUD_PROJECT || null,
         siteName: process.env.SITE_NAME || null,
@@ -581,8 +581,7 @@ app.all('/api/gcs/*', async (req, res) => {
         }
 
         const parsed = parseGcsPath(req.params[0]);
-        const rawBuckets = process.env.DEFAULT_BUCKETS || 'llm-d-benchmarks-staging,llm-d-benchmarks';
-        const resultsBuckets = rawBuckets.split(',').map(b => b.trim());
+        const resultsBuckets = getConfiguredBucketNames(process.env.DEFAULT_BUCKETS);
         const isTargetBucket = parsed && resultsBuckets.includes(parsed.bucket);
 
         let isResultsStore = false;

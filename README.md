@@ -123,7 +123,7 @@ The following environment variables can be set via `--set-env-vars` in the `gclo
 - **`SITE_NAME`**: Custom text appended to "Prism".
 - **`CONTACT_US_URL`**: URL or email for the support link.
 - **`DEFAULT_PROJECTS`**: Comma-separated list of Project IDs for GIQ data.
-- **`DEFAULT_BUCKETS`**: Comma-separated list of GCS buckets for results.
+- **`DEFAULT_BUCKETS`**: Comma-separated list of GCS buckets for results. An entry may be scoped to a subdirectory with a `bucket/path/to/dir` suffix, restricting the scan to objects under that prefix (e.g. `my-bucket/team-a/results`).
 - **`DEFAULT_S3_BUCKETS`**: Comma-separated list of public AWS S3 buckets.
 - **`GOOGLE_API_KEY`**: API Key for Google Drive/Sheets (auto-detected from `.env.local` if present).
 - **`GITHUB_CLIENT_ID`**: The Client ID of your registered GitHub OAuth App (used for authentication).

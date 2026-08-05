@@ -32,6 +32,38 @@ export function getCanonicalBucketName(entry) {
 }
 
 /**
+ * Extracts the plain bucket name from a bucket config entry, stripping any
+ * "/path" scoping suffix. Use this wherever a real GCS bucket name is needed
+ * (e.g. building storage API URLs).
+ * e.g., "gs://slabe-bucket/team-a/results" -> "slabe-bucket"
+ *
+ * @param {string|object} entry
+ * @returns {string}
+ */
+export function getBucketBaseName(entry) {
+    const canonical = getCanonicalBucketName(entry);
+    const slashIdx = canonical.indexOf('/');
+    return slashIdx === -1 ? canonical : canonical.slice(0, slashIdx);
+}
+
+/**
+ * Extracts the object prefix from a "bucket/path" scoped config entry,
+ * normalized to always end with a trailing slash.
+ * e.g., "gs://slabe-bucket/team-a/results/" -> "team-a/results/"
+ *       "slabe-bucket" -> ""
+ *
+ * @param {string|object} entry
+ * @returns {string}
+ */
+export function getBucketPrefix(entry) {
+    const canonical = getCanonicalBucketName(entry);
+    const slashIdx = canonical.indexOf('/');
+    if (slashIdx === -1) return '';
+    const pathParts = canonical.slice(slashIdx + 1).split('/').filter(Boolean);
+    return pathParts.length ? `${pathParts.join('/')}/` : '';
+}
+
+/**
  * Extracts the custom alias from a bucket string or object, if present and non-empty.
  *
  * @param {string|object} entry
