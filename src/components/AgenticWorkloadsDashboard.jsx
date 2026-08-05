@@ -174,7 +174,10 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
     const [showFilters, setShowFilters] = useState(true);
     const [zoomXAxis, setZoomXAxis] = useState('ntpot');
     const [zoomYAxis, setZoomYAxis] = useState('total');
-    const [zoomLogScale, setZoomLogScale] = useState(true);
+    // Default to a linear scale (matching the intelligent-routing and milestone
+    // dashboards): linear gives an even, zero-based, fully-labelled axis, whereas
+    // a log scale collapses the visible ticks to a sparse set of powers of ten.
+    const [zoomLogScale, setZoomLogScale] = useState(false);
     const [zoomPerChip, setZoomPerChip] = useState(false);
     const [visiblePercentiles, setVisiblePercentiles] = useState(['P50']);
     const [zoomXMax, setZoomXMax] = useState(null);
@@ -520,7 +523,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
             <div className="bg-slate-950/30 rounded-xl p-4 border border-slate-800/40 m-4 flex flex-col flex-1 select-none">
                 <div className="relative w-full h-[380px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <ScatterChart margin={{ top: 15, right: 30, left: 60, bottom: 45 }}>
+                        <ScatterChart margin={{ top: 15, right: 30, left: 70, bottom: 45 }}>
                             <CartesianGrid {...gridProps()} opacity={0.4} />
                             <ChartXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={chartAxesConfig.x.domain} ticks={chartAxesConfig.x.ticks} scale={zoomLogScale ? 'log' : 'auto'} allowDataOverflow />
                             <ChartYAxis dataKey="y" type="number" name="Throughput" label={yAxisLabel} domain={chartAxesConfig.y.domain} ticks={chartAxesConfig.y.ticks} allowDataOverflow />

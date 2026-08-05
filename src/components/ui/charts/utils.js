@@ -31,16 +31,27 @@ export function getAxisConfig(minVal, maxVal, isLog = false, options = {}) {
 
     if (isLog) {
         const min = Math.max(0.1, minVal);
-        const logMin = Math.floor(Math.log10(min));
         const paddedMaxVal = maxVal * (1 + padding);
+        const logMin = Math.floor(Math.log10(min));
         const logMax = Math.ceil(Math.log10(paddedMaxVal));
+
+        // Over a narrow span (a couple of decades) plain powers of ten collapse
+        // to just 2-3 marks, leaving the data bunched between sparse ticks.
+        // Subdivide each decade with a 1-2-5 sequence for an even distribution.
+        const subdivide = (logMax - logMin) <= 2;
+        const mantissas = subdivide ? [1, 2, 5] : [1];
+        const lo = Math.pow(10, logMin);
+        const hi = Math.pow(10, logMax);
 
         const ticks = [];
         for (let i = logMin; i <= logMax; i++) {
-            ticks.push(Math.pow(10, i));
+            for (const m of mantissas) {
+                const v = m * Math.pow(10, i);
+                if (v >= lo && v <= hi) ticks.push(v);
+            }
         }
         return {
-            domain: [Math.pow(10, logMin), Math.pow(10, logMax)],
+            domain: [lo, hi],
             ticks
         };
     }

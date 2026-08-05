@@ -93,7 +93,9 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
   one row above the plot).
 - Axes: `ChartXAxis` / `ChartYAxis` (theme-aware; same tick formatting as the
   old `CustomXAxis`/`CustomYAxis`). Grid: `<CartesianGrid {...gridProps()} />`.
-- **Axis domain and ticks**: Prefer including zero on linear scales for a proper baseline. Ticks must be normalized (even, clean distributions). Extend domains slightly beyond the max data point (e.g. 5% upper padding) so data marks are not clipped at the outer edges of the plot. Use the shared utility `getAxisConfig(minVal, maxVal, isLog, options)` from `./ui` to compute domains and ticks, and always configure sufficient margins (e.g., `left: 60`, `bottom: 45` on the chart component) to avoid clipping labels.
+- **Axis domain and ticks**: Prefer including zero on linear scales for a proper baseline. Ticks must be normalized (even, clean distributions). Extend domains slightly beyond the max data point (e.g. 5% upper padding) so data marks are not clipped at the outer edges of the plot. Use the shared utility `getAxisConfig(minVal, maxVal, isLog, options)` from `./ui` to compute domains and ticks, and always configure sufficient margins (e.g., `left: 70`, `bottom: 45` on the chart component) to avoid clipping labels.
+  - **Default to linear scale**, not log. Linear keeps a zero baseline and evenly spaced, fully-labelled ticks; log collapses a narrow data span to a sparse set of powers of ten. Only opt into log for data spanning many orders of magnitude. (`getAxisConfig`'s log branch subdivides each decade `1-2-5` so log mode stays readable when enabled.)
+  - **Render every computed tick.** When you pass an explicit `ticks` list to `ChartXAxis`, all ticks are shown (`interval={0}` is applied automatically); do not let recharts auto-hide "overlapping" ticks, which makes an evenly-spaced axis look uneven and sparse.
 - Series colors: `CHART_SERIES` in fixed order — emerald, sky, amber, violet,
   pink. Assign by entity, never by rank: a series keeps its color when filters
   change the series count. More than 5 series → fold into "Other" or use small

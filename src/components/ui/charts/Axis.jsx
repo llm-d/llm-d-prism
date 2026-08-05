@@ -35,8 +35,12 @@ const labelStyle = (t, extra = {}) => ({
     ...extra,
 });
 
-export const ChartXAxis = ({ label, ...props }) => {
+export const ChartXAxis = ({ label, ticks, interval, ...props }) => {
     const t = getChartTheme();
+    // When an explicit tick list is supplied (e.g. from getAxisConfig), render
+    // every tick. Recharts otherwise auto-hides "overlapping" ticks, which turns
+    // an evenly-spaced list into a sparse, uneven-looking axis.
+    const resolvedInterval = interval ?? (ticks ? 0 : undefined);
     return (
         <XAxis
             stroke={t.axis}
@@ -45,16 +49,19 @@ export const ChartXAxis = ({ label, ...props }) => {
             axisLine={{ stroke: t.grid }}
             label={label && { value: label, position: 'bottom', offset: 0, style: labelStyle(t) }}
             tickFormatter={formatTick(100)}
+            ticks={ticks}
+            interval={resolvedInterval}
             {...props}
         />
     );
 };
 
-export const ChartYAxis = ({ label, ...props }) => {
+export const ChartYAxis = ({ label, width, ...props }) => {
     const t = getChartTheme();
     return (
         <YAxis
             stroke={t.axis}
+            width={width ?? 68}
             tick={{ fill: t.tick, fontSize: 10, fontFamily: 'monospace' }}
             tickLine={{ stroke: t.grid }}
             axisLine={{ stroke: t.grid }}
@@ -63,7 +70,7 @@ export const ChartYAxis = ({ label, ...props }) => {
                     value: label,
                     angle: -90,
                     position: 'insideLeft',
-                    offset: -10,
+                    offset: 0,
                     style: labelStyle(t, { textAnchor: 'middle' }),
                 }
             }
