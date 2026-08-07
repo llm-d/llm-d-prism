@@ -70,6 +70,9 @@ containing:
 
 - Output token throughput rate (`throughput` representing output tokens/s).
 - Input token throughput rate (tokens/s).
+- Total token throughput rate (tokens/s). Prism prefers the reported total,
+  falls back to input plus output when total is absent, and can derive a missing
+  input rate from total minus output when the result is non-negative.
 - Request rate (req/s).
 - **Latency values (converted from seconds to milliseconds):**
     - Time-To-First-Token (TTFT) mean, p50, and p99.

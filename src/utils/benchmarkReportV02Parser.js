@@ -142,6 +142,7 @@ const RawBRV02ReportSchema = z.object({
                 throughput: z.object({
                     output_token_rate: z.object({ mean: numericField }).nullable().optional(),
                     input_token_rate: z.object({ mean: numericField }).nullable().optional(),
+                    total_token_rate: z.object({ mean: numericField }).nullable().optional(),
                     request_rate: z.object({ mean: numericField }).nullable().optional(),
                 }).nullable().optional(),
                 latency: z.object({
@@ -257,6 +258,7 @@ export function parseReportV02(yamlText, filename) {
     const performance = {
         outputTokenRate: tput.output_token_rate?.mean ?? null,
         inputTokenRate: tput.input_token_rate?.mean ?? null,
+        totalTokenRate: tput.total_token_rate?.mean ?? null,
         requestRate: tput.request_rate?.mean ?? null,
         ttftMean: lat.time_to_first_token?.mean ?? null,
         ttftP50: lat.time_to_first_token?.p50 ?? null,
@@ -516,8 +518,23 @@ export function stageToEntry(stage) {
     }
 
     hardware = normalizeHardware(hardware);
-    const ts         = timestamp || new Date().toISOString();
-    const throughput = performance.outputTokenRate ?? null;
+    const ts = timestamp || new Date().toISOString();
+    const outputTokenRate = performance.outputTokenRate ?? null;
+    const reportedInputTokenRate = performance.inputTokenRate ?? null;
+    const reportedTotalTokenRate = performance.totalTokenRate ?? null;
+    const inputTokenRate = reportedInputTokenRate ?? (
+        reportedTotalTokenRate !== null &&
+        outputTokenRate !== null &&
+        reportedTotalTokenRate >= outputTokenRate
+            ? reportedTotalTokenRate - outputTokenRate
+            : null
+    );
+    const totalTokenRate = reportedTotalTokenRate ?? (
+        inputTokenRate !== null && outputTokenRate !== null
+            ? inputTokenRate + outputTokenRate
+            : null
+    );
+    const throughput = outputTokenRate;
     const latency    = {
         mean: performance.e2eMean ?? null,
         p50: performance.e2eP50 ?? null,
@@ -591,8 +608,9 @@ export function stageToEntry(stage) {
 
         metrics: {
             throughput: throughput ?? null,
-            output_tput: throughput ?? null,
-            input_tput: performance.inputTokenRate ?? null,
+            output_tput: outputTokenRate,
+            input_tput: inputTokenRate,
+            total_tput: totalTokenRate,
             request_rate: performance.requestRate ?? null,
             latency,
             ttft,
@@ -612,7 +630,6 @@ export function stageToEntry(stage) {
         },
 
         rawReport: stage.rawReport || null,
-        payload: stage.payload || null,
         _diagnostics: { msg: [], raw_snapshot: {} },
     });
 }
