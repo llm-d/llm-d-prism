@@ -94,7 +94,7 @@ export const FilterPanel = ({
     UnifiedDataTable,
     hideShowSelectedOnly,
     renameClearToUnselectAll,
-    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run,
+    brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run, scannedFilenames,
     setShowDataPanel,
     submissionsMap = {},
     isLoadingSubmissions = false,
@@ -578,6 +578,7 @@ export const FilterPanel = ({
                 brv02CustomLabels={brv02CustomLabels}
                 setBrv02CustomLabels={setBrv02CustomLabels}
                 removeBrv02Run={removeBrv02Run}
+                scannedFilenames={scannedFilenames}
                 setShowDataPanel={setShowDataPanel}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
@@ -604,7 +605,7 @@ export const FilterPanel = ({
         filteredBySource, showSelectedOnly, setShowSelectedOnly, selectedBenchmarks, setSelectedBenchmarks,
         setActiveFilters, expandedModels, toggleBenchmark, toggleModelExpansion, baselineBenchmarkKey,
         setBaselineBenchmarkKey, hideShowSelectedOnly, renameClearToUnselectAll, brv02Runs, brv02CustomLabels,
-        setBrv02CustomLabels, removeBrv02Run, setShowDataPanel, searchTerm, setSearchTerm, kpiFilter,
+        setBrv02CustomLabels, removeBrv02Run, scannedFilenames, setShowDataPanel, searchTerm, setSearchTerm, kpiFilter,
         setKpiFilter, includeUnlisted, paretoKeys, submissionsMap, isLoadingSubmissions, updateSubmissionStatus,
         bulkUpdateSubmissionStatus, deleteSubmission, onOpenSubmitDialog, hasFiltersToSave, loadAllData, loadingConnections,
         dashboardState, defaultSources, addToast, dashboardData

@@ -1,6 +1,6 @@
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
-import { parseReportV02, stageToEntry } from './benchmarkReportV02Parser';
+import { parseReportV02, groupStagesIntoRuns } from './benchmarkReportV02Parser.js';
 
 const generateUUID = () => {
     return uuidv4();
@@ -301,9 +301,15 @@ export const parseInferenceSchedulingReport = (content, filePath) => {
     }
 };
 
+const SCAN_FAILED = { ok: false, runs: [], filenames: null };
+
 /**
- * Scans a local directory (served by /api/local/*) for v0.2 benchmark
- * reports and normalizes them through the shared brv02 pipeline.
+ * Scans a local directory (served by /api/local/*) for v0.2 benchmark reports.
+ * Returns runs, not entries: the caller merges them into brv02Runs so they are
+ * editable and submittable like uploaded runs.
+ *
+ * Reports {ok, runs, filenames}, where ok separates a clean scan of an empty
+ * directory from one that never happened, such as an unreachable endpoint.
  */
 export const scanLocalBenchmarks = async () => {
     try {
@@ -313,9 +319,9 @@ export const scanLocalBenchmarks = async () => {
         }
 
         const data = await response.json();
-        if (!data.items) return [];
+        if (!data.items) return SCAN_FAILED;
 
-        const entries = [];
+        const records = [];
 
         await Promise.all(data.items.map(async (item) => {
             if (!item.name.endsWith('.yaml')) return;
@@ -326,18 +332,39 @@ export const scanLocalBenchmarks = async () => {
                 if (!fileRes.ok) return;
 
                 const content = await fileRes.text();
-                const stage = parseReportV02(content, item.name);
-                if (stage) entries.push(stageToEntry(stage));
+                const record = parseReportV02(content, item.name);
+                if (!record) return;
+
+                // run.eid is shared by the stages of one experiment; run.uid is
+                // per-report, so falling back to it splits the sweep into
+                // single-stage runs rather than guessing from load metadata.
+                const runKey = record.runEid || record.runUid;
+                if (runKey) {
+                    record.runId = `local:${runKey}`;
+                    // Stamped per stage to survive a regroup. Only ever set with a
+                    // runId: without one, grouping falls back to load metadata and
+                    // would fuse an upload into this run, marking it scanned too.
+                    record.origin = 'local-scan';
+                }
+                records.push(record);
             } catch (e) {
                 console.warn(`Failed to parse local report ${item.name}:`, e);
             }
         }));
 
-        return entries;
+        // The fetches push as they land, so sort before grouping to keep which
+        // record seeds each run's label deterministic.
+        records.sort((a, b) => (a.filename || '').localeCompare(b.filename || ''));
+
+        return {
+            ok: true,
+            runs: groupStagesIntoRuns(records),
+            filenames: new Set(records.map(r => r.filename))
+        };
 
     } catch (e) {
         console.error('Local benchmarks scan error:', e);
-        return [];
+        return SCAN_FAILED;
     }
 };
 

@@ -24,6 +24,7 @@ import yaml from 'js-yaml';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { validateBenchmark } from '../../utils/benchmarkValidator';
 import { encodeShareLink, isValidUuid } from '../../utils/shareLinkEncoder';
+import { isFileBackedRun } from '../../utils/benchmarkReportV02Parser';
 import { v4 as uuidv4 } from 'uuid';
 import { downloadRunBRV02, downloadSingleStageYaml } from '../../utils/brv02Exporter';
 
@@ -253,7 +254,7 @@ export const UnifiedDataTable = (props) => {
         baselineBenchmarkKey, setBaselineBenchmarkKey,
         hideShowSelectedOnly = false,
         renameClearToUnselectAll = false,
-        brv02Runs = [], brv02CustomLabels = {}, removeBrv02Run,
+        brv02Runs = [], brv02CustomLabels = {}, removeBrv02Run, scannedFilenames = null,
         setShowDataPanel,
         searchTerm = '',
         setSearchTerm,
@@ -525,7 +526,14 @@ export const UnifiedDataTable = (props) => {
         onOpenSubmitDialog && onOpenSubmitDialog('submit-review');
     };
 
-    const handleEditStagedRun = React.useCallback((run) => {
+    const handleEditStagedRun = React.useCallback((run, runId) => {
+        if (!run) {
+            console.warn('No staged run found for runId', runId);
+            setToastMessage('Could not open this benchmark for editing.');
+            setShowToast(true);
+            return;
+        }
+
         const bundle = buildBundleForRun(run);
 
         try {
@@ -555,7 +563,14 @@ export const UnifiedDataTable = (props) => {
         onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
     }, [selectedStagedRuns, buildBundleForRun, onOpenSubmitDialog]);
 
-    const handleSubmitStagedRunForReview = React.useCallback((run) => {
+    const handleSubmitStagedRunForReview = React.useCallback((run, runId) => {
+        if (!run) {
+            console.warn('No staged run found for runId', runId);
+            setToastMessage('Could not submit this benchmark for review.');
+            setShowToast(true);
+            return;
+        }
+
         const bundle = buildBundleForRun(run);
 
         try {
@@ -601,26 +616,31 @@ export const UnifiedDataTable = (props) => {
         };
     }, [drawerFilteredData]);
 
+    // Uploads and scanned runs share the brv02: prefix, so the prefix alone cannot
+    // gate deletion. A run still backed by a file is not deletable here: the next
+    // scan would bring it straight back.
+    const isDeletableStagedRun = React.useCallback((stat) => {
+        const sourceStr = stat?.data?.[0]?.source || '';
+        if (!sourceStr.startsWith('brv02:')) return false;
+        const runId = sourceStr.replace('brv02:', '');
+        const run = brv02Runs?.find(r => r.runId === runId);
+        return !isFileBackedRun(run, scannedFilenames);
+    }, [brv02Runs, scannedFilenames]);
+
     const localSelectedCount = React.useMemo(() => {
         let count = 0;
         selectedBenchmarks.forEach(key => {
             const stat = modelStats.find(s => s.benchmarkKey === key);
-            if (stat) {
-                const sourceStr = stat.data?.[0]?.source || '';
-                if (sourceStr.startsWith('brv02:')) count++;
-            }
+            if (isDeletableStagedRun(stat)) count++;
         });
         return count;
-    }, [selectedBenchmarks, modelStats]);
+    }, [selectedBenchmarks, modelStats, isDeletableStagedRun]);
 
     const hasLocalSelected = localSelectedCount > 0;
 
     const hasAnyLocalRuns = React.useMemo(() => {
-        return modelStats.some(s => {
-            const sourceStr = s.data?.[0]?.source || '';
-            return sourceStr.startsWith('brv02:');
-        });
-    }, [modelStats]);
+        return modelStats.some(isDeletableStagedRun);
+    }, [modelStats, isDeletableStagedRun]);
 
     const handleDeleteSelected = () => {
         if (!removeBrv02Run) return;
@@ -634,14 +654,9 @@ export const UnifiedDataTable = (props) => {
 
         selectedBenchmarks.forEach(key => {
             const stat = modelStats.find(s => s.benchmarkKey === key);
-            if (stat) {
-                const benchmarkData = stat.data || [];
-                const sourceStr = benchmarkData[0]?.source || '';
-                const isBrv02 = sourceStr.startsWith('brv02:');
-                const runId = isBrv02 ? sourceStr.replace('brv02:', '') : null;
-                if (isBrv02 && runId) {
-                    removeBrv02Run(runId);
-                }
+            if (isDeletableStagedRun(stat)) {
+                const runId = stat.data[0].source.replace('brv02:', '');
+                if (runId) removeBrv02Run(runId);
             }
         });
         lastSelectedKeyRef.current = null;
@@ -2617,7 +2632,7 @@ const BenchmarkRow = React.memo(({
                                                                      <div className="flex items-center justify-between gap-x-4 gap-y-1 w-full min-w-0">
                                                                         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                                                                     {(() => {
-                                                                                        const titleText = isBrv02 
+                                                                                        const titleText = isBrv02
                                                                                             ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
                                                                                             : (stat.model_name || stat.model || meta.model_name);
                                                                                         return (
@@ -2629,10 +2644,7 @@ const BenchmarkRow = React.memo(({
                                                                                                     <button
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation();
-                                                                                                            const run = brv02Runs.find(r => r.runId === runId);
-                                                                                                            if (run) {
-                                                                                                                handleEditStagedRun(run);
-                                                                                                            }
+                                                                                                            handleEditStagedRun(brv02Runs.find(r => r.runId === runId), runId);
                                                                                                         }}
                                                                                                         title="Edit staged benchmark metadata"
                                                                                                         className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0 cursor-pointer whitespace-nowrap"
@@ -2686,10 +2698,7 @@ const BenchmarkRow = React.memo(({
                                                                                                     <button
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation();
-                                                                                                            const run = brv02Runs.find(r => r.runId === runId);
-                                                                                                            if (run) {
-                                                                                                                handleSubmitStagedRunForReview(run);
-                                                                                                            }
+                                                                                                            handleSubmitStagedRunForReview(brv02Runs.find(r => r.runId === runId), runId);
                                                                                                         }}
                                                                                                         disabled={isLoadingSubmissions || isLocalActionPending}
                                                                                                         title="Submit this benchmark to staging GCS bucket for automated format checks"
