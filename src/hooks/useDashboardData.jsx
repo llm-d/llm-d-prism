@@ -1999,6 +1999,14 @@ export const useDashboardData = (initialState, dashboardState) => {
         try {
             // Get all runIds of the bundles we are staging/updating
             const stagedRunIds = new Set(validBundles.map(b => b.payload.runId || b.dirKey).filter(Boolean));
+            validBundles.forEach(b => {
+                if (b.originalSourceBundles) {
+                    b.originalSourceBundles.forEach(orig => {
+                        const origId = orig.payload?.runId || orig.dirKey || orig.id;
+                        if (origId) stagedRunIds.add(origId);
+                    });
+                }
+            });
 
             // Flatten and filter out old stages of the edited runs
             const otherStages = brv02Runs.flatMap(run => run.stages).filter(stage => !stagedRunIds.has(stage.runId));

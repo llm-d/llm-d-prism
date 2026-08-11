@@ -503,6 +503,22 @@ export const UnifiedDataTable = (props) => {
         onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
     }, [buildBundleForRun, onOpenSubmitDialog]);
 
+    const handleEditSelected = React.useCallback(() => {
+        if (selectedStagedRuns.length === 0) return;
+
+        const bundles = selectedStagedRuns.map(buildBundleForRun);
+
+        try {
+            localStorage.setItem('prism_active_staged_bundles', JSON.stringify(bundles));
+            localStorage.setItem('prism_upload_wizard_step', '2');
+            localStorage.setItem('prism_submit_intent', 'stage-locally');
+        } catch (e) {
+            console.error('Failed to set wizard state in localStorage:', e);
+        }
+
+        onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
+    }, [selectedStagedRuns, buildBundleForRun, onOpenSubmitDialog]);
+
     const handleSubmitStagedRunForReview = React.useCallback((run) => {
         const bundle = buildBundleForRun(run);
 
@@ -1569,9 +1585,27 @@ export const UnifiedDataTable = (props) => {
                             {hasPromotableSelected ? `Compare & Promote (${selectedBenchmarks.size})` : `Compare & Inspect (${selectedBenchmarks.size})`}
                         </button>
 
+                        {/* Edit Selected Staged Runs */}
+                        {hasAnyLocalRuns && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleEditSelected}
+                                disabled={selectedStagedRuns.length === 0}
+                                title={selectedStagedRuns.length === 0 ? "Select staged benchmarks to edit" : "Edit selected staged benchmarks"}
+                            >
+                                <Pencil className="w-3.5 h-3.5" /> Edit Selected
+                            </Button>
+                        )}
+
                         {/* Invert Selected */}
                         <Button variant="secondary" size="sm" onClick={invertSelected}>
                             Invert Selection
+                        </Button>
+
+                        {/* Unselect All */}
+                        <Button variant="secondary" size="sm" onClick={clearSelected}>
+                            Unselect All
                         </Button>
 
                         {/* Delete Staged Runs */}
@@ -2085,14 +2119,14 @@ export const UnifiedDataTable = (props) => {
             )}
             {/* Floating Action Dock when runs are selected */}
             {selectedBenchmarks.size > 0 && createPortal(
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-4 bg-slate-950/90 backdrop-blur-md border border-slate-800/80 px-4 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300">
-                    <span className="text-xs font-medium text-slate-300">
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-4 bg-slate-950/90 backdrop-blur-md border border-slate-800/80 px-4 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 whitespace-nowrap max-w-fit">
+                    <span className="text-xs font-medium text-slate-300 whitespace-nowrap flex-shrink-0">
                         {selectedBenchmarks.size} {selectedBenchmarks.size === 1 ? 'benchmark' : 'benchmarks'} selected
                     </span>
-                    <div className="h-4 w-px bg-slate-800" />
+                    <div className="h-4 w-px bg-slate-800 flex-shrink-0" />
                     <button
                         onClick={clearSelected}
-                        className="text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        className="text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer whitespace-nowrap flex-shrink-0"
                     >
                         Unselect All
                     </button>
@@ -2103,6 +2137,7 @@ export const UnifiedDataTable = (props) => {
                                 size="sm"
                                 onClick={() => handleActionClick(handleBulkApprove)}
                                 disabled={isLoadingSubmissions || isLocalActionPending}
+                                className="whitespace-nowrap flex-shrink-0"
                             >
                                 <Check className="w-3.5 h-3.5 stroke-[3]" /> Approve
                             </Button>
@@ -2111,6 +2146,7 @@ export const UnifiedDataTable = (props) => {
                                 size="sm"
                                 onClick={() => handleActionClick(handleBulkReject)}
                                 disabled={isLoadingSubmissions || isLocalActionPending}
+                                className="whitespace-nowrap flex-shrink-0"
                             >
                                 <X className="w-3.5 h-3.5" /> Reject
                             </Button>
@@ -2122,6 +2158,7 @@ export const UnifiedDataTable = (props) => {
                             size="sm"
                             onClick={() => handleActionClick(handleBulkDeleteRejected)}
                             disabled={isLoadingSubmissions || isLocalActionPending}
+                            className="whitespace-nowrap flex-shrink-0"
                         >
                             <Trash2 className="w-3.5 h-3.5" /> Delete
                         </Button>
@@ -2129,10 +2166,33 @@ export const UnifiedDataTable = (props) => {
                     <button
                         id="bottom-compare-publish-btn"
                         onClick={() => setShowComparisonDrawer(true)}
-                        className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold rounded-xl shadow-md transition-all duration-200 cursor-pointer hover:scale-105"
+                        className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold rounded-xl shadow-md transition-all duration-200 cursor-pointer hover:scale-105 whitespace-nowrap flex-shrink-0"
                     >
                         {hasPromotableSelected ? 'Compare & Promote' : 'Compare & Inspect'}
                     </button>
+                    {hasAnyLocalRuns && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleEditSelected}
+                            disabled={selectedStagedRuns.length === 0}
+                            title={selectedStagedRuns.length === 0 ? "Select staged benchmarks to edit" : "Edit selected staged benchmarks"}
+                            className="whitespace-nowrap flex-shrink-0"
+                        >
+                            <Pencil className="w-3.5 h-3.5" /> Edit Selected
+                        </Button>
+                    )}
+                    {hasAnyLocalRuns && (
+                        <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={handleDeleteSelected}
+                            disabled={localSelectedCount === 0}
+                            className="whitespace-nowrap flex-shrink-0"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete Staged ({localSelectedCount})
+                        </Button>
+                    )}
                 </div>,
                 document.body
             )}
@@ -2290,7 +2350,7 @@ const BenchmarkRow = React.memo(({
                                             <div 
                                                 key={stat.benchmarkKey || stat.model}
                                                 className={cn(
-                                                    'flex-1 flex flex-col bg-white dark:bg-slate-900 border rounded-lg transition-colors duration-150 shadow-sm relative',
+                                                    'flex-1 min-w-0 flex flex-col bg-white dark:bg-slate-900 border rounded-lg transition-colors duration-150 shadow-sm relative',
                                                 cardBorderClass,
                                                 cardBgClass,
                                                 isBaseline && 'ring-2 ring-cyan-400/50'
@@ -2298,7 +2358,7 @@ const BenchmarkRow = React.memo(({
                                         >
                                             {!readOnly && statusAccent.accentBar}
                                             {/* Card Main Row (Header) */}
-                                            <div className="flex items-stretch min-h-[60px]">
+                                            <div className="flex items-stretch min-h-[60px] min-w-0">
                                                 {/* Left Checkbox Area (Dedicated Click Target) */}
                                                 {!readOnly && (
                                                     <div 
@@ -2326,7 +2386,7 @@ const BenchmarkRow = React.memo(({
                                                 <div 
                                                     onClick={() => toggleModelExpansion(stat.benchmarkKey || stat.model)}
                                                     className={cn(
-                                                        'flex-1 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-3 overflow-hidden',
+                                                        'flex-1 min-w-0 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-3 overflow-hidden',
                                                         readOnly ? 'p-3.5 sm:p-4' : 'p-3'
                                                     )}
                                                 >
@@ -2569,50 +2629,55 @@ const BenchmarkRow = React.memo(({
                                                                  <div className="flex-1 flex flex-col min-w-0">
                                                                      {/* Line 1: Model Title on left, Source Tag & Date on right */}
                                                                      <div className="flex items-center justify-between gap-x-4 gap-y-1 w-full min-w-0">
-                                                                         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-                                                                                     <div className="flex items-center gap-1.5 min-w-0 flex-nowrap overflow-hidden">
-                                                                                         <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate block">
-                                                                                             {isBrv02 
-                                                                                                 ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
-                                                                                                 : (stat.model_name || stat.model || meta.model_name)}
-                                                                                         </span>
-                                                                                         {isBrv02 && runStatus === 'staged' && !readOnly && (
-                                                                                             <button
-                                                                                                 onClick={(e) => {
-                                                                                                     e.stopPropagation();
-                                                                                                     const run = brv02Runs.find(r => r.runId === runId);
-                                                                                                     if (run) {
-                                                                                                         handleEditStagedRun(run);
-                                                                                                     }
-                                                                                                 }}
-                                                                                                 title="Edit staged benchmark metadata"
-                                                                                                 className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0 cursor-pointer whitespace-nowrap"
-                                                                                             >
-                                                                                                 <Pencil size={12} />
-                                                                                             </button>
-                                                                                         )}
-                                                                                     </div>
-                                                                                       {onSoloOrInvertGraphVisibility && (
-                                                                                           <button
-                                                                                               type="button"
-                                                                                               onClick={(e) => {
-                                                                                                   e.stopPropagation();
-                                                                                                   onSoloOrInvertGraphVisibility(stat.benchmarkKey);
-                                                                                               }}
-                                                                                               className={cn(
-                                                                                                   "opacity-0 group-hover/benchmark-row:opacity-100 transition-opacity duration-150 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border select-none cursor-pointer flex-shrink-0 ml-1.5 shadow-sm",
-                                                                                                   isOnlyThisVisibleOnGraph
-                                                                                                       ? "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400 hover:text-amber-300"
-                                                                                                       : "bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-400 hover:text-cyan-300"
-                                                                                               )}
-                                                                                               title={isOnlyThisVisibleOnGraph ? "Show all other selected benchmarks on graph" : "Show only this benchmark on graph"}
-                                                                                           >
-                                                                                               {isOnlyThisVisibleOnGraph ? "Invert" : "Solo"}
-                                                                                           </button>
-                                                                                       )}
+                                                                        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                                                                                    {(() => {
+                                                                                        const titleText = isBrv02 
+                                                                                            ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
+                                                                                            : (stat.model_name || stat.model || meta.model_name);
+                                                                                        return (
+                                                                                            <div className="flex items-center gap-1.5 min-w-0 flex-shrink overflow-hidden">
+                                                                                                <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate block min-w-0" title={titleText}>
+                                                                                                    {titleText}
+                                                                                                </span>
+                                                                                                {isBrv02 && runStatus === 'staged' && !readOnly && (
+                                                                                                    <button
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            const run = brv02Runs.find(r => r.runId === runId);
+                                                                                                            if (run) {
+                                                                                                                handleEditStagedRun(run);
+                                                                                                            }
+                                                                                                        }}
+                                                                                                        title="Edit staged benchmark metadata"
+                                                                                                        className="p-1 text-slate-300 dark:text-slate-600 hover:text-cyan-400 transition-colors flex-shrink-0 cursor-pointer whitespace-nowrap"
+                                                                                                    >
+                                                                                                        <Pencil size={12} />
+                                                                                                    </button>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        );
+                                                                                    })()}
+                                                                                      {onSoloOrInvertGraphVisibility && (
+                                                                                          <button
+                                                                                              type="button"
+                                                                                              onClick={(e) => {
+                                                                                                  e.stopPropagation();
+                                                                                                  onSoloOrInvertGraphVisibility(stat.benchmarkKey);
+                                                                                              }}
+                                                                                              className={cn(
+                                                                                                  "opacity-0 group-hover/benchmark-row:opacity-100 transition-opacity duration-150 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border select-none cursor-pointer flex-shrink-0 ml-1.5 shadow-sm",
+                                                                                                  isOnlyThisVisibleOnGraph
+                                                                                                      ? "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400 hover:text-amber-300"
+                                                                                                      : "bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-400 hover:text-cyan-300"
+                                                                                              )}
+                                                                                              title={isOnlyThisVisibleOnGraph ? "Show all other selected benchmarks on graph" : "Show only this benchmark on graph"}
+                                                                                          >
+                                                                                              {isOnlyThisVisibleOnGraph ? "Invert" : "Solo"}
+                                                                                          </button>
+                                                                                      )}
 
                                                                             {isBrv02 && !readOnly && (
-                                                                                <div className="flex flex-col items-end gap-1.5 relative">
+                                                                                <div className="flex flex-col items-end gap-1.5 relative flex-shrink-0">
                                                                                     <div className="flex items-center gap-2">
                                                                                         {(() => {
                                                                                             const sub = submissionsMap ? submissionsMap[runId] : null;

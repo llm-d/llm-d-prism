@@ -254,7 +254,7 @@ export const UnifiedDataTable = (props) => {
                                                               e.stopPropagation();
                                                               toggleModelExpansion(stat.benchmarkKey || stat.model);
                                                           }}
-                                                          className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors whitespace-nowrap"
+                                                          className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer"
                                                           title={isExpanded ? 'Collapse details' : 'Expand details'}
                                                       >
                                                           {isExpanded ? (
@@ -263,19 +263,19 @@ export const UnifiedDataTable = (props) => {
                                                               <ChevronDown size={12} />
                                                           )}
                                                       </button>
-                                                                                                         <div className="truncate" title={
-                                                         (() => {
+                                                      <div className="truncate min-w-0" title={
+                                                          (() => {
+                                                              const runId = getRunIdFromKey(stat.benchmarkKey);
+                                                              const customLabel = runId ? brv02CustomLabels?.[runId] : null;
+                                                              return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
+                                                          })()
+                                                      }>
+                                                         {(() => {
                                                              const runId = getRunIdFromKey(stat.benchmarkKey);
                                                              const customLabel = runId ? brv02CustomLabels?.[runId] : null;
                                                              return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
-                                                         })()
-                                                     }>
-                                                        {(() => {
-                                                            const runId = getRunIdFromKey(stat.benchmarkKey);
-                                                            const customLabel = runId ? brv02CustomLabels?.[runId] : null;
-                                                            return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
-                                                        })()}
-                                                    </div>
+                                                         })()}
+                                                     </div>
                                                 </div>
                                            </td>
                                            <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{stat.hardware}</td>
