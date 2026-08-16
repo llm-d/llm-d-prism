@@ -342,10 +342,20 @@ export const UnifiedDataTable = (props) => {
                                                     {(() => {
                                                         const isResultsStore = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
                                                         const isMine = isResultsStore && user && benchmarkData[0]?.github_author?.username === user.username;
+                                                        // Staged runs share the results-store type, so it alone
+                                                        // does not mean a run came from the community bucket.
+                                                        const isLocal = (benchmarkData[0]?.source || '').startsWith('brv02:');
                                                         if (isMine) {
                                                             return (
                                                                 <Badge tone="success" size="sm" className="normal-case tracking-normal font-semibold">
                                                                     Yours
+                                                                </Badge>
+                                                            );
+                                                        }
+                                                        if (isLocal) {
+                                                            return (
+                                                                <Badge tone="neutral" size="sm" className="normal-case tracking-normal font-semibold">
+                                                                    Local
                                                                 </Badge>
                                                             );
                                                         }
