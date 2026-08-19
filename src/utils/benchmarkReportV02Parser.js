@@ -405,9 +405,13 @@ export function groupStagesIntoRuns(stageRecords) {
             targetRun = runsList.find(run => run.runId === record.runId);
         }
 
-        // Fallback: Find an existing run that has the same loadMetadata (only if runId is missing)
+        // Fallback: Find an existing run that has the same loadMetadata (only if runId is missing).
+        // Scanned runs are excluded: a report on disk and an upload can share load
+        // metadata, and fusing them would put the upload under a run the next scan
+        // rebuilds from disk, destroying it.
         if (!targetRun && !record.runId) {
             targetRun = runsList.find(run => {
+                if (isPristineScannedRun(run)) return false;
                 const runMetaStr = canonicalStringify(run.stages[0]?.loadMetadata);
                 return runMetaStr === recordMetaStr && runMetaStr !== '';
             });
@@ -433,7 +437,8 @@ export function groupStagesIntoRuns(stageRecords) {
                 other_tools: record.other_tools || null,
                 payload: record.payload || null,
                 bundle: record.bundle || null,
-                targetDashboards: record.targetDashboards || []
+                targetDashboards: record.targetDashboards || [],
+                origin: record.origin || null
             };
             runsList.push(targetRun);
         }
@@ -458,6 +463,7 @@ export function groupStagesIntoRuns(stageRecords) {
         if (!targetRun.payload && record.payload) targetRun.payload = record.payload;
         if (!targetRun.bundle && record.bundle) targetRun.bundle = record.bundle;
         if (!targetRun.targetDashboards && record.targetDashboards) targetRun.targetDashboards = record.targetDashboards;
+        if (!targetRun.origin && record.origin) targetRun.origin = record.origin;
     }
     
     // Sort stages within each run respecting prism_stage_index then original stage index
@@ -476,6 +482,35 @@ export function groupStagesIntoRuns(stageRecords) {
     }
 
     return runsList;
+}
+
+/**
+ * True when a run is still backed by a file in the scanned directory.
+ *
+ * Keyed on stage filenames because only they survive an edit's re-parse. A null
+ * scannedFilenames means no scan succeeded, which is not a scan that found
+ * nothing — neither caller may act on it.
+ */
+export function isFileBackedRun(run, scannedFilenames) {
+    if (!scannedFilenames) return false;
+    const prefix = run?.runId ? `${run.runId}/` : '';
+    return (run?.stages || []).some(stage => {
+        const filename = stage.filename || '';
+        if (scannedFilenames.has(filename)) return true;
+        return prefix && filename.startsWith(prefix)
+            && scannedFilenames.has(filename.slice(prefix.length));
+    });
+}
+
+/**
+ * True for a run the scanner produced and nothing has since edited, i.e. one the
+ * next scan may safely rebuild from disk.
+ *
+ * Requires both marks. Grouping by load metadata can fuse an upload into a
+ * scanned run and spread origin to it, but never the local: runId.
+ */
+export function isPristineScannedRun(run) {
+    return run?.origin === 'local-scan' && !!run?.runId?.startsWith('local:');
 }
 
 /**

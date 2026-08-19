@@ -17,7 +17,7 @@ import { CacheManager } from '../utils/cacheManager';
 import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
-import { parseReportV02, groupStagesIntoRuns, stageToEntry } from '../utils/benchmarkReportV02Parser';
+import { parseReportV02, groupStagesIntoRuns, stageToEntry, isPristineScannedRun } from '../utils/benchmarkReportV02Parser';
 import { scanLocalBenchmarks } from '../utils/gcsScanner';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
@@ -99,6 +99,7 @@ export const useDashboardData = (initialState, dashboardState) => {
     });
     const [brv02Error, setBrv02Error] = useState(null);
     const [brv02Loading, setBrv02Loading] = useState(false);
+    const [scannedFilenames, setScannedFilenames] = useState(null);
     const [brv02CustomLabels, setBrv02CustomLabels] = useState(() => {
         try {
             const saved = localStorage.getItem('prism_brv02_custom_labels');
@@ -1386,14 +1387,22 @@ export const useDashboardData = (initialState, dashboardState) => {
                 failedSources.push(`Sample Data (${e.message})`);
             }
 
-            // 1b. Fetch local/PVC benchmark reports (no-op unless PRISM_LOCAL_DIR is set)
+            // 1b. Fetch local benchmark reports. These join brv02Runs, so they
+            // render through the same derivation as uploads.
             try {
-                const localBench = await scanLocalBenchmarks();
-                if (localBench.length > 0) {
-                    const sourceKey = 'local:benchmarks';
-                    allData = [...allData, ...localBench.map(e => ({ ...e, source: sourceKey }))];
-                    setAvailableSources(prev => new Set([...prev, sourceKey]));
-                    setSelectedSources(prev => new Set([...prev, sourceKey]));
+                const scan = await scanLocalBenchmarks();
+                // Only a successful scan may reconcile: a failed one reports no
+                // filenames, and acting on that would drop every local run.
+                if (scan.ok) {
+                    setScannedFilenames(scan.filenames);
+                    setBrv02Runs(prev => [
+                        // Drop pristine scanned runs, so a deleted file disappears.
+                        // Both marks are required: grouping by load metadata can fuse
+                        // an upload into a scanned run and spread the origin to it,
+                        // but never the local: runId, which only the scanner mints.
+                        ...prev.filter(r => !isPristineScannedRun(r)),
+                        ...scan.runs.filter(s => !prev.some(r => r.runId === s.runId && !isPristineScannedRun(r))),
+                    ]);
                 }
             } catch (e) {
                 console.warn("Failed to load local/PVC benchmarks", e);
@@ -2598,7 +2607,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
         handleAddGCSBucket, removeGCSBucket,
-        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs,
+        brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs, scannedFilenames,
         brv02CustomLabels, setBrv02CustomLabels,
         brv02BaselineRunId, setBrv02BaselineRunId,
         brv02SelectedStages, setBrv02SelectedStages,

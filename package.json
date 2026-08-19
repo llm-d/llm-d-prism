@@ -9,6 +9,7 @@
     "build": "vite build",
     "start": "tsx server/server.js",
     "type-check": "tsc --noEmit",
+    "test": "for t in src/utils/*.test.js; do echo \"--- $t\"; node \"$t\" || exit 1; done",
     "lint": "eslint .",
     "preview": "vite preview",
     "update-metrics": "python3 tools/update_arena_scores.py",
