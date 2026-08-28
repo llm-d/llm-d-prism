@@ -21,6 +21,7 @@ import {
     CHART_SERIES, EmptyState, ToggleGroup, gridProps,
 } from '../ui';
 import { cn } from '../../utils/cn';
+import { getEntryLabel, getCustomLabelRunId } from '../../utils/runLabel';
 
 // One-bar-per-run comparison chart. Metrics are grouped into families
 // (TTFT / TPOT / ITL / E2E / observability) so the user picks the family
@@ -102,13 +103,57 @@ const STAT_COLORS = {
     p99:  CHART_SERIES[3], // violet
 };
 
-const aggregateValue = (entries, statFn, higher) => {
-    const vals = entries
-        .map(statFn)
-        .filter(v => v !== null && v !== undefined && !isNaN(v));
-    if (vals.length === 0) return null;
-    if (vals.length === 1) return vals[0];
-    return higher ? Math.max(...vals) : Math.min(...vals);
+// Stage bars of one run share the run's hue and separate by lightness, so a
+// sweep reads as one family. skills/style.md caps the palette at five hues and
+// forbids cycling, so beyond five runs the hue repeats and the axis label is
+// what distinguishes them.
+const shade = (hex, factor) => {
+    const n = parseInt(hex.slice(1), 16);
+    const mix = (c) => Math.round(c + (255 - c) * factor).toString(16).padStart(2, '0');
+    return `#${mix((n >> 16) & 255)}${mix((n >> 8) & 255)}${mix(n & 255)}`;
+};
+
+// Only a genuine sweep has distinct stage indices; repeated stage numbers mean
+// the entries are something else (a rerun, a coalesced upload) and stay one bar.
+const splitStages = (entries) => {
+    const byStage = new Map();
+    entries.forEach(d => {
+        const stage = d.workload?.stage;
+        if (stage == null || byStage.has(stage)) return;
+        byStage.set(stage, d);
+    });
+    return byStage.size === entries.length && byStage.size > 1
+        ? [...byStage.entries()].sort((a, b) => a[0] - b[0]).map(([, d]) => d)
+        : [];
+};
+
+const stageKey = (key, entry) => `${key}#stage${entry.workload?.stage}`;
+const runKeyOf = (key) => key.split('#stage')[0];
+
+// A sweep's stages are separate operating points, so taking the best value of
+// each metric independently reports a configuration that never ran: peak
+// throughput from the last stage beside the first stage's latency. One stage
+// represents the run instead, the one that reached peak throughput, and every
+// stat on the bar is read from it.
+const representativeEntry = (entries) => {
+    if (entries.length <= 1) return entries[0] ?? null;
+    const tput = d => d.metrics?.total_tput ?? d.metrics?.output_tput ?? d.throughput;
+    let best = null;
+    let bestVal = -Infinity;
+    entries.forEach(d => {
+        const v = tput(d);
+        if (v !== null && v !== undefined && !isNaN(v) && v > bestVal) {
+            bestVal = v;
+            best = d;
+        }
+    });
+    return best ?? entries[0];
+};
+
+const statValue = (entry, statFn) => {
+    if (!entry) return null;
+    const v = statFn(entry);
+    return v === null || v === undefined || isNaN(v) ? null : v;
 };
 
 const formatVal = (v, dec) => {
@@ -116,15 +161,54 @@ const formatVal = (v, dec) => {
     return Number(v).toLocaleString(undefined, { maximumFractionDigits: dec });
 };
 
-const truncateLabel = (s, n = 22) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
+const clip = (s, n) => (s.length <= n ? s : `${s.slice(0, Math.max(1, n - 1))}…`);
 
-const buildBenchmarkLabel = (key, sample, brv02CustomLabels) => {
-    if (sample?.source?.startsWith('brv02:')) {
-        const runId = sample.source.slice('brv02:'.length);
-        if (brv02CustomLabels?.[runId]) return brv02CustomLabels[runId];
-        const qps = sample.workload?.target_qps;
+// Runs in a sweep share their model name and differ inside the bracket, so the
+// bracket is kept whole and the model name and trailing ` · stage N · QPS` context
+// are clipped around it. Runs that differ only inside that context can still clip
+// to the same string; the caller's dedup suffix keeps them hoverable.
+const truncateLabel = (s, n = 22, keepHead = false) => {
+    if (!s || s.length <= n) return s;
+    // A stage bar's leading text is the only part that differs between its
+    // siblings, so it is kept whole and the shared remainder gives way.
+    if (keepHead) {
+        const cut = s.indexOf(' · ');
+        if (cut > 0 && cut <= n - 2) return `${s.slice(0, cut)} ·${clip(s.slice(cut + 2), n - cut - 2)}`;
+    }
+    const m = s.match(/^(.*?)(\s*)\[(.+)\](.*)$/);
+    if (m) {
+        const [, head, gap, inner, tail] = m;
+        const sep = head ? gap : '';
+        const room = n - inner.length - 2 - sep.length;
+        if (room >= (head ? 2 : 0)) {
+            const keptTail = clip(tail, Math.max(0, room - Math.min(head.length, 12)));
+            const keptHead = clip(head, room - keptTail.length);
+            return `${keptHead}${sep}[${inner}]${keptTail}`;
+        }
+        const budget = n - 2;
+        if (budget >= 4) return `[…${inner.slice(inner.length - budget + 1)}]`;
+    }
+    return clip(s, n);
+};
+
+const buildBenchmarkLabel = (key, sample, brv02CustomLabels, isStageBar) => {
+    const runId = getCustomLabelRunId(sample);
+    if (runId !== null) {
+        const customLabel = brv02CustomLabels?.[runId];
         const stage = sample.workload?.stage;
-        const parts = [sample.model_name || sample.model || 'run'];
+        const conc = sample.workload?.concurrency;
+        const qps = sample.workload?.target_qps;
+        const run = customLabel || getEntryLabel(sample) || 'run';
+
+        // Stage bars of one run share every leading character, so the knob that
+        // differs leads and the run name follows; the tooltip keeps the full text.
+        if (isStageBar) {
+            const load = conc != null ? `conc ${conc}` : qps != null ? `${qps} QPS` : `stage ${stage}`;
+            return `${load} · ${run}`;
+        }
+
+        if (customLabel) return customLabel;
+        const parts = [run];
         if (stage != null) parts.push(`stage ${stage}`);
         if (qps != null) parts.push(`${qps} QPS`);
         return parts.join(' · ');
@@ -143,6 +227,11 @@ const BarTooltip = ({ active, payload, metric, activeStats, baselineSet }) => {
             title={
                 <span className="flex items-center gap-2">
                     <span className="truncate">{d.fullLabel}</span>
+                    {d.stageCount > 1 && d.stage != null && (
+                        <span className="text-slate-400 dark:text-slate-500 text-[10px] font-normal shrink-0">
+                            stage {d.stage} of {d.stageCount}
+                        </span>
+                    )}
                     {d.isBaseline && <span className="text-cyan-500 dark:text-cyan-400 text-[10px] font-normal shrink-0">📌 baseline</span>}
                 </span>
             }
@@ -198,6 +287,8 @@ export const RunComparisonChart = ({
     // Multi-select: any combination of {'mean','p50','p99'} for the active metric.
     const [statIds, setStatIds] = useState(() => new Set(['mean']));
     const [viewOverride, setViewOverride] = useState(null);
+    const [hiddenStages, setHiddenStages] = useState(() => new Set());
+    const [collapsedRuns, setCollapsedRuns] = useState(() => new Set());
 
     useEffect(() => {
         if (!baselineBenchmarkKey) setViewOverride(null);
@@ -241,6 +332,23 @@ export const RunComparisonChart = ({
     // Build chart data once per render, computing values and diffs for EVERY
     // stat the metric supports (cheap; lets us re-render without recomputing
     // when the user toggles stat visibility).
+    // Runs that actually sweep, so the UI can offer a toggle per stage.
+    const sweeps = useMemo(() => {
+        const byKey = new Map();
+        filteredBySource.forEach(d => {
+            const key = getBenchmarkKey(d);
+            if (!selectedBenchmarks.has(key)) return;
+            if (!byKey.has(key)) byKey.set(key, []);
+            byKey.get(key).push(d);
+        });
+        const out = [];
+        byKey.forEach((entries, key) => {
+            const stages = splitStages(entries);
+            if (stages.length > 1) out.push({ key, entries, stages });
+        });
+        return out;
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey]);
+
     const chartData = useMemo(() => {
         if (selectedBenchmarks.size < 2) return [];
 
@@ -252,11 +360,55 @@ export const RunComparisonChart = ({
             byKey.get(key).push(d);
         });
 
-        const list = [];
+        // A run's stages are separate operating points, so each gets its own bar
+        // unless the user has collapsed the run back to one. Stage keys stay local
+        // to this chart: getBenchmarkKey still identifies the run, so selections
+        // and baselines saved elsewhere keep working.
+        const groups = new Map();
         byKey.forEach((entries, key) => {
-            const sample = entries[0];
-            const fullLabel = buildBenchmarkLabel(key, sample, brv02CustomLabels);
-            const isBaseline = key === baselineBenchmarkKey;
+            const stages = splitStages(entries);
+            if (stages.length < 2 || collapsedRuns.has(key)) {
+                groups.set(key, entries);
+                return;
+            }
+            stages.forEach(entry => {
+                const sk = stageKey(key, entry);
+                if (hiddenStages.has(sk)) return;
+                groups.set(sk, [entry]);
+            });
+        });
+
+        // One hue per run so a sweep's stage bars read as a family.
+        const runHues = new Map();
+        [...groups.keys()].forEach(k => {
+            const rk = runKeyOf(k);
+            if (!runHues.has(rk)) runHues.set(rk, CHART_SERIES[runHues.size % CHART_SERIES.length]);
+        });
+        const stageOrder = new Map();   // group key -> its position within its run
+        const runStageCount = new Map(); // run key -> how many bars it has
+        [...groups.keys()].forEach(k => {
+            const rk = runKeyOf(k);
+            const seen = runStageCount.get(rk) || 0;
+            stageOrder.set(k, seen);
+            runStageCount.set(rk, seen + 1);
+        });
+
+        const list = [];
+        const usedLabels = new Set();
+        groups.forEach((entries, key) => {
+            // The bar's values come from this stage, so its label must too.
+            const sample = representativeEntry(entries);
+            const isStageBar = key !== runKeyOf(key);
+            const fullLabel = buildBenchmarkLabel(key, sample, brv02CustomLabels, isStageBar);
+            const isBaseline = runKeyOf(key) === baselineBenchmarkKey;
+            // Recharts keys bars on `label`, so a collision makes both unhoverable.
+            const prefix = isBaseline ? '📌 ' : '';
+            let label = prefix + truncateLabel(fullLabel, 22, isStageBar);
+            for (let n = 2; usedLabels.has(label); n++) {
+                const suffix = ` (${n})`;
+                label = prefix + truncateLabel(fullLabel, 22 - suffix.length, isStageBar) + suffix;
+            }
+            usedLabels.add(label);
             const row = {
                 key,
                 fullLabel,
@@ -264,11 +416,17 @@ export const RunComparisonChart = ({
                 // baseline — each bar's %diff is computed vs the same-stat
                 // value of THIS benchmark, so the marker belongs to the
                 // group, not any single bar.
-                label: (isBaseline ? '📌 ' : '') + truncateLabel(fullLabel, 22),
+                label,
                 isBaseline,
             };
+            row.stage = sample?.workload?.stage ?? null;
+            row.stageCount = entries.length;
+            const rk = runKeyOf(key);
+            const total = runStageCount.get(rk) || 1;
+            // Later stages sit lighter within the run's hue; a lone bar keeps it pure.
+            row.color = shade(runHues.get(rk), total > 1 ? (stageOrder.get(key) / total) * 0.55 : 0);
             metric.stats.forEach(s => {
-                row[`raw_${s.id}`] = aggregateValue(entries, s.fn, metric.higher);
+                row[`raw_${s.id}`] = statValue(sample, s.fn);
             });
             list.push(row);
         });
@@ -301,7 +459,7 @@ export const RunComparisonChart = ({
             if (b.isBaseline && !a.isBaseline) return 1;
             return (b[`raw_${sortStat}`] ?? 0) - (a[`raw_${sortStat}`] ?? 0);
         });
-    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey, metric, baselineBenchmarkKey, brv02CustomLabels, statIds]);
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey, metric, baselineBenchmarkKey, brv02CustomLabels, statIds, hiddenStages, collapsedRuns]);
 
     if (selectedBenchmarks.size < 2) return null;
 
@@ -443,6 +601,48 @@ export const RunComparisonChart = ({
                     />
                 </div>
 
+                {sweeps.map(({ key, stages }) => {
+                    const collapsed = collapsedRuns.has(key);
+                    const shown = stages.filter(e => !hiddenStages.has(stageKey(key, e))).length;
+                    return (
+                        <div key={key} className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                            <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stages</span>
+                            <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
+                            <button
+                                onClick={() => setCollapsedRuns(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key); else next.add(key);
+                                    return next;
+                                })}
+                                title={collapsed ? 'Show each stage as its own bar' : 'Combine the stages into one bar'}
+                                className={cn(baseTogglesClass, collapsed ? activeClass('purple') : inactiveToggleClass)}
+                            >
+                                {collapsed ? 'Combined' : 'Split'}
+                            </button>
+                            {!collapsed && stages.map(entry => {
+                                const sk = stageKey(key, entry);
+                                const isOn = !hiddenStages.has(sk);
+                                const load = entry.workload?.concurrency ?? entry.workload?.target_qps;
+                                return (
+                                    <button
+                                        key={sk}
+                                        onClick={() => setHiddenStages(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(sk)) next.delete(sk);
+                                            else if (shown > 1) next.add(sk);
+                                            return next;
+                                        })}
+                                        title={isOn && shown === 1 ? 'Keep at least one stage' : `Stage ${entry.workload?.stage}${load != null ? ` · ${load}` : ''}`}
+                                        className={cn(baseTogglesClass, isOn ? activeClass('cyan') : inactiveToggleClass)}
+                                    >
+                                        {entry.workload?.stage}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    );
+                })}
+
                 {metric.stats.length > 1 && (
                     <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
                         <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stat</span>
@@ -558,7 +758,7 @@ export const RunComparisonChart = ({
                                         {plotData.map((entry, i) => (
                                             <Cell
                                                 key={i}
-                                                fill={STAT_COLORS[s.id]}
+                                                fill={activeStats.length > 1 ? STAT_COLORS[s.id] : (entry.color || STAT_COLORS[s.id])}
                                                 stroke={entry.isBaseline ? (theme === 'dark' ? '#67e8f9' : '#0e7490') : 'none'}
                                                 strokeWidth={entry.isBaseline ? 1.5 : 0}
                                             />
@@ -580,7 +780,7 @@ export const RunComparisonChart = ({
 
             <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-center">
                 One bar per selected benchmark{activeStats.length > 1 ? ` × ${activeStats.length} stats` : ''} ·
-                multi-point benchmarks aggregate to {metric.higher ? 'max' : 'min'} {metric.label.toLowerCase()}
+                multi-stage runs are shown at their peak-throughput stage
                 {canDiff
                     ? ' · Δ% in green = improvement, red = regression'
                     : ' · set a baseline (📌) on a run to enable Δ% comparison'}
