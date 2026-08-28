@@ -188,6 +188,14 @@ export const UnifiedDataTable = (props) => {
                                       const meta = benchmarkData[0]?.metadata || {};
                                       const tp = getEffectiveTp(benchmarkData[0]) || '-';
 
+                                      const isBrv02 = benchmarkData[0]?.source_info?.type === 'benchmark_report_v02';
+                                      // Stages sweep whichever knob the workload defines: concurrency,
+                                      // request rate, or neither. Label the column after the one present.
+                                      const [stageLoadLabel, stageLoadOf] = benchmarkData.some(d => d.workload?.concurrency != null)
+                                          ? ['Conc', (d) => d.workload?.concurrency]
+                                          : benchmarkData.some(d => d.workload?.target_qps != null)
+                                              ? ['Rate', (d) => d.workload?.target_qps]
+                                              : ['Load', () => null];
                                       const entryLabel = buildRunLabel({
                                           model: stat.model_name || stat.model || meta.model_name,
                                           description: benchmarkData[0]?.runLabel,
@@ -493,6 +501,8 @@ export const UnifiedDataTable = (props) => {
                                                             <table className="w-full text-left text-slate-600 dark:text-slate-300 text-xs shadow-inner rounded-sm overflow-hidden">
                                                                 <thead className="bg-slate-200 dark:bg-slate-700/40 text-slate-700 dark:text-slate-100 uppercase text-[10px] font-medium border-b border-slate-300 dark:border-slate-600">
                                                                     <tr>
+                                                                        {isBrv02 && <th className="px-3 py-2 w-12 text-center">Stage</th>}
+                                                                        {isBrv02 && <th className="px-2 py-1">{stageLoadLabel}</th>}
                                                                         <th className="px-4 py-2">QPS</th>
                                                                         <th className="px-2 py-1">Input Tok/s</th>
                                                                         <th className="px-2 py-1">Output Tok/s</th>
@@ -510,9 +520,16 @@ export const UnifiedDataTable = (props) => {
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700/50">
-                                                                    {benchmarkData.map((d, index) => (
+                                                                    {[...benchmarkData]
+                                                                        .sort((a, b) => (a.workload?.stage ?? 0) - (b.workload?.stage ?? 0))
+                                                                        .map((d, index) => (
                                                                        <tr key={index} className="hover:bg-slate-100 dark:hover:bg-slate-800/50">
-                                                                           {index === 0 && console.log('Row 0 Data:', d)}
+                                                                           {isBrv02 && (
+                                                                               <td className="px-3 py-1.5 text-center w-12 font-mono text-slate-500 border-r border-slate-100 dark:border-slate-700">
+                                                                                   {d.workload?.stage ?? '-'}
+                                                                               </td>
+                                                                           )}
+                                                                           {isBrv02 && <td className="px-2 py-1 font-mono">{stageLoadOf(d) ?? '-'}</td>}
                                                                            <td className="px-4 py-1.5 font-mono">{d.metrics?.request_rate?.toFixed(2) || d.qps?.toFixed(2) || '-'}</td>
                                                                            <td className="px-2 py-1 font-mono">{d.metrics?.input_tput?.toFixed(0) || '-'}</td>
                                                                            <td className="px-2 py-1 font-mono">{d.metrics?.output_tput?.toFixed(0) || d.throughput?.toFixed(0) || '-'}</td>
