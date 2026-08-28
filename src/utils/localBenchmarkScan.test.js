@@ -14,7 +14,7 @@
 
 import { describe, it, afterEach } from 'vitest';
 import { scanLocalBenchmarks } from './gcsScanner.js';
-import { groupStagesIntoRuns, isFileBackedRun, isPristineScannedRun } from './benchmarkReportV02Parser.js';
+import { groupStagesIntoRuns, isFileBackedRun, isPristineScannedRun, stageToEntry } from './benchmarkReportV02Parser.js';
 import assert from 'node:assert';
 
 // The reconcile expression from useDashboardData's local scan step.
@@ -279,5 +279,18 @@ describe('local benchmark scan', () => {
         assert.strictEqual(unkeyed.origin, null);
         assert.strictEqual(mixed.runs.filter(r => isPristineScannedRun(r)).length, 1);
     });
-});
 
+    it('backfills the variant from the run description but never configuration', () => {
+        // 13. configuration is a node-topology string the compare chart colors by.
+        const labelled = stageToEntry({ runLabel: 'Qwen/Qwen3-32B [conc32]', scenario: {}, performance: {} });
+        assert.strictEqual(labelled.metadata.variant, 'Qwen/Qwen3-32B [conc32]');
+        assert.strictEqual(labelled.metadata.configuration, '');
+
+        const stated = stageToEntry({
+            runLabel: 'Qwen/Qwen3-32B [conc32]',
+            scenario: { configuration: '2 Nodes (TP8)' },
+            performance: {},
+        });
+        assert.strictEqual(stated.metadata.configuration, '2 Nodes (TP8)');
+    });
+});

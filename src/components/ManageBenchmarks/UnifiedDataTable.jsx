@@ -20,6 +20,7 @@ import { ThroughputCostChart } from '../Dashboard/ThroughputCostChart';
 import { Button, Badge, StatusChip, Modal, Textarea } from '../ui';
 import { cn } from '../../utils/cn';
 import { getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
+import { buildRunLabel } from '../../utils/runLabel';
 import yaml from 'js-yaml';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { validateBenchmark } from '../../utils/benchmarkValidator';
@@ -3384,9 +3385,14 @@ const BenchmarkRow = React.memo(({
                                                                      <div className="flex items-center justify-between gap-x-4 gap-y-1 w-full min-w-0">
                                                                         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                                                                     {(() => {
+                                                                                        const model = stat.model_name || stat.model || meta.model_name;
                                                                                         const titleText = isBrv02
-                                                                                            ? (brv02CustomLabels[runId] || benchmarkData[0]?.runLabel || stat.model_name || stat.model || meta.model_name)
-                                                                                            : (stat.model_name || stat.model || meta.model_name);
+                                                                                            ? buildRunLabel({
+                                                                                                model,
+                                                                                                description: benchmarkData[0]?.runLabel,
+                                                                                                customLabel: brv02CustomLabels[runId],
+                                                                                            })
+                                                                                            : model;
                                                                                         return (
                                                                                             <div className="flex items-center gap-1.5 min-w-0 flex-shrink overflow-hidden">
                                                                                                 <span className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate block min-w-0" title={titleText}>

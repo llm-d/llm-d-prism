@@ -615,6 +615,10 @@ export function stageToEntry(stage) {
 
     const harness = scenario.harness && scenario.harness !== 'unknown' ? scenario.harness : '';
 
+    // normalizeModelName strips the bracketed part from model_name, so without this
+    // the description never reaches a label.
+    const variant = stage.runLabel || '';
+
     return createEntry({
         payload: stage.payload || null,
         forked_from: stage.forked_from || stage.payload?.forked_from || null,
@@ -677,6 +681,8 @@ export function stageToEntry(stage) {
             stage: stage.prism_stage_index !== undefined && stage.prism_stage_index !== null
                 ? stage.prism_stage_index
                 : (stage.stageIndex !== undefined && stage.stageIndex !== null ? stage.stageIndex : null),
+            variant,
+            configuration: scenario.configuration || '',
         },
 
         workload: {

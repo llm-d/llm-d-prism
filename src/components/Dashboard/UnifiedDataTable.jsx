@@ -17,6 +17,7 @@ import { RotateCcw, ChevronDown, ChevronUp, Star, Pin, GitFork } from 'lucide-re
 import { Badge, Button, EmptyState, Panel } from '../ui';
 import { cn } from '../../utils/cn';
 import { getEffectiveTp, getBucket, getSourceTag, getSubmissionStatusDetails } from '../../utils/dashboardHelpers';
+import { buildRunLabel, getCustomLabelRunId } from '../../utils/runLabel';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 
 export const UnifiedDataTable = (props) => {
@@ -67,13 +68,6 @@ export const UnifiedDataTable = (props) => {
             newSelected.delete(key);
         }
         setSelectedBenchmarks(newSelected);
-    };
-
-    const getRunIdFromKey = (key) => {
-        if (!key) return null;
-        if (key.startsWith('brv02:')) return key.substring(6);
-        if (key.startsWith('results-store:')) return key.substring(14);
-        return null;
     };
 
     const toggleBaseline = (key) => {
@@ -193,6 +187,12 @@ export const UnifiedDataTable = (props) => {
                                       // Extract metadata from the first entry to populate columns
                                       const meta = benchmarkData[0]?.metadata || {};
                                       const tp = getEffectiveTp(benchmarkData[0]) || '-';
+
+                                      const entryLabel = buildRunLabel({
+                                          model: stat.model_name || stat.model || meta.model_name,
+                                          description: benchmarkData[0]?.runLabel,
+                                          customLabel: brv02CustomLabels?.[getCustomLabelRunId(stat.benchmarkKey)],
+                                      });
                                       
                                       // Use buckets to avoid "Var" for slightly different lengths
                                       const uniqueIsl = [...new Set(benchmarkData.map(d => getBucket(d.isl || d.workload?.input_tokens)))];
@@ -263,18 +263,8 @@ export const UnifiedDataTable = (props) => {
                                                               <ChevronDown size={12} />
                                                           )}
                                                       </button>
-                                                      <div className="truncate min-w-0" title={
-                                                          (() => {
-                                                              const runId = getRunIdFromKey(stat.benchmarkKey);
-                                                              const customLabel = runId ? brv02CustomLabels?.[runId] : null;
-                                                              return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
-                                                          })()
-                                                      }>
-                                                         {(() => {
-                                                             const runId = getRunIdFromKey(stat.benchmarkKey);
-                                                             const customLabel = runId ? brv02CustomLabels?.[runId] : null;
-                                                             return customLabel || benchmarkData[0]?.runLabel || (stat.model_name || stat.model || meta.model_name);
-                                                         })()}
+                                                      <div className="truncate min-w-0" title={entryLabel}>
+                                                         {entryLabel}
                                                      </div>
                                                 </div>
                                            </td>
