@@ -19,6 +19,7 @@ import { CustomLabel, CustomChartTooltip } from '../common';
 import { Button, ChartContainer, ChartXAxis, ChartYAxis, Input, Select, gridProps } from '../ui';
 import { cn } from '../../utils/cn';
 import { getBucket, getEffectiveTp, getParetoFrontier } from '../../utils/dashboardHelpers';
+import { stripModelPrefix, stripExperimentIdSuffix } from '../../utils/runLabel';
 const getStageIdx = (d) => {
     const raw = d.workload?.stage ?? d.prism_stage_index ?? d.stageIndex ?? d.stage ?? d.metadata?.stage_index ?? d.metadata?.stage;
     if (raw !== null && raw !== undefined && raw !== '') {
@@ -1043,6 +1044,7 @@ export const ThroughputCostChart = (props) => {
                          precision: sample.metadata?.precision || 'Unknown',
                          tp: tp,
                          configuration: sample.metadata?.configuration || '',
+                         variant: sample.metadata?.variant || '',
                          workload: workload,
                          backend: sample.metadata?.backend || sample.source || '',
                          filename: filename
@@ -1061,6 +1063,7 @@ export const ThroughputCostChart = (props) => {
                  const constPrec = isConst('precision');
                  const constTp = isConst('tp');
                  const constConfiguration = isConst('configuration');
+                 const constVariant = isConst('variant');
                  const constWorkload = isConst('workload');
                  // For backend, if it's constant OR if it's 'lpg', we might want to hide it if explicit filenames are used?
                  // Let's stick to standard diff logic
@@ -1072,35 +1075,49 @@ export const ThroughputCostChart = (props) => {
                  const coreLabels = new Map(); // id -> label string
                  const labelCounts = new Map(); // label string -> count
 
+                 const variantsById = new Map();
+                 attrs.forEach(a => {
+                     const variants = [];
+                     const hasConfig = !constConfiguration && a.configuration && a.configuration !== 'Unknown';
+                     if (hasConfig) variants.push(a.configuration);
+
+                     if (!constVariant && a.variant) {
+                         // The segments are joined into one outer [...], and the family may
+                         // already carry the variant from useDashboardData.
+                         const rest = stripExperimentIdSuffix(stripModelPrefix(a.variant, a.family)).replace(/^\[(.*)\]$/, '$1');
+                         if (rest && !a.family.endsWith(`[${rest}]`)) variants.push(rest);
+                     }
+
+                     if (!constHw && a.hardware !== 'Unknown') variants.push(a.hardware);
+                     if (!constPrec && a.precision !== 'Unknown') variants.push(a.precision);
+
+                     // Don't show generic TP if we already showed a configuration (which includes TP info)
+                     if (!hasConfig && !constTp && a.tp) variants.push(a.tp);
+
+                     if (!constWorkload && a.workload) variants.push(a.workload);
+                     
+                     variantsById.set(a.id, variants);
+                 });
+
+                 // A series whose variants all collapse to nothing would fall back to the
+                 // family alone, reading as a different kind of label than its siblings.
+                 const everyHasVariants = attrs.every(a => variantsById.get(a.id).length > 0);
+
                  attrs.forEach(a => {
                      const parts = [];
-                     
+
                      // Show Model Name (family) ONLY if:
                      // 1. It differs across benchmarks (!constFamily)
                      // 2. OR there is only one benchmark total (so the user knows what they are looking at)
-                     if (!constFamily || uniqueBenchmarks.length === 1) {
+                     if (!constFamily || uniqueBenchmarks.length === 1 || !everyHasVariants) {
                         parts.push(a.family);
                      }
-                     
-                     const variants = [];
-                     // Add Configuration (Node Config) if meaningful and not constant
-                     if (!constConfiguration && a.configuration && a.configuration !== 'Unknown') {
-                         variants.push(a.configuration);
-                     }
-                     
-                     if (!constHw && a.hardware !== 'Unknown') variants.push(a.hardware);
-                     if (!constPrec && a.precision !== 'Unknown') variants.push(a.precision);
-                     
-                     // Don't show generic TP if we already showed a configuration (which includes TP info)
-                     const hasConfig = !constConfiguration && a.configuration && a.configuration !== 'Unknown';
-                     if (!hasConfig && !constTp && a.tp) variants.push(a.tp);
-                     
-                     if (!constWorkload && a.workload) variants.push(a.workload);
-                     
+
+                     const variants = variantsById.get(a.id);
                      if (variants.length > 0) {
-                         parts.push(variants.join(', '));
+                         parts.push(`[${variants.join(', ')}]`);
                      }
-                     
+
                      const label = parts.join(' ');
                      coreLabels.set(a.id, label);
                      labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
