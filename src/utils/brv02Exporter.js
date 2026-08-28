@@ -416,7 +416,9 @@ export function getRawPrismCloudPayload(runPayloadOrStat, benchmarkData = []) {
         manifests,
         evidence,
         run_metadata: runPayloadOrStat.run_metadata || runPayloadOrStat.payload?.run_metadata || first.run_metadata || first.payload?.run_metadata || null,
-        metadata: runPayloadOrStat.metadata || runPayloadOrStat.payload?.metadata || first.metadata || first.payload?.metadata || null,
+        // Only run-level metadata is submitted: a normalized entry's metadata carries
+        // fields derived for display, which do not belong in a stored payload.
+        metadata: runPayloadOrStat.metadata || runPayloadOrStat.payload?.metadata || first.payload?.metadata || null,
         submitter: runPayloadOrStat.submitter || runPayloadOrStat.payload?.submitter || first.submitter || null,
         submitted_at: runPayloadOrStat.submitted_at || runPayloadOrStat.payload?.submitted_at || first.submitted_at || null,
         entries
