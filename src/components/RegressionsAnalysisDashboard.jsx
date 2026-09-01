@@ -129,8 +129,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
     const [selectedPath, setSelectedPath] = useState('');
     const [activeMetric, setActiveMetric] = useState('ttft'); // 'ttft' | 'itl' | 'qps' | 'p90Latency' | 'cacheHitPct'
     const [selectedRunMenu, setSelectedRunMenu] = useState('optimized-baseline/gke/kustomize');
-    const [xAxisMode, setXAxisMode] = useState('output'); // 'build' | 'date' | 'output' | 'input' | 'total' | 'qps'
-    const [yMetric, setYMetric] = useState('ntpot'); // 'ntpot' | 'tpot' | 'ttft' | 'itl' | 'e2e'
+    const [xMetric, setXMetric] = useState('ntpot'); // 'ntpot' | 'tpot' | 'ttft' | 'itl' | 'e2e'
+    const [yMetric, setYMetric] = useState('output'); // 'output' | 'input' | 'total' | 'qps'
     const [isLogScaleX, setIsLogScaleX] = useState(false);
     const [showPerChip, setShowPerChip] = useState(false);
     const [visiblePercentiles, setVisiblePercentiles] = useState(['P50', 'P90', 'P99']);
@@ -313,18 +313,18 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
     }, [runs]);
 
     const xLabels = {
-        output: 'Output Tokens/sec',
-        input: 'Input Tokens/sec',
-        total: 'Total Tokens/sec',
-        qps: 'Queries Per Second (QPS)'
-    };
-    
-    const yLabels = {
         ntpot: 'Normalized TPOT (ms)',
         tpot: 'Time Per Output Token (ms)',
         ttft: 'Time To First Token (ms)',
         itl: 'Inter-Token Latency (ms)',
         e2e: 'E2E Latency (ms)'
+    };
+    
+    const yLabels = {
+        output: 'Output Tokens/sec',
+        input: 'Input Tokens/sec',
+        total: 'Total Tokens/sec',
+        qps: 'Queries Per Second (QPS)'
     };
 
     const filteredRuns = useMemo(() => {
@@ -341,41 +341,39 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
             let xVal_p90 = d.ttft_p90;
             let xVal_p99 = d.ttft_p99;
 
-            if (yMetric === 'itl') {
+            if (xMetric === 'itl') {
                 xVal_p50 = d.itl_p50;
                 xVal_p90 = d.itl_p90;
                 xVal_p99 = d.itl_p99;
-            } else if (yMetric === 'ntpot') {
+            } else if (xMetric === 'ntpot') {
                 xVal_p50 = d.ntpot_p50;
                 xVal_p90 = d.ntpot_p90;
                 xVal_p99 = d.ntpot_p99;
-            } else if (yMetric === 'tpot') {
+            } else if (xMetric === 'tpot') {
                 xVal_p50 = d.tpot_p50;
                 xVal_p90 = d.tpot_p90;
                 xVal_p99 = d.tpot_p99;
-            } else if (yMetric === 'e2e') {
+            } else if (xMetric === 'e2e') {
                 xVal_p50 = d.ttft_p50 + d.itl_p50 * 10;
                 xVal_p90 = d.ttft_p90 + d.itl_p90 * 10;
                 xVal_p99 = d.ttft_p99 + d.itl_p99 * 10;
             }
 
-            // Apply Per Chip scaling to Latency (X-axis)
-            if (showPerChip) {
-                xVal_p50 = xVal_p50 / 8; // Assume 8 chips
-                xVal_p90 = xVal_p90 / 8;
-                xVal_p99 = xVal_p99 / 8;
-            }
-
             // Derive Y value (Throughput/QPS)
             let yVal = d.qps;
-            if (xAxisMode === 'input') {
+            if (yMetric === 'input') {
                 yVal = d.inputTokenRate;
-            } else if (xAxisMode === 'total') {
+            } else if (yMetric === 'total') {
                 yVal = d.totalTokenRate;
-            } else if (xAxisMode === 'output') {
+            } else if (yMetric === 'output') {
                 yVal = d.outputTokenRate;
-            } else if (xAxisMode === 'qps') {
+            } else if (yMetric === 'qps') {
                 yVal = d.qps;
+            }
+
+            // Apply Per Chip scaling to Throughput (Y-axis)
+            if (showPerChip) {
+                yVal = yVal / 8; // Assume 8 chips
             }
 
             return {
@@ -395,7 +393,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
         });
 
         return filtered;
-    }, [selectedRunMenu, xAxisMode, yMetric, showPerChip, tputCap, runs, selectedPath]);
+    }, [selectedRunMenu, xMetric, yMetric, showPerChip, tputCap, runs, selectedPath]);
 
     const uniqueRunsForSidebar = useMemo(() => {
         const seen = new Set();
@@ -663,20 +661,21 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
 
                         {showChartFilters && (
                             <div className="bg-slate-800/40 border-b border-slate-700/50 px-6 py-4 flex flex-col gap-4 overflow-hidden shadow-inner">
-                                {/* Row 1 */}
+                                {/* Row 1: X-Axis (Latency) */}
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
                                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">X-Axis:</span>
                                         <ToggleGroup
                                             className="w-full whitespace-nowrap overflow-x-auto no-scrollbar"
                                             options={[
-                                                { value: 'output', label: 'Output' },
-                                                { value: 'input', label: 'Input' },
-                                                { value: 'total', label: 'Total' },
-                                                { value: 'qps', label: 'QPS' },
+                                                { value: 'ntpot', label: 'NTPOT' },
+                                                { value: 'tpot', label: 'TPOT' },
+                                                { value: 'ttft', label: 'TTFT' },
+                                                { value: 'itl', label: 'ITL' },
+                                                { value: 'e2e', label: 'E2E Latency' },
                                             ]}
-                                            value={xAxisMode}
-                                            onChange={setXAxisMode}
+                                            value={xMetric}
+                                            onChange={setXMetric}
                                         />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-3 lg:justify-end shrink-0">
@@ -689,16 +688,6 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                 )}
                                             >
                                                 Log Scale
-                                            </button>
-                                            <div className="h-3 w-px bg-slate-700" />
-                                            <button
-                                                onClick={() => setShowPerChip(!showPerChip)}
-                                                className={cn(
-                                                    'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer',
-                                                    showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                                                )}
-                                            >
-                                                Per Chip
                                             </button>
                                         </div>
 
@@ -719,24 +708,34 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                     </div>
                                 </div>
 
-                                {/* Row 2 */}
+                                {/* Row 2: Y-Axis (Throughput) */}
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
                                     <div className="flex items-center gap-2 w-full lg:w-[60%]">
                                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest w-14 shrink-0">Y-Axis:</span>
                                         <ToggleGroup
                                             className="w-full whitespace-nowrap overflow-x-auto no-scrollbar"
                                             options={[
-                                                { value: 'ntpot', label: 'NTPOT' },
-                                                { value: 'tpot', label: 'TPOT' },
-                                                { value: 'ttft', label: 'TTFT' },
-                                                { value: 'itl', label: 'ITL' },
-                                                { value: 'e2e', label: 'E2E Latency' },
+                                                { value: 'output', label: 'Output' },
+                                                { value: 'input', label: 'Input' },
+                                                { value: 'total', label: 'Total' },
+                                                { value: 'qps', label: 'QPS' },
                                             ]}
                                             value={yMetric}
                                             onChange={setYMetric}
                                         />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-3 lg:justify-end shrink-0">
+                                        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/50 rounded-lg p-0.5 shrink-0">
+                                            <button
+                                                onClick={() => setShowPerChip(!showPerChip)}
+                                                className={cn(
+                                                    'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all cursor-pointer',
+                                                    showPerChip ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                                )}
+                                            >
+                                                Per Chip
+                                            </button>
+                                        </div>
                                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/50 px-3 py-1 rounded-lg shrink-0">
                                             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Cap:</span>
                                             <input 
@@ -754,7 +753,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                 onChange={(e) => setTputCap(Number(e.target.value))} 
                                                 className="w-16 bg-transparent text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1 text-right font-mono font-bold transition-all" 
                                             />
-                                            <span className="text-[9px] text-slate-500 font-mono font-bold">tok/s</span>
+                                            <span className="text-[9px] text-slate-500 font-mono font-bold">{yMetric === 'qps' ? 'qps' : 'tok/s'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -765,12 +764,12 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             {/* Interactive Chart Container */}
                             <div className="w-full h-[460px] bg-slate-950/50 border border-slate-800/60 rounded-xl p-4 select-none relative overflow-visible flex flex-col">
                                 <ResponsiveContainer width="100%" height="100%">
-                                <LineChart margin={{ top: 25, right: 20, left: 0, bottom: 10 }}>
+                                <LineChart margin={{ top: 25, right: 25, left: 60, bottom: 45 }}>
                                     <CartesianGrid {...gridProps()} opacity={0.5} />
                                     <ChartXAxis
                                         dataKey="xVal"
                                         type="number"
-                                        label={yLabels[yMetric] || 'Latency'}
+                                        label={xLabels[xMetric] || 'Latency'}
                                         scale={isLogScaleX ? 'log' : 'auto'}
                                         domain={xDomain}
                                         allowDataOverflow={true}
@@ -788,7 +787,7 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                         strokeWidth={1}
                                     />
                                     <ChartYAxis
-                                        label={xLabels[xAxisMode] || 'Throughput'}
+                                        label={`${yLabels[yMetric] || 'Throughput'}${showPerChip ? ' per Chip' : ''}`}
                                         strokeWidth={1}
                                     />
                                     <Tooltip
@@ -796,11 +795,11 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                         content={({ active, payload }) => {
                                             if (active && payload && payload.length) {
                                                 const d = payload[0].payload;
-                                                const tputUnit = xAxisMode === 'qps' ? 'qps' : 'tok/s';
+                                                const tputUnit = yMetric === 'qps' ? (showPerChip ? 'qps/chip' : 'qps') : (showPerChip ? 'tok/s/chip' : 'tok/s');
                                                 return (
                                                     <ChartTooltip className="min-w-[240px]">
                                                         <div className="border-b border-theme-border pb-1.5 mb-1.5">
-                                                            <div className="text-[11px] font-mono font-bold text-theme-text leading-tight flex justify-between gap-3">
+                                                             <div className="text-[11px] font-mono font-bold text-theme-text leading-tight flex justify-between gap-3">
                                                                 <span>Run: {formatBuildId(d.build)}</span>
                                                                 <span className="text-theme-muted">Stage {d.stage}</span>
                                                             </div>
@@ -825,8 +824,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                                                     <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: entry.stroke }} aria-hidden="true" />
                                                                     <span className="text-[10px] font-bold text-theme-text">{entry.name}</span>
                                                                 </div>
-                                                                <ChartTooltipRow label="Latency" value={entry.value !== undefined ? `${Number(entry.value).toFixed(1)} ms` : 'N/A'} />
-                                                                <ChartTooltipRow label="Throughput" value={entry.payload.xVal !== undefined ? `${Number(entry.payload.xVal).toFixed(1)} ${tputUnit}` : 'N/A'} />
+                                                                <ChartTooltipRow label="Latency" value={entry.payload.xVal !== undefined ? `${Number(entry.payload.xVal).toFixed(1)} ms` : 'N/A'} />
+                                                                <ChartTooltipRow label="Throughput" value={entry.value !== undefined ? `${Number(entry.value).toFixed(1)} ${tputUnit}` : 'N/A'} />
                                                             </div>
                                                         ))}
                                                         {d.note && (
