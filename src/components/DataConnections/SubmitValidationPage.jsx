@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, FileText, ChevronLeft, ChevronRight, ChevronDown, Trash2, Upload, ShieldAlert, Check, ArrowRight, ArrowLeft, GitCompare, Zap, Cpu, Pencil, Layers, Split, GripVertical, Sparkles, Info, RotateCcw, GitFork } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure } from '../../utils/benchmarkValidator';
-import { parseReportV02, stageToEntry, canonicalStringify, mutateRawReportMetadata, compareOriginalStageOrder } from '../../utils/benchmarkReportV02Parser';
+import { parseReportV02, stageToEntry, canonicalStringify, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits } from '../../utils/benchmarkReportV02Parser';
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 
@@ -53,6 +53,29 @@ const checkStageMetrics = (entry, format) => {
     }
 
     const latencyVal = normalized?.latency && typeof normalized.latency === 'object' ? normalized.latency.mean : normalized?.latency;
+    const ttftVal = parsedStage?.performance?.ttftMean ?? null;
+    const tpotVal = parsedStage?.performance?.tpotMean ?? null;
+    const throughputVal = normalized?.throughput ?? null;
+
+    // Latency warning thresholds (seconds)
+    const e2eSec = typeof latencyVal === 'number' && latencyVal > 0 ? latencyVal / 1000 : 0;
+    const isLatencyWarning = e2eSec > 3600;
+    const latencyWarningMsg = isLatencyWarning
+        ? `E2E latency is unusually high (${e2eSec.toFixed(1)}s > 1 hour). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`
+        : null;
+
+    const ttftSec = typeof ttftVal === 'number' && ttftVal > 0 ? ttftVal / 1000 : 0;
+    const isTtftWarning = ttftSec > 600;
+    const ttftWarningMsg = isTtftWarning
+        ? `TTFT is unusually high (${ttftSec.toFixed(1)}s > 10 minutes). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`
+        : null;
+
+    const tpotSec = typeof tpotVal === 'number' && tpotVal > 0 ? tpotVal / 1000 : 0;
+    const isTpotWarning = tpotSec > 60;
+    const tpotWarningMsg = isTpotWarning
+        ? `TPOT is unusually high (${tpotSec.toFixed(1)}s > 60 seconds per token). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`
+        : null;
+
     const rawTimestamp = entry.raw_report?.run?.time?.start || entry.raw_report?.timestamp || entry.timestamp;
     let formattedTimestamp = 'N/A';
     if (rawTimestamp) {
@@ -68,21 +91,30 @@ const checkStageMetrics = (entry, format) => {
         rawTimestamp,
         timestamp: formattedTimestamp,
         throughput: {
-            val: normalized?.throughput,
-            isValid: typeof normalized?.throughput === 'number' && normalized.throughput > 0
+            val: throughputVal,
+            isValid: typeof throughputVal === 'number' && throughputVal > 0,
+            isWarning: false,
+            warningMessage: null,
         },
         latency: {
             val: latencyVal,
-            isValid: typeof latencyVal === 'number' && latencyVal > 0
+            isValid: typeof latencyVal === 'number' && latencyVal > 0,
+            isWarning: isLatencyWarning,
+            warningMessage: latencyWarningMsg,
         },
         ttft: {
-            val: parsedStage?.performance?.ttftMean ?? null,
-            isValid: format === 'inference-perf' ? true : (typeof parsedStage?.performance?.ttftMean === 'number' && parsedStage.performance.ttftMean > 0)
+            val: ttftVal,
+            isValid: format === 'inference-perf' ? true : (typeof ttftVal === 'number' && ttftVal > 0),
+            isWarning: isTtftWarning,
+            warningMessage: ttftWarningMsg,
         },
         tpot: {
-            val: parsedStage?.performance?.tpotMean ?? null,
-            isValid: format === 'inference-perf' ? true : (typeof parsedStage?.performance?.tpotMean === 'number' && parsedStage.performance.tpotMean > 0)
+            val: tpotVal,
+            isValid: format === 'inference-perf' ? true : (typeof tpotVal === 'number' && tpotVal > 0),
+            isWarning: isTpotWarning,
+            warningMessage: tpotWarningMsg,
         },
+        hasWarnings: isLatencyWarning || isTtftWarning || isTpotWarning,
         hardware: {
             val: normalized?.hardware || parsedStage?.scenario?.hardware,
             isValid: !!(normalized?.hardware || parsedStage?.scenario?.hardware) && (normalized?.hardware || parsedStage?.scenario?.hardware) !== 'Unknown' && (normalized?.hardware || parsedStage?.scenario?.hardware) !== 'Unknown Hardware'
@@ -155,6 +187,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
     const [draggedStageIndex, setDraggedStageIndex] = useState(null);
     const [stageSortConfig, setStageSortConfig] = useState({});
     const [hoveredFilenameTooltip, setHoveredFilenameTooltip] = useState(null);
+    const [hoveredWarningTooltip, setHoveredWarningTooltip] = useState(null);
+    const [hoveredTimestampTooltip, setHoveredTimestampTooltip] = useState(null);
 
     const [previewModalState, setPreviewModalState] = useState({
         isOpen: false,
@@ -197,6 +231,48 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
     const handleFilenameMouseLeave = () => {
         setHoveredFilenameTooltip(null);
     };
+
+    const handleTimestampMouseEnter = (e, timestamp, rawTimestamp) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const isNearTop = rect.top < 120;
+        setHoveredTimestampTooltip({
+            timestamp,
+            rawTimestamp,
+            x: rect.left + rect.width / 2,
+            y: isNearTop ? rect.bottom + 8 : rect.top - 8,
+            isNearTop
+        });
+    };
+
+    const handleTimestampMouseLeave = () => {
+        setHoveredTimestampTooltip(null);
+    };
+
+    const handleWarningMouseEnter = (e, title, message) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const isNearTop = rect.top < 140;
+        setHoveredWarningTooltip({
+            title,
+            message,
+            x: Math.min(Math.max(160, rect.left + rect.width / 2), window.innerWidth - 160),
+            y: isNearTop ? rect.bottom + 8 : rect.top - 8,
+            isNearTop
+        });
+    };
+
+    const handleWarningMouseLeave = () => {
+        setHoveredWarningTooltip(null);
+    };
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (hoveredFilenameTooltip) setHoveredFilenameTooltip(null);
+            if (hoveredWarningTooltip) setHoveredWarningTooltip(null);
+            if (hoveredTimestampTooltip) setHoveredTimestampTooltip(null);
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+        return () => window.removeEventListener('scroll', handleScroll, { capture: true });
+    }, [hoveredFilenameTooltip, hoveredWarningTooltip, hoveredTimestampTooltip]);
 
     // Selection handlers
     const toggleSelectBundle = (bundleId) => {
@@ -1646,6 +1722,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     console.error("Failed to parse raw report content into JSON object:", e);
                 }
 
+                if (rawReportObj && typeof rawReportObj === 'object') {
+                    rawReportObj = normalizeReportUnits(rawReportObj);
+                }
+
                 payloadEntries.push({
                     run_id: uuidv4(),
                     run_description: groupName,
@@ -2134,7 +2214,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         run_id: entry.run_id || uuidv4(),
                         run_description: bundle.name || bundle.payload.runLabel || 'Unnamed Run',
                         filename: entry.filename,
-                        raw_report: entry.rawReport || entry.raw_report || entry.content
+                        raw_report: normalizeReportUnits(entry.rawReport || entry.raw_report || entry.content)
                     }))
                 };
 
@@ -3151,14 +3231,29 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                             {bundle.isExpanded && (
                                                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm">
                                                     <div className={cn('grid grid-cols-1', wizardStep === 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-1', 'gap-4')}>
-                                                        <div className={cn(wizardStep === 2 ? 'lg:col-span-2' : 'w-full', 'space-y-4')}>
+                                                        <div className={cn(wizardStep === 2 ? 'lg:col-span-2 min-w-0' : 'w-full min-w-0', 'space-y-4')}>
                                                     
                                                     {(() => {
-                                                        const activeErrors = bundle.validation.errors || [];
-                                                        const activeWarnings = (bundle.validation.warnings || []).filter(w => 
+                                                        const activeErrors = [...new Set(bundle.validation.errors || [])];
+                                                        const rawWarnings = bundle.validation.warnings || [];
+                                                        const filteredWarnings = rawWarnings.filter(w => 
                                                             !w.toLowerCase().includes("hardware metadata is missing") && 
                                                             !w.toLowerCase().includes("missing attribution fields")
                                                         );
+
+                                                        const isHighMetricWarning = (w) => w.toLowerCase().includes("unusually high");
+                                                        const hasHighMetricWarning = filteredWarnings.some(isHighMetricWarning) ||
+                                                            Boolean(bundle.payload?.entries?.some(entry => checkStageMetrics(entry, bundle.payload.format).hasWarnings));
+
+                                                        const otherWarnings = filteredWarnings.filter(w => !isHighMetricWarning(w));
+                                                        const uniqueOtherWarnings = [...new Set(otherWarnings)];
+
+                                                        const activeWarnings = [...uniqueOtherWarnings];
+                                                        if (hasHighMetricWarning) {
+                                                            activeWarnings.push(
+                                                                "One or more stages have unusually high latency metrics (highlighted in yellow below). Check if units were emitted in milliseconds or nanoseconds without declaring units."
+                                                            );
+                                                        }
 
                                                         if (activeErrors.length === 0 && activeWarnings.length === 0) return null;
 
@@ -3660,24 +3755,21 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                     {bundle.payload.entries && bundle.payload.entries.length > 0 && (
                                                         <div>
                                                             <h4 className="font-bold text-slate-300 text-xs uppercase tracking-wider mb-2.5 select-none">Parsed Sub-runs / Stages Validation Checklist ({bundle.payload.entries.length})</h4>
-                                                            <div className="overflow-visible border border-slate-900/60 rounded-xl bg-slate-950/20">
+                                                            <div className="overflow-x-auto regular-scrollbar-x border border-slate-900/60 rounded-xl bg-slate-950/20">
                                                                 <table className="w-full text-left text-xs border-collapse">
                                                                     <thead className="bg-[#0b101c]/45 text-slate-400 border-b border-slate-900/80 uppercase tracking-widest text-[9px]">
                                                                         <tr>
-                                                                            <th className="pl-2 pr-0 py-1.5 w-8 text-center"></th>
-                                                                            <th className="px-3 py-1.5 w-14 text-center select-none">
-                                                                                <div className="relative inline-flex items-center justify-center gap-1 group/stage-tooltip cursor-help">
+                                                                            <th className="pl-2 pr-0 py-1.5 text-center whitespace-nowrap w-px"></th>
+                                                                            <th className="px-1.5 py-1.5 text-center select-none whitespace-nowrap w-px" title="Stages are automatically sequential and do not reflect the original values.">
+                                                                                <div className="inline-flex items-center justify-center gap-1 cursor-help">
                                                                                     <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
                                                                                         Stage
                                                                                     </span>
-                                                                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/stage-tooltip:block w-56 px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-normal break-words text-center normal-case tracking-normal font-sans font-normal pointer-events-none">
-                                                                                        <span className="text-[11px] text-slate-300">Stages are automatically sequential and do not reflect the original values.</span>
-                                                                                    </div>
                                                                                 </div>
                                                                             </th>
                                                                             <th
                                                                                 onClick={() => handleSortStages(bundle.id, 'filename')}
-                                                                                className="px-3 py-1.5 text-center cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                className="px-1.5 py-1.5 text-center cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-px"
                                                                                 title="Click to sort by file name"
                                                                             >
                                                                                 <div className="flex items-center justify-center gap-1">
@@ -3690,22 +3782,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                 </div>
                                                                             </th>
                                                                             <th
-                                                                                onClick={() => handleSortStages(bundle.id, 'timestamp')}
-                                                                                className="px-3 py-1.5 cursor-pointer hover:text-cyan-400 select-none transition-colors group"
-                                                                                title="Click to sort by timestamp"
-                                                                            >
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <span>Timestamp</span>
-                                                                                    {stageSortConfig[bundle.id]?.column === 'timestamp' ? (
-                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
-                                                                                    ) : (
-                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </th>
-                                                                            <th
                                                                                 onClick={() => handleSortStages(bundle.id, 'throughput')}
-                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
+                                                                                className="px-1.5 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-px"
                                                                                 title="Click to sort by throughput"
                                                                             >
                                                                                 <div className="flex items-center justify-end gap-1">
@@ -3719,10 +3797,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                             </th>
                                                                             <th
                                                                                 onClick={() => handleSortStages(bundle.id, 'latency')}
-                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
-                                                                                title="Click to sort by E2E latency"
+                                                                                className="px-1.5 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-px"
+                                                                                title="Click to sort by End-to-End Latency"
                                                                             >
-                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                <div className="flex items-center justify-end gap-1">
                                                                                     {stageSortConfig[bundle.id]?.column === 'latency' ? (
                                                                                         <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
                                                                                     ) : (
@@ -3731,17 +3809,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                     <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
                                                                                         Latency
                                                                                     </span>
-                                                                                    <div className="absolute right-0 bottom-full mb-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
-                                                                                        <span className="text-[11px] text-slate-300">End-to-End Latency</span>
-                                                                                    </div>
                                                                                 </div>
                                                                             </th>
                                                                             <th
                                                                                 onClick={() => handleSortStages(bundle.id, 'ttft')}
-                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
-                                                                                title="Click to sort by TTFT"
+                                                                                className="px-1.5 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-px"
+                                                                                title="Click to sort by Time to First Token (Prefill)"
                                                                             >
-                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                <div className="flex items-center justify-end gap-1">
                                                                                     {stageSortConfig[bundle.id]?.column === 'ttft' ? (
                                                                                         <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
                                                                                     ) : (
@@ -3750,17 +3825,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                     <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
                                                                                         TTFT
                                                                                     </span>
-                                                                                    <div className="absolute right-0 bottom-full mb-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
-                                                                                        <span className="text-[11px] text-slate-300">Time to First Token (Prefill)</span>
-                                                                                    </div>
                                                                                 </div>
                                                                             </th>
                                                                             <th
                                                                                 onClick={() => handleSortStages(bundle.id, 'tpot')}
-                                                                                className="px-3 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group"
-                                                                                title="Click to sort by TPOT"
+                                                                                className="px-1.5 py-1.5 text-right cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-px"
+                                                                                title="Click to sort by Time per Output Token (Decode)"
                                                                             >
-                                                                                <div className="relative flex items-center justify-end gap-1 group/metric-tooltip">
+                                                                                <div className="flex items-center justify-end gap-1">
                                                                                     {stageSortConfig[bundle.id]?.column === 'tpot' ? (
                                                                                         <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
                                                                                     ) : (
@@ -3769,19 +3841,28 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                     <span className="underline decoration-dotted underline-offset-4 decoration-slate-500/70 hover:decoration-cyan-400">
                                                                                         TPOT
                                                                                     </span>
-                                                                                    <div className="absolute right-0 bottom-full mb-2 hidden group-hover/metric-tooltip:block px-2.5 py-1.5 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-lg shadow-xl z-50 whitespace-nowrap text-right normal-case tracking-normal font-sans font-normal pointer-events-none">
-                                                                                        <span className="text-[11px] text-slate-300">Time per Output Token (Decode)</span>
-                                                                                    </div>
                                                                                 </div>
                                                                             </th>
-                                                                            <th className="px-3 py-1.5 text-center">Status</th>
+                                                                            <th
+                                                                                onClick={() => handleSortStages(bundle.id, 'timestamp')}
+                                                                                className="px-2 py-1.5 text-left cursor-pointer hover:text-cyan-400 select-none transition-colors group whitespace-nowrap w-auto"
+                                                                                title="Click to sort by timestamp"
+                                                                            >
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span>Timestamp</span>
+                                                                                    {stageSortConfig[bundle.id]?.column === 'timestamp' ? (
+                                                                                        <span className="text-cyan-400 font-bold">{stageSortConfig[bundle.id].direction === 'asc' ? '▲' : '▼'}</span>
+                                                                                    ) : (
+                                                                                        <span className="opacity-0 group-hover:opacity-60 text-slate-500">▲</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody className="divide-y divide-slate-900/50">
                                                                         {bundle.payload.entries.map((entry, idx) => {
                                                                             const check = checkStageMetrics(entry, bundle.payload.format);
-                                                                                const isStageValid = check.throughput.isValid && check.latency.isValid && check.ttft.isValid && check.tpot.isValid;
-                                                                                return (
+                                                                            return (
                                                                                     <tr
                                                                                         key={entry.run_id || idx}
                                                                                         draggable
@@ -3795,7 +3876,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                         }}
                                                                                         className="hover:bg-slate-900/30 border-b border-slate-900/10 font-medium transition-colors"
                                                                                     >
-                                                                                        <td className="pl-2 pr-0 py-1.5 text-center">
+                                                                                        <td className="pl-2 pr-0 py-1.5 text-center whitespace-nowrap">
                                                                                             <div className="flex items-center justify-center gap-0.5">
                                                                                                 <div
                                                                                                     className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-cyan-400 transition-colors inline-block"
@@ -3845,27 +3926,18 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                                 </div>
                                                                                             </div>
                                                                                         </td>
-                                                                                        <td className="px-3 py-1.5 text-center font-bold font-mono text-slate-400">{check.stageIndex}</td>
-                                                                                        <td className="px-3 py-1.5 text-center">
+                                                                                        <td className="px-1.5 py-1.5 text-center font-bold font-mono text-slate-400 whitespace-nowrap">{check.stageIndex}</td>
+                                                                                        <td className="px-1 py-1.5 text-center whitespace-nowrap">
                                                                                             <div
                                                                                                 onMouseEnter={(e) => handleFilenameMouseEnter(e, check.filename)}
                                                                                                 onMouseLeave={handleFilenameMouseLeave}
-                                                                                                className="p-1 text-slate-400 hover:text-cyan-400 cursor-pointer transition-colors inline-flex items-center justify-center"
+                                                                                                className="p-0.5 text-slate-400 hover:text-cyan-400 cursor-pointer transition-colors inline-flex items-center justify-center"
                                                                                             >
                                                                                                 <Info size={15} />
                                                                                             </div>
                                                                                         </td>
-                                                                                        <td className="px-3 py-1.5 font-mono whitespace-nowrap" title={check.timestamp}>
-                                                                                            {check.timestamp === 'N/A' || !check.timestamp ? (
-                                                                                                <span className="text-amber-400 italic" title="Timestamp missing or unavailable">
-                                                                                                    N/A
-                                                                                                </span>
-                                                                                            ) : (
-                                                                                                <span className="text-slate-400">{check.timestamp}</span>
-                                                                                            )}
-                                                                                        </td>
                                                                                         
-                                                                                        <td className="px-3 py-1.5 text-right font-mono">
+                                                                                        <td className="px-1.5 py-1.5 text-right font-mono whitespace-nowrap">
                                                                                             {check.throughput.isValid ? (
                                                                                                 <span className="text-slate-300">{check.throughput.val.toFixed(2)} t/s</span>
                                                                                             ) : (
@@ -3873,18 +3945,56 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                             )}
                                                                                         </td>
                                                                                         
-                                                                                        <td className="px-3 py-1.5 text-right font-mono">
+                                                                                        <td className={cn("px-1.5 py-1.5 text-right font-mono transition-colors whitespace-nowrap", check.latency.isWarning && "bg-amber-500/15 dark:bg-amber-500/20")}>
                                                                                             {check.latency.isValid ? (
-                                                                                                <span className="text-slate-300">{check.latency.val.toFixed(1)}ms</span>
+                                                                                                <div
+                                                                                                    className="inline-flex items-center justify-end gap-1.5"
+                                                                                                    onMouseEnter={(e) => check.latency.isWarning && handleWarningMouseEnter(e, "Unusually High Latency", check.latency.warningMessage)}
+                                                                                                    onMouseLeave={handleWarningMouseLeave}
+                                                                                                >
+                                                                                                    <span className={cn(
+                                                                                                        "transition-colors",
+                                                                                                        check.latency.isWarning ? "text-amber-400 dark:text-amber-300 font-bold" : "text-slate-300"
+                                                                                                    )}>
+                                                                                                        {check.latency.val.toFixed(1)}ms
+                                                                                                    </span>
+                                                                                                    {check.latency.isWarning && (
+                                                                                                        <span
+                                                                                                            className="cursor-help inline-flex items-center text-amber-400 hover:text-amber-300 transition-colors"
+                                                                                                            title={check.latency.warningMessage}
+                                                                                                        >
+                                                                                                            <AlertTriangle size={13} className="shrink-0 animate-pulse text-amber-400" />
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </div>
                                                                                             ) : (
                                                                                                 <span className="text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="End-to-end latency must be greater than zero">❌ Absent</span>
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-1.5 text-right font-mono">
+                                                                                        <td className={cn("px-1.5 py-1.5 text-right font-mono transition-colors whitespace-nowrap", check.ttft.isWarning && "bg-amber-500/15 dark:bg-amber-500/20")}>
                                                                                             {check.ttft.isValid ? (
                                                                                                 check.ttft.val !== null ? (
-                                                                                                    <span className="text-slate-300">{check.ttft.val.toFixed(1)}ms</span>
+                                                                                                    <div
+                                                                                                        className="inline-flex items-center justify-end gap-1.5"
+                                                                                                        onMouseEnter={(e) => check.ttft.isWarning && handleWarningMouseEnter(e, "Unusually High TTFT", check.ttft.warningMessage)}
+                                                                                                        onMouseLeave={handleWarningMouseLeave}
+                                                                                                    >
+                                                                                                        <span className={cn(
+                                                                                                            "transition-colors",
+                                                                                                            check.ttft.isWarning ? "text-amber-400 dark:text-amber-300 font-bold" : "text-slate-300"
+                                                                                                        )}>
+                                                                                                            {check.ttft.val.toFixed(1)}ms
+                                                                                                        </span>
+                                                                                                        {check.ttft.isWarning && (
+                                                                                                            <span
+                                                                                                                className="cursor-help inline-flex items-center text-amber-400 hover:text-amber-300 transition-colors"
+                                                                                                                title={check.ttft.warningMessage}
+                                                                                                            >
+                                                                                                                <AlertTriangle size={13} className="shrink-0 animate-pulse text-amber-400" />
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 ) : (
                                                                                                     <span className="text-slate-400">N/A (Legacy)</span>
                                                                                                 )
@@ -3893,10 +4003,29 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-1.5 text-right font-mono">
+                                                                                        <td className={cn("px-1.5 py-1.5 text-right font-mono transition-colors whitespace-nowrap", check.tpot.isWarning && "bg-amber-500/15 dark:bg-amber-500/20")}>
                                                                                             {check.tpot.isValid ? (
                                                                                                 check.tpot.val !== null ? (
-                                                                                                    <span className="text-slate-300">{check.tpot.val.toFixed(2)}ms</span>
+                                                                                                    <div
+                                                                                                        className="inline-flex items-center justify-end gap-1.5"
+                                                                                                        onMouseEnter={(e) => check.tpot.isWarning && handleWarningMouseEnter(e, "Unusually High TPOT", check.tpot.warningMessage)}
+                                                                                                        onMouseLeave={handleWarningMouseLeave}
+                                                                                                    >
+                                                                                                        <span className={cn(
+                                                                                                            "transition-colors",
+                                                                                                            check.tpot.isWarning ? "text-amber-400 dark:text-amber-300 font-bold" : "text-slate-300"
+                                                                                                        )}>
+                                                                                                            {check.tpot.val.toFixed(2)}ms
+                                                                                                        </span>
+                                                                                                        {check.tpot.isWarning && (
+                                                                                                            <span
+                                                                                                                className="cursor-help inline-flex items-center text-amber-400 hover:text-amber-300 transition-colors"
+                                                                                                                title={check.tpot.warningMessage}
+                                                                                                            >
+                                                                                                                <AlertTriangle size={13} className="shrink-0 animate-pulse text-amber-400" />
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 ) : (
                                                                                                     <span className="text-slate-400">N/A (Legacy)</span>
                                                                                                 )
@@ -3905,11 +4034,17 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                                             )}
                                                                                         </td>
 
-                                                                                        <td className="px-3 py-1.5 text-center">
-                                                                                            {isStageValid ? (
-                                                                                                <Badge tone="success">Pass</Badge>
+                                                                                        <td
+                                                                                            className="px-2 py-1.5 font-mono whitespace-nowrap text-left text-slate-400 w-auto cursor-default"
+                                                                                            onMouseEnter={(e) => handleTimestampMouseEnter(e, check.timestamp, check.rawTimestamp)}
+                                                                                            onMouseLeave={handleTimestampMouseLeave}
+                                                                                        >
+                                                                                            {check.timestamp === 'N/A' || !check.timestamp ? (
+                                                                                                <span className="text-amber-400 italic" title="Timestamp missing or unavailable">
+                                                                                                    N/A
+                                                                                                </span>
                                                                                             ) : (
-                                                                                                <Badge tone="danger">Fail</Badge>
+                                                                                                <span>{check.timestamp}</span>
                                                                                             )}
                                                                                         </td>
                                                                                     </tr>
@@ -4312,6 +4447,52 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     >
                         <span className="font-bold text-cyan-400 block mb-0.5 text-[10px] font-sans uppercase tracking-wider">File Name / Path</span>
                         <span className="text-[11px] text-slate-300 select-all font-mono">{hoveredFilenameTooltip.filename}</span>
+                    </div>
+                )}
+
+                {hoveredWarningTooltip && (
+                    <div
+                        className={cn(
+                            "fixed px-3 py-2 bg-slate-900 border border-amber-500/50 text-slate-200 text-xs rounded-xl shadow-2xl z-[99999] w-72 max-w-sm whitespace-normal break-words pointer-events-none text-left backdrop-blur-md animate-in fade-in duration-100 font-sans",
+                            hoveredWarningTooltip.isNearTop ? "-translate-x-1/2" : "-translate-x-1/2 -translate-y-full"
+                        )}
+                        style={{
+                            left: `${hoveredWarningTooltip.x}px`,
+                            top: `${hoveredWarningTooltip.y}px`
+                        }}
+                    >
+                        <div className="flex items-center gap-1.5 text-amber-400 dark:text-amber-300 font-bold mb-1">
+                            <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+                            <span>{hoveredWarningTooltip.title}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                            {hoveredWarningTooltip.message}
+                        </p>
+                    </div>
+                )}
+
+                {hoveredTimestampTooltip && (
+                    <div
+                        className={cn(
+                            "fixed px-3 py-2 bg-slate-900 border border-slate-700/80 text-slate-200 text-xs rounded-xl shadow-2xl z-[99999] min-w-[200px] w-max max-w-sm pointer-events-none text-left backdrop-blur-md animate-in fade-in duration-100 font-sans",
+                            hoveredTimestampTooltip.isNearTop ? "-translate-x-1/2" : "-translate-x-1/2 -translate-y-full"
+                        )}
+                        style={{
+                            left: `${hoveredTimestampTooltip.x}px`,
+                            top: `${hoveredTimestampTooltip.y}px`
+                        }}
+                    >
+                        <span className="font-bold text-cyan-400 block mb-0.5 text-[10px] font-sans uppercase tracking-wider">Run Timestamp</span>
+                        <span className="text-[11px] text-slate-300 font-mono block">
+                            {hoveredTimestampTooltip.timestamp && hoveredTimestampTooltip.timestamp !== 'N/A' 
+                                ? hoveredTimestampTooltip.timestamp 
+                                : <span className="text-amber-400 italic">Timestamp missing or unavailable</span>}
+                        </span>
+                        {hoveredTimestampTooltip.rawTimestamp && hoveredTimestampTooltip.rawTimestamp !== hoveredTimestampTooltip.timestamp && (
+                            <span className="text-[9px] text-slate-500 font-mono block mt-0.5 select-all">
+                                {hoveredTimestampTooltip.rawTimestamp}
+                            </span>
+                        )}
                     </div>
                 )}
 

@@ -66,6 +66,10 @@ upstream repository:
   individual BRV0.2 files are parsed, grouped into runs, normalized, and
   enriched with fallback metadata, refer to the dedicated
   [Parser & Data Model Specification](parser_and_data_model.md).
+- **Unit Handling & Normalization Spec:** For detailed specifications on how
+  latency and throughput units are parsed, converted to milliseconds, defaulted
+  upon omission, and validated against suspicious values, refer to the dedicated
+  [Unit Handling Specification](unit_handling.md).
 
 ---
 

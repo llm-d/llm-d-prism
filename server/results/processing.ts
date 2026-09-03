@@ -14,6 +14,7 @@
 
 import { readResultPayload, writeResult, deleteResult } from './gcs.ts';
 import { validatePrismUploadStructure } from '../../src/utils/benchmarkValidator.js';
+import { normalizeReportUnits } from '../../src/utils/benchmarkReportV02Parser.js';
 import { PrismSubmissionState } from './api.ts';
 
 export interface ProcessSubmissionResult {
@@ -40,8 +41,17 @@ export async function processSubmission(
         // Resolve contributor/author username
         const username = payload.github_author?.username || 'Unknown';
 
-        // Perform validation checks
+        // Perform validation checks before normalizing units so original unit presence is validated
         const validation = validatePrismUploadStructure(payload, { isUpload: true });
+
+        // Ensure all entry raw reports have normalized units (seconds)
+        if (payload.entries && Array.isArray(payload.entries)) {
+            for (const entry of payload.entries) {
+                if (entry.raw_report) {
+                    entry.raw_report = normalizeReportUnits(entry.raw_report);
+                }
+            }
+        }
 
         // If validation fails, drop the submission completely from GCS storage
         if (!validation.isValid) {

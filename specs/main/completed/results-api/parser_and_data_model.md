@@ -81,6 +81,13 @@ containing:
     - End-to-End request latency mean, p50, and p99.
 - Total requests count and failure count.
 
+> [!NOTE]
+>
+> For comprehensive details on unit normalization factors, per-token vs.
+> request-level latency handling, missing unit assumptions, and Zod schema
+> preservation rules, see the dedicated
+> [Unit Handling Specification](unit_handling.md).
+
 ### 2.4 Observability Metrics (Optional)
 
 - Mean, p50, and p99 of KV cache utilization (normalized to 0-100%).

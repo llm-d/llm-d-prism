@@ -33,10 +33,301 @@ const safeNum = (val) => {
     return isNaN(n) ? null : n;
 };
 
-// v0.2 latency values are in seconds — convert to ms for display
-const toMs = (val) => {
+export function unitToSecondsFactor(units) {
+    if (!units || typeof units !== 'string') return 1;
+    const u = units.trim().toLowerCase().replace(/\s*\/\s*/g, '/');
+    if (
+        u === 's' ||
+        u === 'sec' ||
+        u === 'second' ||
+        u === 'seconds' ||
+        u === 's/token' ||
+        u === 'sec/token' ||
+        u === 'second/token' ||
+        u === 'seconds/token'
+    ) {
+        return 1;
+    }
+    if (
+        u === 'ms' ||
+        u === 'msec' ||
+        u === 'millisecond' ||
+        u === 'milliseconds' ||
+        u === 'ms/token' ||
+        u === 'msec/token' ||
+        u === 'millisecond/token' ||
+        u === 'milliseconds/token'
+    ) {
+        return 1e-3;
+    }
+    if (
+        u === 'us' ||
+        u === 'µs' ||
+        u === 'microsecond' ||
+        u === 'microseconds' ||
+        u === 'us/token' ||
+        u === 'µs/token' ||
+        u === 'microsecond/token' ||
+        u === 'microseconds/token'
+    ) {
+        return 1e-6;
+    }
+    if (
+        u === 'ns' ||
+        u === 'nsec' ||
+        u === 'nanosecond' ||
+        u === 'nanoseconds' ||
+        u === 'ns/token' ||
+        u === 'nsec/token' ||
+        u === 'nanosecond/token' ||
+        u === 'nanoseconds/token'
+    ) {
+        return 1e-9;
+    }
+    return 1;
+}
+
+export function normalizeLatencyStatistics(statBlock, defaultToken = false) {
+    if (!statBlock) return statBlock;
+    if (typeof statBlock === 'number' && Number.isFinite(statBlock)) {
+        return {
+            mean: statBlock,
+            units: defaultToken ? 's/token' : 's',
+        };
+    }
+    if (typeof statBlock !== 'object') return statBlock;
+
+    const units = typeof statBlock.units === 'string' ? statBlock.units : null;
+    const factor = unitToSecondsFactor(units);
+    const hasToken = defaultToken || Boolean(units && units.toLowerCase().includes('/token'));
+    const targetUnits = hasToken ? 's/token' : 's';
+
+    const normalized = { ...statBlock, units: targetUnits };
+    for (const [key, val] of Object.entries(statBlock)) {
+        if (key === 'units') continue;
+        const num = safeNum(val);
+        if (num !== null) {
+            normalized[key] = num * factor;
+        }
+    }
+    return normalized;
+}
+
+export function normalizeTimeSeriesLatency(tsData, defaultToken = false) {
+    if (!tsData || typeof tsData !== 'object') return tsData;
+    const units = typeof tsData.units === 'string' ? tsData.units : null;
+    const factor = unitToSecondsFactor(units);
+    const hasToken = defaultToken || Boolean(units && units.toLowerCase().includes('/token'));
+    const targetUnits = hasToken ? 's/token' : 's';
+
+    const normalized = { ...tsData, units: targetUnits };
+    if (Array.isArray(tsData.series)) {
+        normalized.series = tsData.series.map(pt => {
+            if (!pt || typeof pt !== 'object') return pt;
+            const newPt = { ...pt };
+            for (const [k, v] of Object.entries(pt)) {
+                if (k === 'ts') continue;
+                const num = safeNum(v);
+                if (num !== null) {
+                    newPt[k] = num * factor;
+                }
+            }
+            return newPt;
+        });
+    }
+    return normalized;
+}
+
+export const isPerTokenMetric = (key) =>
+    Boolean(key && (
+        key === 'time_per_output_token' ||
+        key === 'normalized_time_per_output_token' ||
+        key === 'inter_token_latency' ||
+        key.includes('/token') ||
+        key.includes('per_output_token') ||
+        key.includes('per_token')
+    ));
+
+export function hasMetricData(val) {
+    if (typeof val === 'number') return Number.isFinite(val);
+    if (!val || typeof val !== 'object') return false;
+    for (const [k, v] of Object.entries(val)) {
+        if (k === 'units') continue;
+        if (typeof v === 'number' && Number.isFinite(v)) return true;
+        if (typeof v === 'string' && v.trim() !== '' && !isNaN(parseFloat(v))) return true;
+        if (Array.isArray(v) && v.length > 0) return true;
+    }
+    return false;
+}
+
+export function isMissingUnits(val) {
+    if (!hasMetricData(val)) return false;
+    if (typeof val === 'number') return true;
+    return !val.units || typeof val.units !== 'string' || val.units.trim() === '';
+}
+
+export function detectMissingUnitWarnings(rawReport, filename = '') {
+    if (!rawReport) return [];
+
+    let doc = rawReport;
+    if (typeof rawReport === 'string') {
+        try {
+            doc = yaml.load(rawReport);
+        } catch {
+            return [];
+        }
+    }
+    if (!doc || typeof doc !== 'object') return [];
+
+    const warnings = [];
+    const prefix = filename ? `[${filename}] ` : '';
+
+    const addWarning = (path, defaultUnit) => {
+        warnings.push(
+            `${prefix}Missing units for '${path}'; assumed ${defaultUnit}, but validation is needed since units are missing from original report file.`
+        );
+    };
+
+    // 1. Aggregate latency metrics
+    const aggLat = doc.results?.request_performance?.aggregate?.latency;
+    if (aggLat && typeof aggLat === 'object') {
+        for (const [key, val] of Object.entries(aggLat)) {
+            if (isMissingUnits(val)) {
+                const isToken = isPerTokenMetric(key);
+                const defaultUnit = isToken ? "'s/token' (seconds per token)" : "'s' (seconds)";
+                addWarning(`$.results.request_performance.aggregate.latency.${key}`, defaultUnit);
+            }
+        }
+    }
+
+    // 2. Aggregate throughput metrics
+    const aggTput = doc.results?.request_performance?.aggregate?.throughput;
+    if (aggTput && typeof aggTput === 'object') {
+        for (const [key, val] of Object.entries(aggTput)) {
+            if (isMissingUnits(val)) {
+                const defaultUnit = key === 'request_rate' ? "'queries/s'" : "'tokens/s'";
+                addWarning(`$.results.request_performance.aggregate.throughput.${key}`, defaultUnit);
+            }
+        }
+    }
+
+    // 3. Time series latency metrics
+    const tsLat = doc.results?.request_performance?.time_series?.latency;
+    if (tsLat && typeof tsLat === 'object') {
+        for (const [key, val] of Object.entries(tsLat)) {
+            if (isMissingUnits(val)) {
+                const isToken = isPerTokenMetric(key);
+                const defaultUnit = isToken ? "'s/token' (seconds per token)" : "'s' (seconds)";
+                addWarning(`$.results.request_performance.time_series.latency.${key}`, defaultUnit);
+            }
+        }
+    }
+
+    // 4. Pod startup times observability
+    const podStartup = doc.results?.observability?.pod_startup_times?.aggregate;
+    if (isMissingUnits(podStartup)) {
+        addWarning('$.results.observability.pod_startup_times.aggregate', "'s' (seconds)");
+    }
+    const podStartupByPod = doc.results?.observability?.pod_startup_times?.by_pod;
+    if (podStartupByPod && typeof podStartupByPod === 'object') {
+        for (const [podName, val] of Object.entries(podStartupByPod)) {
+            if (isMissingUnits(val)) {
+                addWarning(`$.results.observability.pod_startup_times.by_pod.${podName}`, "'s' (seconds)");
+            }
+        }
+    }
+
+    // 5. Session performance latency
+    const sessionLatency = doc.results?.session_performance?.aggregate?.latency;
+    if (sessionLatency && typeof sessionLatency === 'object') {
+        for (const [key, val] of Object.entries(sessionLatency)) {
+            if (isMissingUnits(val)) {
+                const isToken = isPerTokenMetric(key);
+                const defaultUnit = isToken ? "'s/token' (seconds per token)" : "'s' (seconds)";
+                addWarning(`$.results.session_performance.aggregate.latency.${key}`, defaultUnit);
+            }
+        }
+    }
+
+    return warnings;
+}
+
+export function normalizeReportUnits(rawReport) {
+    if (!rawReport || typeof rawReport !== 'object') return rawReport;
+
+    const newReport = JSON.parse(JSON.stringify(rawReport));
+
+    // 1. Aggregate latency metrics
+    const latency = newReport.results?.request_performance?.aggregate?.latency;
+    if (latency && typeof latency === 'object') {
+        for (const [key, val] of Object.entries(latency)) {
+            if (val !== null && val !== undefined) {
+                const isPerToken = isPerTokenMetric(key);
+                latency[key] = normalizeLatencyStatistics(val, isPerToken);
+            }
+        }
+    }
+
+    // 2. Time series latency metrics
+    const tsLatency = newReport.results?.request_performance?.time_series?.latency;
+    if (tsLatency && typeof tsLatency === 'object') {
+        for (const [key, val] of Object.entries(tsLatency)) {
+            if (val !== null && val !== undefined) {
+                const isPerToken = isPerTokenMetric(key);
+                tsLatency[key] = normalizeTimeSeriesLatency(val, isPerToken);
+            }
+        }
+    }
+
+    // 3. Pod startup times observability
+    const podStartup = newReport.results?.observability?.pod_startup_times?.aggregate;
+    if (podStartup && typeof podStartup === 'object') {
+        newReport.results.observability.pod_startup_times.aggregate = normalizeLatencyStatistics(podStartup, false);
+    }
+    const podStartupByPod = newReport.results?.observability?.pod_startup_times?.by_pod;
+    if (podStartupByPod && typeof podStartupByPod === 'object') {
+        for (const [k, v] of Object.entries(podStartupByPod)) {
+            if (v && typeof v === 'object') {
+                podStartupByPod[k] = normalizeLatencyStatistics(v, false);
+            }
+        }
+    }
+
+    // 4. Session performance latency
+    const sessionLatency = newReport.results?.session_performance?.aggregate?.latency;
+    if (sessionLatency && typeof sessionLatency === 'object') {
+        for (const [key, val] of Object.entries(sessionLatency)) {
+            if (val !== null && val !== undefined) {
+                const isPerToken = isPerTokenMetric(key);
+                sessionLatency[key] = normalizeLatencyStatistics(val, isPerToken);
+            }
+        }
+    }
+
+    // 5. Aggregate throughput metrics
+    const throughput = newReport.results?.request_performance?.aggregate?.throughput;
+    if (throughput && typeof throughput === 'object') {
+        for (const [key, val] of Object.entries(throughput)) {
+            if (val && typeof val === 'object' && (!val.units || typeof val.units !== 'string' || val.units.trim() === '')) {
+                val.units = key === 'request_rate' ? 'queries/s' : 'tokens/s';
+            } else if (typeof val === 'number') {
+                throughput[key] = {
+                    mean: val,
+                    units: key === 'request_rate' ? 'queries/s' : 'tokens/s',
+                };
+            }
+        }
+    }
+
+    return newReport;
+}
+
+// Convert latency value to milliseconds, respecting declared units (defaults to seconds)
+const toMs = (val, units) => {
     const n = safeNum(val);
-    return n !== null ? n * 1000 : null;
+    if (n === null) return null;
+    const factor = unitToSecondsFactor(units);
+    return n * (factor * 1000);
 };
 
 // vllm cache rates are emitted as fractions for kv_cache_usage but as
@@ -59,37 +350,66 @@ const deriveRunLabel = (doc) => {
 
 const numericField = z.preprocess(safeNum, z.number().nullable());
 const percentField = z.preprocess(pct, z.number().nullable());
-const latencyField = z.preprocess(toMs, z.number().nullable());
 
 const MetricValuesSchema = z.object({
+    units: z.string().optional().nullable(),
     mean: numericField.optional(),
     p50: numericField.optional(),
     p99: numericField.optional(),
-}).optional().nullable();
+}).passthrough().optional().nullable();
 
 const PercentValuesSchema = z.object({
+    units: z.string().optional().nullable(),
     mean: percentField.optional(),
     p50: percentField.optional(),
     p99: percentField.optional(),
-}).optional().nullable();
+}).passthrough().optional().nullable();
 
-const LatencyValuesSchema = z.object({
-    mean: latencyField.optional(),
-    p50: latencyField.optional(),
-    p99: latencyField.optional(),
-}).optional().nullable();
+const ThroughputMetricSchema = z.object({
+    units: z.string().optional().nullable(),
+    mean: numericField.optional(),
+    p50: numericField.optional(),
+    p99: numericField.optional(),
+}).passthrough().optional().nullable();
+
+const LatencyValuesSchema = z.preprocess((val) => {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'number' || typeof val === 'string') {
+        const ms = toMs(val, null);
+        return { mean: ms, p50: ms, p99: ms };
+    }
+    if (typeof val === 'object') {
+        const units = typeof val.units === 'string' ? val.units : null;
+        const res = { ...val };
+        for (const [k, v] of Object.entries(val)) {
+            if (k === 'units') continue;
+            const num = safeNum(v);
+            if (num !== null) {
+                res[k] = toMs(v, units);
+            }
+        }
+        return res;
+    }
+    return val;
+}, z.object({
+    units: z.string().optional().nullable(),
+    mean: z.number().optional().nullable(),
+    p50: z.number().optional().nullable(),
+    p99: z.number().optional().nullable(),
+}).passthrough().optional().nullable());
 
 const ObservabilityMetricSchema = z.object({
     aggregated: MetricValuesSchema,
-}).optional().nullable();
+}).passthrough().optional().nullable();
 
 const PercentObservabilityMetricSchema = z.object({
     aggregated: PercentValuesSchema,
-}).optional().nullable();
+}).passthrough().optional().nullable();
 
 const PodStartupMetricSchema = z.object({
     aggregate: MetricValuesSchema,
-}).optional().nullable();
+    by_pod: z.record(z.string(), MetricValuesSchema).optional().nullable(),
+}).passthrough().optional().nullable();
 
 const ObservabilitySchema = z.object({
     vllm_kv_cache_usage_perc: PercentObservabilityMetricSchema,
@@ -112,53 +432,62 @@ const RawBRV02ReportSchema = z.object({
         pid: z.string().nullable().optional(),
         time: z.object({
             start: z.string().nullable().optional(),
-        }).nullable().optional(),
+        }).passthrough().nullable().optional(),
         description: z.string().nullable().optional(),
-    }).nullable().optional(),
+    }).passthrough().nullable().optional(),
     scenario: z.object({
         stack: z.array(z.any()).nullable().optional(),
         load: z.object({
             standardized: z.object({
                 stage: numericField.optional(),
                 tool: z.string().nullable().optional(),
-                input_seq_len: z.object({ value: numericField }).nullable().optional(),
-                output_seq_len: z.object({ value: numericField }).nullable().optional(),
+                input_seq_len: z.object({ value: numericField }).passthrough().nullable().optional(),
+                output_seq_len: z.object({ value: numericField }).passthrough().nullable().optional(),
                 rate_qps: numericField.optional(),
                 concurrency: numericField.optional(),
-            }).nullable().optional(),
+            }).passthrough().nullable().optional(),
             native: z.object({
                 config: z.object({
                     server: z.object({
                         model_name: z.string().nullable().optional(),
-                    }).nullable().optional(),
-                }).nullable().optional(),
-            }).nullable().optional(),
+                    }).passthrough().nullable().optional(),
+                }).passthrough().nullable().optional(),
+            }).passthrough().nullable().optional(),
             metadata: z.record(z.string(), z.unknown()).nullable().optional(),
-        }).nullable().optional(),
-    }).nullable().optional(),
+        }).passthrough().nullable().optional(),
+    }).passthrough().nullable().optional(),
     results: z.object({
         request_performance: z.object({
             aggregate: z.object({
                 throughput: z.object({
-                    output_token_rate: z.object({ mean: numericField }).nullable().optional(),
-                    input_token_rate: z.object({ mean: numericField }).nullable().optional(),
-                    total_token_rate: z.object({ mean: numericField }).nullable().optional(),
-                    request_rate: z.object({ mean: numericField }).nullable().optional(),
-                }).nullable().optional(),
+                    output_token_rate: ThroughputMetricSchema,
+                    input_token_rate: ThroughputMetricSchema,
+                    total_token_rate: ThroughputMetricSchema,
+                    request_rate: ThroughputMetricSchema,
+                }).passthrough().nullable().optional(),
                 latency: z.object({
                     time_to_first_token: LatencyValuesSchema,
                     time_per_output_token: LatencyValuesSchema,
+                    normalized_time_per_output_token: LatencyValuesSchema,
                     inter_token_latency: LatencyValuesSchema,
                     request_latency: LatencyValuesSchema,
-                }).nullable().optional(),
+                }).passthrough().nullable().optional(),
                 requests: z.object({
                     total: numericField.optional(),
                     failures: numericField.optional(),
-                }).nullable().optional(),
-            }).nullable().optional(),
-        }).nullable().optional(),
+                }).passthrough().nullable().optional(),
+            }).passthrough().nullable().optional(),
+            time_series: z.object({
+                latency: z.record(z.string(), z.unknown()).optional().nullable(),
+            }).passthrough().optional().nullable(),
+        }).passthrough().nullable().optional(),
+        session_performance: z.object({
+            aggregate: z.object({
+                latency: z.record(z.string(), z.unknown()).optional().nullable(),
+            }).passthrough().optional().nullable(),
+        }).passthrough().optional().nullable(),
         observability: ObservabilitySchema,
-    }).nullable().optional(),
+    }).passthrough().nullable().optional(),
 }).passthrough();
 
 // ---------------------------------------------------------------------------
@@ -266,6 +595,9 @@ export function parseReportV02(yamlText, filename) {
         tpotMean: lat.time_per_output_token?.mean ?? null,
         tpotP50: lat.time_per_output_token?.p50 ?? null,
         tpotP99: lat.time_per_output_token?.p99 ?? null,
+        ntpotMean: lat.normalized_time_per_output_token?.mean ?? null,
+        ntpotP50: lat.normalized_time_per_output_token?.p50 ?? null,
+        ntpotP99: lat.normalized_time_per_output_token?.p99 ?? null,
         itlMean: lat.inter_token_latency?.mean ?? null,
         itlP50: lat.inter_token_latency?.p50 ?? null,
         itlP99: lat.inter_token_latency?.p99 ?? null,
@@ -317,6 +649,8 @@ export function parseReportV02(yamlText, filename) {
         if (hasAny) observability = obsValues;
     }
 
+    const warnings = detectMissingUnitWarnings(rawDoc);
+
     return {
         runLabel: deriveRunLabel(doc, filename),
         filename,
@@ -331,7 +665,8 @@ export function parseReportV02(yamlText, filename) {
         performance,
         observability,
         components,
-        rawReport: doc,
+        warnings,
+        rawReport: rawDoc,
     };
 }
 
@@ -643,7 +978,7 @@ export function stageToEntry(stage) {
         // Hoist key metrics to root for Chart compatibility
         time_per_output_token: performance.tpotMean ?? null,
         tpot: performance.tpotMean ?? null,
-        ntpot: performance.tpotMean ?? null,
+        ntpot: performance.ntpotMean ?? performance.tpotMean ?? null,
         itl: performance.itlMean ?? null,
 
         prism_stage_index: stage.prism_stage_index !== undefined && stage.prism_stage_index !== null
@@ -707,8 +1042,10 @@ export function stageToEntry(stage) {
             tpot_ms: performance.tpotMean ?? null,
             tpot_p50: performance.tpotP50 ?? null,
             tpot_p99: performance.tpotP99 ?? null,
-            ntpot: performance.tpotMean ?? null,
-            ntpot_ms: performance.tpotMean ?? null,
+            ntpot: performance.ntpotMean ?? performance.tpotMean ?? null,
+            ntpot_ms: performance.ntpotMean ?? performance.tpotMean ?? null,
+            ntpot_p50: performance.ntpotP50 ?? performance.tpotP50 ?? null,
+            ntpot_p99: performance.ntpotP99 ?? performance.tpotP99 ?? null,
             itl: performance.itlMean ?? null,
             itl_ms: performance.itlMean ?? null,
             itl_p50: performance.itlP50 ?? null,
@@ -719,7 +1056,7 @@ export function stageToEntry(stage) {
         },
 
         rawReport: stage.rawReport || null,
-        _diagnostics: { msg: [], raw_snapshot: {} },
+        _diagnostics: { msg: [...(stage.warnings || [])], raw_snapshot: {} },
     });
 }
 
@@ -730,7 +1067,7 @@ export function stageToEntry(stage) {
 export function mutateRawReportMetadata(rawReport, { model_name, hardware_name, runLabel, inference_tool } = {}) {
     if (!rawReport || typeof rawReport !== 'object') return rawReport;
 
-    const newReport = JSON.parse(JSON.stringify(rawReport));
+    const newReport = normalizeReportUnits(rawReport);
 
     // 1. Update run description if provided
     if (runLabel) {

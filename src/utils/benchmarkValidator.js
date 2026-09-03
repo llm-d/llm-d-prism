@@ -1,5 +1,5 @@
 import yaml from 'js-yaml';
-import { parseReportV02, stageToEntry } from './benchmarkReportV02Parser.js';
+import { parseReportV02, stageToEntry, detectMissingUnitWarnings } from './benchmarkReportV02Parser.js';
 import { normalizeModelName, normalizeHardware } from './dataParser.js';
 import { PrismResultPayloadSchema } from '../../server/results/api.ts';
 
@@ -68,12 +68,27 @@ export function validateBenchmark(fileContent, filename) {
         try {
             const stage = parseReportV02(fileContent, filename);
             if (stage) {
+                if (Array.isArray(stage.warnings) && stage.warnings.length > 0) {
+                    result.warnings.push(...stage.warnings);
+                }
                 const entries = [];
                 
                 const entry = stageToEntry(stage);
                 const latencyVal = entry.latency && typeof entry.latency === 'object' ? entry.latency.mean : entry.latency;
                 if (entry.throughput === null || entry.throughput < 0 || latencyVal === null || latencyVal < 0) {
                     result.errors.push(`Stage ${stage.stageIndex} has negative metrics.`);
+                }
+                const e2eSec = latencyVal !== null ? latencyVal / 1000 : 0;
+                if (e2eSec > 3600) {
+                    result.warnings.push(`E2E latency is unusually high (${e2eSec.toFixed(1)}s > 1 hour). Verify that latency units were not emitted in milliseconds or nanoseconds without declaring units.`);
+                }
+                const ttftSec = (entry.ttft?.mean ?? 0) / 1000;
+                if (ttftSec > 600) {
+                    result.warnings.push(`TTFT is unusually high (${ttftSec.toFixed(1)}s > 10 minutes). Verify that latency units were not emitted in milliseconds or nanoseconds without declaring units.`);
+                }
+                const tpotSec = (entry.tpot ?? 0) / 1000;
+                if (tpotSec > 60) {
+                    result.warnings.push(`TPOT is unusually high (${tpotSec.toFixed(1)}s > 60 seconds per token). Verify that latency units were not emitted in milliseconds or nanoseconds without declaring units.`);
                 }
                 entries.push({
                     model_name: entry.model_name,
@@ -266,6 +281,13 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
                 parsedStage.config = uploadData.config || null;
                 normalizedEntry = stageToEntry(parsedStage);
                 stageIndex = parsedStage.stageIndex ?? 0;
+
+                const rawReport = entry.raw_report || entry.rawReport || parsedStage.rawReport;
+                const missingUnitWarnings = detectMissingUnitWarnings(rawReport, entry.filename);
+                for (const w of missingUnitWarnings) {
+                    warnings.push(w);
+                    fieldErrors[`entries.${stageIndex}.missing_units`] = { message: w, severity: 'warning' };
+                }
             }
 
             // 1. Verify model name matches root $.model_name
@@ -321,6 +343,26 @@ export function validatePrismUploadStructure(uploadData, options = {}) {
             const latencyVal = normalizedEntry.latency && typeof normalizedEntry.latency === 'object' ? normalizedEntry.latency.mean : normalizedEntry.latency;
             if (normalizedEntry.throughput === null || normalizedEntry.throughput < 0 || latencyVal === null || latencyVal < 0) {
                 errors.push(`Stage ${stageIndex} (${entry.filename}) has negative metrics.`);
+            }
+
+            // 5. Verify latency values are not implausibly high (e.g. emitted in ms or ns without declaring units)
+            const e2eSec = latencyVal !== null ? latencyVal / 1000 : 0;
+            if (e2eSec > 3600) {
+                const msg = `Stage ${stageIndex} (${entry.filename || 'unknown'}) has an unusually high E2E latency (${e2eSec.toFixed(1)}s > 1 hour). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`;
+                warnings.push(msg);
+                fieldErrors[`entries.${stageIndex}.latency`] = { message: msg, severity: 'warning' };
+            }
+            const ttftSec = (normalizedEntry.ttft?.mean ?? 0) / 1000;
+            if (ttftSec > 600) {
+                const msg = `Stage ${stageIndex} (${entry.filename || 'unknown'}) has an unusually high TTFT (${ttftSec.toFixed(1)}s > 10 minutes). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`;
+                warnings.push(msg);
+                fieldErrors[`entries.${stageIndex}.ttft`] = { message: msg, severity: 'warning' };
+            }
+            const tpotSec = (normalizedEntry.tpot ?? 0) / 1000;
+            if (tpotSec > 60) {
+                const msg = `Stage ${stageIndex} (${entry.filename || 'unknown'}) has an unusually high TPOT (${tpotSec.toFixed(1)}s > 60 seconds per token). This may indicate that metrics were emitted in milliseconds or nanoseconds without declaring units.`;
+                warnings.push(msg);
+                fieldErrors[`entries.${stageIndex}.tpot`] = { message: msg, severity: 'warning' };
             }
 
         } catch (e) {

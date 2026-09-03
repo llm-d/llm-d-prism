@@ -19,6 +19,7 @@ import { isPlaygroundMode } from '../../iam.ts';
 import { writeResult, deleteResult } from '../gcs.ts';
 import { processSubmission } from '../processing.ts';
 import { PrismSubmissionState, PrismResultPayload } from '../api.ts';
+import { normalizeReportUnits } from '../../../src/utils/benchmarkReportV02Parser.js';
 
 export interface ResultsSubmitResponse {
     success: boolean;
@@ -86,6 +87,9 @@ export async function submitResultsHandler(
     if (uploadData.entries && Array.isArray(uploadData.entries)) {
         for (const entry of uploadData.entries) {
             entry.run_id = crypto.randomUUID();
+            if (entry.raw_report) {
+                entry.raw_report = normalizeReportUnits(entry.raw_report);
+            }
         }
     }
 
