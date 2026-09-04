@@ -664,9 +664,9 @@ export const FilterPanel = ({
     return (
         <div className="flex flex-col gap-6 mb-4">
             {/* Top Section: Submission Tracker & Upload Benchmarks */}
-            <div className="flex flex-col lg:flex-row gap-4 relative z-40">
+            <div className="flex flex-col min-[900px]:flex-row gap-4 relative z-40">
                 {/* Submission Tracker Card */}
-                <div className="flex-1 lg:flex-[7] flex flex-col justify-start p-5 rounded-3xl bg-[#090c15] border border-slate-800/80 hover:border-cyan-500/20 shadow-lg transition-all duration-300 min-h-[128px]">
+                <div className="flex-1 min-[900px]:flex-[7] flex flex-col justify-start p-5 rounded-3xl bg-[#090c15] border border-slate-800/80 hover:border-cyan-500/20 shadow-lg transition-all duration-300 min-h-[128px]">
                             {/* Header */}
                             <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider pb-2 border-b border-slate-800/60 flex items-center justify-between select-none mb-2.5">
                                 <div className="flex flex-col">
@@ -748,7 +748,7 @@ export const FilterPanel = ({
                                                 <div className="text-[10px] font-bold text-slate-400/90 uppercase tracking-wider select-none leading-none pt-0.5">
                                                     {isPlaygroundMode ? 'Pending Pipeline — Sub-Stage Tracking' : 'My Pipeline — Sub-Stage Tracking'}
                                                 </div>
-                                                <div className="flex items-center justify-between gap-1 border border-slate-900/60 p-1 rounded-lg select-none">
+                                                <div className="flex items-center justify-between gap-1 border border-slate-900/60 p-1 rounded-lg select-none overflow-x-auto no-scrollbar">
                                                     
                                                     {/* Step 1: Locally Staged */}
                                                     <button 
@@ -869,12 +869,12 @@ export const FilterPanel = ({
                                     } else {
                                         // Public Store Selected
                                         return (
-                                            <div className="flex-1 flex flex-row items-stretch gap-3 select-none">
-                                                {/* Pane 1: Public Store Analytics */}
-                                                <div className="flex-1 flex flex-row items-center justify-between bg-slate-900/40 border border-slate-900/80 px-4 py-2 rounded-xl">
+                                            <div className="flex-1 grid grid-cols-2 gap-2.5 select-none">
+                                                {/* Top Row: Public Store Analytics (Sparkline Card) taking 2 columns */}
+                                                <div className="col-span-2 flex flex-row items-center justify-between bg-slate-900/40 border border-slate-900/80 px-4 py-2 rounded-xl">
                                                     <div className="flex flex-col justify-center">
                                                         <span className="text-[10px] font-bold text-slate-400/95 uppercase tracking-wider leading-none">Public Store Analytics</span>
-                                                        <span className="text-[10px] text-slate-500 mt-1.5 leading-none">Submission activity (last 15 days)</span>
+                                                        <span className="text-[10px] text-slate-500 mt-1 leading-none">Submission activity (last 15 days)</span>
                                                     </div>
                                                     
                                                     <div className="flex items-center gap-4">
@@ -913,11 +913,11 @@ export const FilterPanel = ({
                                                     </div>
                                                 </div>
 
-                                                {/* Pane: Community Benchmarks Only Pane */}
+                                                {/* Second Row, Column 1: Community Only */}
                                                 <button
                                                     onClick={() => setCommunityOnly ? setCommunityOnly(prev => !prev) : null}
                                                     className={cn(
-                                                        "flex flex-col justify-between px-4 py-3 rounded-xl border text-left transition-all duration-300 cursor-pointer select-none min-w-[210px] max-w-[240px]",
+                                                        "col-span-1 flex flex-col justify-between px-3.5 py-2.5 rounded-xl border text-left transition-all duration-300 cursor-pointer select-none",
                                                         communityOnly
                                                         ? "bg-slate-900 border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
                                                         : "bg-slate-900/40 border-slate-900/80 hover:border-slate-800/80 hover:bg-slate-800/40"
@@ -928,13 +928,13 @@ export const FilterPanel = ({
                                                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/95 leading-none">
                                                             Community Only
                                                         </span>
-                                                        <span className="text-[10px] text-slate-500 mt-1.5 leading-tight">
+                                                        <span className="text-[10px] text-slate-500 mt-1 leading-tight">
                                                             Hides built-in benchmarks and only show community-submitted benchmarks
                                                         </span>
                                                     </div>
                                                     
-                                                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/60 mt-2.5">
-                                                        <span className={cn("text-[9px] font-bold uppercase tracking-wider whitespace-nowrap", communityOnly ? "text-blue-400" : "text-slate-500")}>
+                                                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/60 mt-2">
+                                                        <span className={cn("text-[9px] font-bold uppercase tracking-wider", communityOnly ? "text-blue-400" : "text-slate-500")}>
                                                             {communityOnly ? (
                                                                 <>
                                                                     Active{" "}
@@ -959,11 +959,11 @@ export const FilterPanel = ({
                                                     </div>
                                                 </button>
 
-                                                {/* Pane 2: Standalone Unlisted Pane */}
+                                                {/* Second Row, Column 2: Show Unlisted */}
                                                 <button
                                                     onClick={() => setIncludeUnlisted ? setIncludeUnlisted(prev => !prev) : null}
                                                     className={cn(
-                                                        "flex flex-col justify-between px-4 py-3 rounded-xl border text-left transition-all duration-300 cursor-pointer select-none min-w-[195px]",
+                                                        "col-span-1 flex flex-col justify-between px-3.5 py-2.5 rounded-xl border text-left transition-all duration-300 cursor-pointer select-none",
                                                         includeUnlisted
                                                         ? "bg-slate-900 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
                                                         : "bg-slate-900/40 border-slate-900/80 hover:border-slate-800/80 hover:bg-slate-800/40"
@@ -974,12 +974,12 @@ export const FilterPanel = ({
                                                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/95 leading-none">
                                                             Show Unlisted
                                                         </span>
-                                                        <span className="text-[10px] text-slate-500 mt-1.5 leading-none">
+                                                        <span className="text-[10px] text-slate-500 mt-1 leading-tight">
                                                             Experimental runs not reviewed yet
                                                         </span>
                                                     </div>
                                                     
-                                                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/60 mt-2.5">
+                                                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/60 mt-2">
                                                         <span className={cn("text-[9px] font-bold uppercase tracking-wider", includeUnlisted ? "text-cyan-400" : "text-slate-500")}>
                                                             {includeUnlisted ? "Included" : "Hidden"}
                                                         </span>
@@ -1003,7 +1003,7 @@ export const FilterPanel = ({
                         </div>
 
                 {/* Upload Benchmarks Card */}
-                <div className="flex-1 lg:flex-[3] group relative bg-slate-950/70 border border-slate-900 rounded-3xl p-5 shadow-lg hover:border-cyan-500/20 transition-all duration-300 flex flex-col justify-between overflow-hidden min-h-[128px]">
+                <div className="flex-1 min-[900px]:flex-[3] group relative bg-slate-950/70 border border-slate-900 rounded-3xl p-5 shadow-lg hover:border-cyan-500/20 transition-all duration-300 flex flex-col justify-between overflow-hidden min-h-[128px]">
                     <div>
                         {/* Header */}
                         <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider pb-2 border-b border-slate-800/60 flex items-center select-none mb-2.5">
