@@ -1376,7 +1376,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
             stats.push({
                 benchmarkKey,
-                runLabel: payload?.runLabel || '',
+                runLabel: payload?.runLabel || groupingData.find(d => d.runLabel)?.runLabel || groupingData[0]?.runLabel || '',
                 model,
                 configuration, // Explicitly pass configuration
                 maxTput,

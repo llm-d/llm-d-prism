@@ -14,7 +14,7 @@
 
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildRunLabel, getEntryLabel, stripModelPrefix, stripExperimentIdSuffix, getCustomLabelRunId } from './runLabel.js';
+import { buildRunLabel, getEntryLabel, stripModelPrefix, stripExperimentIdSuffix, getCustomLabelRunId, getBenchmarkSortLabel } from './runLabel.js';
 
 const MODEL = 'qwen3-32b';
 
@@ -102,4 +102,53 @@ describe('run label', () => {
         assert.equal(
             getCustomLabelRunId({ source_info: { type: 'benchmark_report_v02' }, run_id: 'r9' }), 'r9');
     });
+
+    it('resolves benchmark sort label prioritizing custom label, runLabel, then model fallback', () => {
+        // Direct runLabel
+        assert.equal(getBenchmarkSortLabel({ runLabel: 'Baseline Test' }), 'Baseline Test');
+
+        // From data array or payload
+        assert.equal(getBenchmarkSortLabel({ data: [{ runLabel: 'Nested Stage Label' }] }), 'Nested Stage Label');
+        assert.equal(getBenchmarkSortLabel({ payload: { runLabel: 'Payload Run Name' } }), 'Payload Run Name');
+
+        // Custom label overrides
+        assert.equal(
+            getBenchmarkSortLabel(
+                { benchmarkKey: 'results-store:run-abc', runLabel: 'Original Label' },
+                { 'run-abc': 'Renamed Benchmark' }
+            ),
+            'Renamed Benchmark'
+        );
+
+        // Fallback to model name when no label is present
+        assert.equal(getBenchmarkSortLabel({ model: 'llama-3.1-70b' }), 'llama-3.1-70b');
+        assert.equal(getBenchmarkSortLabel({ benchmarkKey: 'custom-key' }), 'custom-key');
+        assert.equal(getBenchmarkSortLabel(null), '');
+    });
+
+    it('sorts benchmarks by benchmark name using natural numeric comparison', () => {
+        const stats = [
+            { benchmarkKey: '3', runLabel: 'Run 10' },
+            { benchmarkKey: '1', runLabel: 'Run 2' },
+            { benchmarkKey: '2', runLabel: 'Alpha Baseline' },
+            { benchmarkKey: '4', model: 'Zero-Label Model' },
+        ];
+
+        const sortedAsc = [...stats].sort((a, b) => {
+            const labelA = getBenchmarkSortLabel(a);
+            const labelB = getBenchmarkSortLabel(b);
+            return labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        assert.deepEqual(sortedAsc.map(s => s.benchmarkKey), ['2', '1', '3', '4']);
+
+        const sortedDesc = [...stats].sort((a, b) => {
+            const labelA = getBenchmarkSortLabel(a);
+            const labelB = getBenchmarkSortLabel(b);
+            return labelB.localeCompare(labelA, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        assert.deepEqual(sortedDesc.map(s => s.benchmarkKey), ['4', '3', '1', '2']);
+    });
 });
+

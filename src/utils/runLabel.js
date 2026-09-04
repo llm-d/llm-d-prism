@@ -82,3 +82,43 @@ export const getEntryLabel = (entry) => {
         description: entry.runLabel || entry.metadata?.variant || entry.metadata?.configuration,
     });
 };
+
+/**
+ * Resolves the benchmark name / run label for table sorting in Results Store.
+ * Prefers active custom label overrides, then the benchmark runLabel,
+ * and falls back to model or benchmarkKey when unspecified.
+ */
+export const getBenchmarkSortLabel = (stat, customLabels = {}) => {
+    if (!stat) return '';
+    const benchmarkData = Array.isArray(stat.data) ? stat.data : [];
+    const sourceStr = benchmarkData[0]?.source || stat.source || '';
+    const isBrv02 = sourceStr.startsWith('brv02:') ||
+        benchmarkData[0]?.source_info?.type === 'benchmark_report_v02' ||
+        stat.source_info?.type === 'benchmark_report_v02';
+    const runId = isBrv02
+        ? (sourceStr.startsWith('brv02:')
+            ? sourceStr.replace('brv02:', '')
+            : (benchmarkData[0]?.run_id || stat.run_id))
+        : null;
+
+    if (runId && customLabels?.[runId]) {
+        return customLabels[runId];
+    }
+    const customKeyId = getCustomLabelRunId(stat.benchmarkKey || stat);
+    if (customKeyId && customLabels?.[customKeyId]) {
+        return customLabels[customKeyId];
+    }
+
+    const rawLabel = stat.runLabel ||
+        stat.payload?.runLabel ||
+        benchmarkData[0]?.runLabel ||
+        benchmarkData[0]?.payload?.runLabel ||
+        benchmarkData.find?.(d => d.runLabel)?.runLabel;
+
+    if (rawLabel && typeof rawLabel === 'string' && rawLabel.trim()) {
+        return rawLabel.trim();
+    }
+
+    return stat.model_name || stat.model || benchmarkData[0]?.metadata?.model_name || stat.benchmarkKey || '';
+};
+

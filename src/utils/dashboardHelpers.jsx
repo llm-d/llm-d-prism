@@ -192,6 +192,20 @@ export const sortBuckets = (buckets) => {
     });
 };
 
+export const sortGroupKeys = (keys, { isDesc = false } = {}) => {
+    return [...keys].sort((a, b) => {
+        const strA = String(a ?? '');
+        const strB = String(b ?? '');
+        const isSpecialA = strA === 'Other' || strA.startsWith('Unknown');
+        const isSpecialB = strB === 'Other' || strB.startsWith('Unknown');
+        if (isSpecialA && !isSpecialB) return 1;
+        if (!isSpecialA && isSpecialB) return -1;
+
+        const cmp = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+        return isDesc ? -cmp : cmp;
+    });
+};
+
 export const findParetoPoint = (dataset, xKey, yKey, minimizeX, maximizeY) => {
     if (!dataset || dataset.length === 0) return null;
 

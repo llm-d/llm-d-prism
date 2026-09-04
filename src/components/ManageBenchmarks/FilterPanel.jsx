@@ -312,16 +312,26 @@ export const FilterPanel = ({
     
     const [sortByField, setSortByField] = useState(() => {
         try {
+            const migrated = localStorage.getItem('prism_manage_sort_default_v2');
+            if (!migrated) {
+                localStorage.setItem('prism_manage_sort_default_v2', 'true');
+                const saved = localStorage.getItem('prism_manage_sort_by');
+                if (!saved || saved === 'timestamp') {
+                    localStorage.setItem('prism_manage_sort_by', 'runLabel');
+                    localStorage.setItem('prism_manage_sort_dir', 'asc');
+                    return 'runLabel';
+                }
+            }
             const saved = localStorage.getItem('prism_manage_sort_by');
-            return saved || 'timestamp';
-        } catch { return 'timestamp'; }
+            return saved || 'runLabel';
+        } catch { return 'runLabel'; }
     });
 
     const [sortDirection, setSortDirection] = useState(() => {
         try {
             const saved = localStorage.getItem('prism_manage_sort_dir');
-            return saved || 'desc';
-        } catch { return 'desc'; }
+            return saved || 'asc';
+        } catch { return 'asc'; }
     });
 
     const [isFiltersExpanded, setIsFiltersExpanded] = useState(() => {
@@ -990,7 +1000,7 @@ export const FilterPanel = ({
                                 }}
                                 className={cn(
                                     'px-3 py-2 text-xs font-semibold rounded-xl border transition-colors cursor-pointer flex items-center gap-1.5',
-                                    showViewSettings || groupBy !== 'None' || sortByField !== 'timestamp'
+                                    showViewSettings || groupBy !== 'None' || sortByField !== 'runLabel'
                                     ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-bold'
                                     : 'bg-[#070b13] border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-205'
                                 )}
@@ -1029,6 +1039,7 @@ export const FilterPanel = ({
                                                     value={sortByField}
                                                     onChange={(e) => setSortByField(e.target.value)}
                                                 >
+                                                    <option value="runLabel">Run Label</option>
                                                     <option value="timestamp">Timestamp</option>
                                                     <option value="maxTput">Max Throughput</option>
                                                     <option value="minLat">Min Latency</option>

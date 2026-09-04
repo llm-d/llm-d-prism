@@ -19,8 +19,8 @@ import { RunComparisonChart } from '../Dashboard/RunComparisonChart';
 import { ThroughputCostChart } from '../Dashboard/ThroughputCostChart';
 import { Button, Badge, StatusChip, Modal, Textarea } from '../ui';
 import { cn } from '../../utils/cn';
-import { getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey } from '../../utils/dashboardHelpers';
-import { buildRunLabel } from '../../utils/runLabel';
+import { getSourceTag, getSourceType, getSourceTypeStyle, formatOriginLabel, getSubmissionStatusDetails, getBenchmarkKey, sortGroupKeys } from '../../utils/dashboardHelpers';
+import { buildRunLabel, getBenchmarkSortLabel } from '../../utils/runLabel';
 import yaml from 'js-yaml';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { validateBenchmark } from '../../utils/benchmarkValidator';
@@ -323,8 +323,8 @@ export const UnifiedDataTable = (props) => {
         onOpenSubmitDialog,
         isFiltered = false,
         groupBy = 'Model',
-        sortByField = 'timestamp',
-        sortDirection = 'desc',
+        sortByField = 'runLabel',
+        sortDirection = 'asc',
         visibleSpecs = {
             hardware: true,
             timestamp: true,
@@ -1292,7 +1292,10 @@ export const UnifiedDataTable = (props) => {
         return [...filteredStats].sort((a, b) => {
             let valA, valB;
             
-            if (sortByField === 'timestamp') {
+            if (sortByField === 'runLabel') {
+                valA = getBenchmarkSortLabel(a, brv02CustomLabels);
+                valB = getBenchmarkSortLabel(b, brv02CustomLabels);
+            } else if (sortByField === 'timestamp') {
                 valA = a.timestamp || 0;
                 valB = b.timestamp || 0;
             } else if (sortByField === 'maxTput') {
@@ -1337,6 +1340,17 @@ export const UnifiedDataTable = (props) => {
                 return primaryResult;
             }
 
+            if (sortByField === 'runLabel') {
+                const modelA = a.model_name || a.model || '';
+                const modelB = b.model_name || b.model || '';
+                const modelCmp = modelA.localeCompare(modelB, undefined, { numeric: true, sensitivity: 'base' });
+                if (modelCmp !== 0) return modelCmp;
+
+                const timeA = a.timestamp || 0;
+                const timeB = b.timestamp || 0;
+                if (timeA !== timeB) return timeB - timeA;
+            }
+
             // Fallback tie-breaker: Origin/Folder first, then Filename
             const firstA = a.data?.[0];
             const firstB = b.data?.[0];
@@ -1359,7 +1373,7 @@ export const UnifiedDataTable = (props) => {
 
             return (a.benchmarkKey || '').localeCompare(b.benchmarkKey || '', undefined, { numeric: true, sensitivity: 'base' });
         });
-    }, [filteredStats, sortByField, sortDirection]);
+    }, [filteredStats, sortByField, sortDirection, brv02CustomLabels]);
 
     const needsExpansion = sortedStats.length > 4;
 
@@ -1398,11 +1412,20 @@ export const UnifiedDataTable = (props) => {
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(stat);
             });
+
+            const isGroupSortDesc = (groupBy === 'Model' && sortByField === 'model') ? sortDirection === 'desc' : false;
+            const sortedKeys = sortGroupKeys(Object.keys(grouped), { isDesc: isGroupSortDesc });
+
+            const sortedGrouped = {};
+            for (const key of sortedKeys) {
+                sortedGrouped[key] = grouped[key];
+            }
+            return sortedGrouped;
         } else {
             grouped['All'] = sortedStats;
+            return grouped;
         }
-        return grouped;
-    }, [sortedStats, groupBy]);
+    }, [sortedStats, groupBy, sortByField, sortDirection]);
 
     const visibleStatsList = React.useMemo(() => {
         return Object.values(groupedStats).flat();

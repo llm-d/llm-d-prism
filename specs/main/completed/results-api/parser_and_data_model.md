@@ -267,3 +267,14 @@ localeCompare(otherString, undefined, {
 
 This guarantees that sequence lengths (e.g., "128", "256", "1024") are ordered
 numerically rather than lexicographically.
+
+### 7.2 Results Store Default Sorting & Grouping
+
+The Results Store table sorts by **Run Label** (`runLabel`) ascending (`asc`) by
+default, ordering benchmarks naturally by benchmark name / run label (using the
+same locale-sensitive natural numeric sort) and falling back to model name /
+benchmark key when unspecified.
+
+When grouping by any dimension (such as Model, Hardware, or Origin), the group
+headers are also consistently sorted using natural numeric-aware locale
+comparison, placing "Other" and "Unknown" fallback categories at the end.

@@ -652,7 +652,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
             stats.push({
                 benchmarkKey,
-                runLabel: payload?.runLabel || '',
+                runLabel: payload?.runLabel || groupingData.find(d => d.runLabel)?.runLabel || groupingData[0]?.runLabel || '',
                 model,
                 configuration,
                 maxTput,
