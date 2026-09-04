@@ -30,6 +30,7 @@ export const getSharedState = () => {
             own: params.has('own') ? params.get('own') === 'true' : null,
             q: params.get('q') || params.get('search') || null,
             unlisted: params.has('unlisted') ? params.get('unlisted') === 'true' || params.get('unlisted') === '1' : (params.has('includeUnlisted') ? params.get('includeUnlisted') === 'true' || params.get('includeUnlisted') === '1' : null),
+            communityOnly: params.has('communityOnly') ? params.get('communityOnly') === 'true' || params.get('communityOnly') === '1' : (params.has('community_only') ? params.get('community_only') === 'true' || params.get('community_only') === '1' : null),
             chartMode: params.get('c_mode') || 'tpot',
             tputType: params.get('t_type') || 'output',
             costMode: params.get('cost_mode') || 'spot',

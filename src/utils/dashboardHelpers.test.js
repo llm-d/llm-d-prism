@@ -51,3 +51,23 @@ describe('dashboardHelpers sortBuckets', () => {
         expect(sortBuckets(buckets)).toEqual(['128', '512', '1024', '2048']);
     });
 });
+
+describe('dashboardHelpers getSourceType', () => {
+    it('identifies built-in sources correctly', async () => {
+        const { getSourceType } = await import('./dashboardHelpers.jsx');
+        expect(getSourceType({ source: 'local' })).toBe('Built-in');
+        expect(getSourceType({ source: 'llm-d-results:google_drive' })).toBe('Built-in');
+        expect(getSourceType({ source: 'llmd_drive' })).toBe('Built-in');
+        expect(getSourceType({ source: 'quality_scores' })).toBe('Built-in');
+        expect(getSourceType(null)).toBe('Built-in');
+    });
+
+    it('identifies cloud and local brv02 sources correctly', async () => {
+        const { getSourceType } = await import('./dashboardHelpers.jsx');
+        expect(getSourceType({ source: 'gcs:llm-d-benchmarks' })).toBe('Cloud');
+        expect(getSourceType({ source: 'gcs:llm-d-benchmarks-staging' })).toBe('Cloud');
+        expect(getSourceType({ source: 'aws:my-bucket' })).toBe('Cloud');
+        expect(getSourceType({ source: 'brv02:run-123' })).toBe('Local');
+    });
+});
+

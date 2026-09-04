@@ -175,6 +175,26 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         }
     });
 
+    const [communityOnly, setCommunityOnly] = React.useState(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('communityOnly')) {
+                return params.get('communityOnly') === 'true' || params.get('communityOnly') === '1';
+            }
+            if (params.has('community_only')) {
+                return params.get('community_only') === 'true' || params.get('community_only') === '1';
+            }
+            if (params.has('community')) {
+                return params.get('community') === 'true' || params.get('community') === '1';
+            }
+
+            const saved = localStorage.getItem('prism_community_only');
+            if (saved !== null) return saved === 'true';
+        } catch {
+            return false;
+        }
+    });
+
     const [kpiFilter, setKpiFilter] = React.useState(() => {
         try {
             const params = new URLSearchParams(window.location.search);
@@ -215,6 +235,12 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
     React.useEffect(() => {
         try {
+            localStorage.setItem('prism_community_only', communityOnly.toString());
+        } catch (e) { console.warn(e); }
+    }, [communityOnly]);
+
+    React.useEffect(() => {
+        try {
             if (kpiFilter) {
                 localStorage.setItem('prism_status_filter', kpiFilter);
             } else {
@@ -247,6 +273,14 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             params.delete('includeUnlisted');
         }
 
+        if (communityOnly) {
+            params.set('communityOnly', '1');
+        } else {
+            params.delete('communityOnly');
+            params.delete('community_only');
+            params.delete('community');
+        }
+
         if (searchTerm) {
             params.set('q', searchTerm);
         } else {
@@ -258,7 +292,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         if (window.location.search !== `?${params.toString()}`) {
             window.history.replaceState(null, '', newUrl);
         }
-    }, [kpiFilter, includeUnlisted, searchTerm]);
+    }, [kpiFilter, includeUnlisted, communityOnly, searchTerm]);
 
     React.useEffect(() => {
         const showSubmitFlow = sessionStorage.getItem('prism_show_submit_dialog_after_login');
@@ -1043,6 +1077,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                         brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run, scannedFilenames,
                         searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
                         includeUnlisted, setIncludeUnlisted,
+                        communityOnly, setCommunityOnly,
                         submissionsMap,
                         isLoadingSubmissions,
                         updateSubmissionStatus,
@@ -1071,6 +1106,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         brv02Runs, brv02CustomLabels, setBrv02CustomLabels, removeBrv02Run, scannedFilenames,
         searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
         includeUnlisted,
+        communityOnly,
         submissionsMap,
         isLoadingSubmissions,
         updateSubmissionStatus,

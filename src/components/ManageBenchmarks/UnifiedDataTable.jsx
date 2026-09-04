@@ -138,7 +138,7 @@ const getKpiFilterLabel = (filter, isPlaygroundMode = false) => {
 };
 
 export const UnifiedDataTable = (props) => {
-    const { dashboardState, includeUnlisted = false, addToast, dashboardData } = props;
+    const { dashboardState, includeUnlisted = false, communityOnly = false, addToast, dashboardData } = props;
     const { user, isPlaygroundMode } = useGitHubAuth();
     const isAdmin = user?.permission === 'admin';
         const [rawYamlContent, setRawYamlContent] = useState(null);
@@ -1151,6 +1151,16 @@ export const UnifiedDataTable = (props) => {
                     return status !== 'unlisted';
                 });
             }
+            if (communityOnly) {
+                stats = stats.filter(stat => {
+                    const firstEntry = stat.data?.[0];
+                    if (!firstEntry) return false;
+                    const src = firstEntry.source || '';
+                    const isBrv02 = src.startsWith('brv02:') || firstEntry.source_info?.type === 'benchmark_report_v02';
+                    const isBuiltin = getSourceType(firstEntry) === 'Built-in' || !isBrv02;
+                    return !isBuiltin;
+                });
+            }
         }
 
         // Apply KPI Filter
@@ -1286,7 +1296,7 @@ export const UnifiedDataTable = (props) => {
         }
 
         return stats;
-    }, [modelStats, showSelectedOnly, selectedBenchmarks, kpiFilter, includeUnlisted, searchTerm, paretoKeys, baselineBenchmarkKey, submissionsMap, user, isPlaygroundMode]);
+    }, [modelStats, showSelectedOnly, selectedBenchmarks, kpiFilter, includeUnlisted, communityOnly, searchTerm, paretoKeys, baselineBenchmarkKey, submissionsMap, user, isPlaygroundMode]);
 
     const sortedStats = React.useMemo(() => {
         return [...filteredStats].sort((a, b) => {

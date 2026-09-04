@@ -18,7 +18,7 @@ import { Filter, ChevronDown, ChevronUp, Check, ArrowDown01, ArrowDown10, Loader
 import { MultiSelectDropdown } from '../common';
 import { Button, Input, Select, Label } from '../ui';
 import { cn } from '../../utils/cn';
-import { USE_CASE_META, formatOriginLabel } from '../../utils/dashboardHelpers';
+import { USE_CASE_META, formatOriginLabel, getSourceType } from '../../utils/dashboardHelpers';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 
 const SPEC_LABELS = {
@@ -101,6 +101,7 @@ export const FilterPanel = ({
     loadSubmissions,
     searchTerm, setSearchTerm, kpiFilter, setKpiFilter,
     includeUnlisted = false, setIncludeUnlisted,
+    communityOnly = false, setCommunityOnly,
     updateSubmissionStatus,
     bulkUpdateSubmissionStatus,
     deleteSubmission,
@@ -216,13 +217,14 @@ export const FilterPanel = ({
 
     const hasAnyActiveFilters = React.useMemo(() => {
         const hasActiveFacet = Object.values(activeFilters).some(valSet => valSet instanceof Set && valSet.size > 0);
-        return hasActiveFacet || !!searchTerm || !!kpiFilter || !!includeUnlisted;
-    }, [activeFilters, searchTerm, kpiFilter, includeUnlisted]);
+        return hasActiveFacet || !!searchTerm || !!kpiFilter || !!includeUnlisted || !!communityOnly;
+    }, [activeFilters, searchTerm, kpiFilter, includeUnlisted, communityOnly]);
 
     const handleClearAllFilters = () => {
         setSearchTerm('');
         setKpiFilter(null);
         if (setIncludeUnlisted) setIncludeUnlisted(false);
+        if (setCommunityOnly) setCommunityOnly(false);
         const newFilters = {};
         Object.keys(activeFilters).forEach(key => {
             newFilters[key] = new Set();
@@ -460,6 +462,17 @@ export const FilterPanel = ({
 
     const legacyCount = totalCount - verifiedCount;
 
+    const hiddenBuiltinCount = React.useMemo(() => {
+        return modelStats.filter(s => {
+            const firstEntry = s.data?.[0];
+            if (!firstEntry) return true;
+            const src = firstEntry.source || '';
+            const isBrv02 = src.startsWith('brv02:') || firstEntry.source_info?.type === 'benchmark_report_v02';
+            const isBuiltin = getSourceType(firstEntry) === 'Built-in' || !isBrv02;
+            return isBuiltin;
+        }).length;
+    }, [modelStats]);
+
     const allRuns = React.useMemo(() => {
         const runs = [];
         modelStats.forEach(s => {
@@ -588,6 +601,7 @@ export const FilterPanel = ({
                 kpiFilter={kpiFilter}
                 setKpiFilter={setKpiFilter}
                 includeUnlisted={includeUnlisted}
+                communityOnly={communityOnly}
                 paretoKeys={paretoKeys}
                 submissionsMap={submissionsMap}
                 isLoadingSubmissions={isLoadingSubmissions}
@@ -609,7 +623,7 @@ export const FilterPanel = ({
         setActiveFilters, expandedModels, toggleBenchmark, toggleModelExpansion, baselineBenchmarkKey,
         setBaselineBenchmarkKey, hideShowSelectedOnly, renameClearToUnselectAll, brv02Runs, brv02CustomLabels,
         setBrv02CustomLabels, removeBrv02Run, scannedFilenames, setShowDataPanel, searchTerm, setSearchTerm, kpiFilter,
-        setKpiFilter, includeUnlisted, paretoKeys, submissionsMap, isLoadingSubmissions, updateSubmissionStatus,
+        setKpiFilter, includeUnlisted, communityOnly, paretoKeys, submissionsMap, isLoadingSubmissions, updateSubmissionStatus,
         bulkUpdateSubmissionStatus, deleteSubmission, onOpenSubmitDialog, hasFiltersToSave, loadAllData, loadingConnections,
         dashboardState, defaultSources, addToast, dashboardData
     ]);
@@ -867,6 +881,52 @@ export const FilterPanel = ({
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                {/* Pane: Community Benchmarks Only Pane */}
+                                                <button
+                                                    onClick={() => setCommunityOnly ? setCommunityOnly(prev => !prev) : null}
+                                                    className={cn(
+                                                        "flex flex-col justify-between px-4 py-3 rounded-xl border text-left transition-all duration-300 cursor-pointer select-none min-w-[210px] max-w-[240px]",
+                                                        communityOnly
+                                                        ? "bg-slate-900 border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
+                                                        : "bg-slate-900/40 border-slate-900/80 hover:border-slate-800/80 hover:bg-slate-800/40"
+                                                    )}
+                                                    title="Toggle community benchmarks only"
+                                                >
+                                                    <div className="flex flex-col justify-center">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/95 leading-none">
+                                                            Community Only
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500 mt-1.5 leading-tight">
+                                                            Hides built-in benchmarks and only show community-submitted benchmarks
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/60 mt-2.5">
+                                                        <span className={cn("text-[9px] font-bold uppercase tracking-wider whitespace-nowrap", communityOnly ? "text-blue-400" : "text-slate-500")}>
+                                                            {communityOnly ? (
+                                                                <>
+                                                                    Active{" "}
+                                                                    <span className="normal-case tracking-normal font-semibold text-blue-300/85">
+                                                                        ({hiddenBuiltinCount} hidden)
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                "Off"
+                                                            )}
+                                                        </span>
+                                                        
+                                                        <div className={cn(
+                                                            "w-7 h-4 rounded-full p-0.5 transition-colors duration-200 ease-in-out flex items-center",
+                                                            communityOnly ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" : "bg-slate-800 border border-slate-700/60"
+                                                        )}>
+                                                            <div className={cn(
+                                                                "w-3 h-3 rounded-full shadow-md transform transition-transform duration-200 ease-in-out",
+                                                                communityOnly ? "translate-x-3 bg-slate-950" : "translate-x-0 bg-slate-400"
+                                                            )} />
+                                                        </div>
+                                                    </div>
+                                                </button>
 
                                                 {/* Pane 2: Standalone Unlisted Pane */}
                                                 <button
