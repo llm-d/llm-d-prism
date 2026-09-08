@@ -34,6 +34,7 @@ import { FilterPanel } from './Dashboard/FilterPanel';
 import { UnifiedDataTable } from './Dashboard/UnifiedDataTable';
 import { ThroughputCostChart } from './Dashboard/ThroughputCostChart';
 import { RunComparisonChart } from './Dashboard/RunComparisonChart';
+import { ObservabilityTimeSeriesPanel } from './Dashboard/ObservabilityTimeSeriesPanel';
 import DataInspector from './DataInspector';
 import { useDashboardState } from '../hooks/useDashboardState';
 import { useDashboardData } from '../hooks/useDashboardData';
@@ -1747,6 +1748,13 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                                     baselineBenchmarkKey={baselineBenchmarkKey}
                                     brv02CustomLabels={brv02CustomLabels}
                                     theme={theme}
+                                />
+
+                                <ObservabilityTimeSeriesPanel
+                                    filteredBySource={filteredBySource}
+                                    selectedBenchmarks={selectedBenchmarks}
+                                    getBenchmarkKey={getBenchmarkKey}
+                                    brv02CustomLabels={brv02CustomLabels}
                                 />
                             </div>
                         )}

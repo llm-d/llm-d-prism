@@ -13,7 +13,9 @@
 // limitations under the License.
 
 import { describe, it, expect } from 'vitest';
-import { sortGroupKeys, sortBuckets } from './dashboardHelpers.jsx';
+import { sortGroupKeys, sortBuckets, buildStageSuffix } from './dashboardHelpers.jsx';
+import { CHART_SERIES, CHART_SERIES_OTHER, seriesColor } from '../components/ui/charts/palette.js';
+import { MAX_SERIES } from '../components/ui/charts/TimeSeriesLineChart.jsx';
 
 describe('dashboardHelpers sortGroupKeys', () => {
     it('sorts group keys alphabetically using natural numeric sorting', () => {
@@ -99,3 +101,23 @@ describe('dashboardHelpers getSourceType', () => {
     });
 });
 
+describe('observability series identity', () => {
+    it('appends only the sweep fields the run actually has', () => {
+        expect(buildStageSuffix({ workload: { stage: 2, target_qps: 10 } })).toBe('stage 2 · 10 QPS');
+        expect(buildStageSuffix({ workload: { stage: 0 } })).toBe('stage 0');
+        expect(buildStageSuffix({ workload: {} })).toBe('');
+        expect(buildStageSuffix({})).toBe('');
+    });
+
+    it('folds series past the hue budget onto one neutral', () => {
+        const series = Array.from({ length: 8 }, (_, i) => ({
+            color: i < MAX_SERIES ? seriesColor(i) : null,
+        }));
+        const folded = series.filter(s => s.color === null);
+        const resolved = series.map(s => (s.color === null ? CHART_SERIES_OTHER : s.color));
+        const branded = resolved.filter(c => c !== CHART_SERIES_OTHER);
+        expect(folded).toHaveLength(3);
+        expect(new Set(branded).size).toBe(branded.length);
+        expect(CHART_SERIES.includes(CHART_SERIES_OTHER)).toBe(false);
+    });
+});
