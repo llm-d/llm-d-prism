@@ -36,6 +36,11 @@ export function seriesColor(index) {
     return CHART_SERIES[index % CHART_SERIES.length];
 }
 
+// The hue for a folded "Other"/overflow tail. Deliberately outside CHART_SERIES
+// so it never reads as a 6th entity, and low-chroma so a folded tail recedes
+// behind the five that keep their identity.
+export const CHART_SERIES_OTHER = '#94a3b8';
+
 // Status colors for chart marks that encode state (pass/fail bands, threshold
 // lines). Reserved for state — never used as "series 6". Always pair with a
 // label or icon; never state by color alone.

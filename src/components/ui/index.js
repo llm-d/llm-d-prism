@@ -34,6 +34,6 @@ export { ChartContainer } from './charts/ChartContainer';
 export { ChartTooltip, ChartTooltipRow } from './charts/ChartTooltip';
 export { ChartLegend } from './charts/ChartLegend';
 export { ChartXAxis, ChartYAxis } from './charts/Axis';
-export { CHART_SERIES, seriesColor, CHART_STATUS } from './charts/palette';
+export { CHART_SERIES, seriesColor, CHART_SERIES_OTHER, CHART_STATUS } from './charts/palette';
 export { getChartTheme, gridProps, tooltipProps } from './charts/theme';
 export { getAxisConfig } from './charts/utils';

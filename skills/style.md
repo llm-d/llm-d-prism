@@ -98,7 +98,8 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
   - **Render every computed tick.** When you pass an explicit `ticks` list to `ChartXAxis`, all ticks are shown (`interval={0}` is applied automatically); do not let recharts auto-hide "overlapping" ticks, which makes an evenly-spaced axis look uneven and sparse.
 - Series colors: `CHART_SERIES` in fixed order — emerald, sky, amber, violet,
   pink. Assign by entity, never by rank: a series keeps its color when filters
-  change the series count. More than 5 series → fold into "Other" or use small
+  change the series count. More than 5 series → fold the tail onto
+  `CHART_SERIES_OTHER` (labelled "Other (n)", one legend entry) or use small
   multiples; never invent a 6th hue. The palette is CVD-validated for both
   themes; do not edit it without re-validating.
 - Status colors in charts come from `CHART_STATUS` and are reserved for state —
