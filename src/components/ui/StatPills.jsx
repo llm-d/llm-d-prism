@@ -13,28 +13,20 @@
 // limitations under the License.
 
 import React from 'react';
-import { cn } from '../../utils/cn';
+import { ToggleGroup } from './ToggleGroup';
 
 // Multi-select pill group for chart stat/percentile visibility
-// ("Stats: Mean P90", "Percentiles: P50 P90 P99"). Unlike ToggleGroup
-// (single-select), every pill toggles independently. options: string[].
+// ("Stats: Mean P90", "Percentiles: P50 P90 P99"). A ToggleGroup preset:
+// options are bare strings and the label is the value. options: string[].
 export function StatPills({ options, active, onToggle, className }) {
     return (
-        <div className={cn('flex items-center gap-0.5 bg-slate-900/50 border border-slate-700/50 rounded-lg p-0.5 shrink-0', className)}>
-            {options.map((p) => (
-                <button
-                    key={p}
-                    type="button"
-                    aria-pressed={active.includes(p)}
-                    onClick={() => onToggle(p)}
-                    className={cn(
-                        'px-2.5 py-1 text-[10px] font-medium rounded-md transition-all cursor-pointer',
-                        active.includes(p) ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                    )}
-                >
-                    {p}
-                </button>
-            ))}
-        </div>
+        <ToggleGroup
+            options={options.map(p => ({ value: p, label: p }))}
+            value={new Set(active)}
+            onChange={onToggle}
+            multiSelect
+            variant="fill"
+            className={className}
+        />
     );
 }

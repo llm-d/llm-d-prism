@@ -83,8 +83,8 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
 | `Spinner` / `LoadingState` | `size` / `label, fullPage` | inline `animate-spin` loaders; `fullPage` = pre-data dashboard shell |
 | `PageHeader` | `title, subtitle, badge, onNavigateBack, onToggleMobileNav, actions` | dashboard header chrome |
 | `ShareLinkButton` | — (copies URL + "Link copied!" toast) | per-dashboard share buttons |
-| `ToggleGroup` | `options[{value,label}], value, onChange, fullWidth` | metric/mode pill selectors (single-select) |
-| `StatPills` | `options[], active[], onToggle` | stat/percentile visibility multi-toggles |
+| `ToggleGroup` | `options[{value,label,disabled}], value, onChange, fullWidth, multiSelect, variant` | metric/mode pill selectors; `multiSelect` takes a `Set` and reports the clicked value |
+| `StatPills` | `options[], active[], onToggle` | stat/percentile visibility multi-toggles (a `ToggleGroup variant="fill"` preset) |
 | `FactCell` | `label, value, title` | scenario-card label + mono value cells |
 
 ## Chart rules
