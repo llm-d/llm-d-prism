@@ -102,6 +102,11 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
   `CHART_SERIES_OTHER` (labelled "Other (n)", one legend entry) or use small
   multiples; never invent a 6th hue. The palette is CVD-validated for both
   themes; do not edit it without re-validating.
+- **Grouped series shade within a hue.** When lines fall into groups (e.g. one
+  metric's stages), the hue identifies the group and lines inside it separate by
+  opacity, as stat bars do — so a chart spends one hue per group, not per line.
+  Legend swatches and tooltip rows carry the same opacity (`ChartLegend` /
+  `ChartTooltipRow opacity`).
 - Status colors in charts come from `CHART_STATUS` and are reserved for state —
   never used as an extra series color; always paired with a label.
 - **One axis.** Never two y-scales on one chart. Two measures of different

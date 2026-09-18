@@ -94,6 +94,7 @@ const TimeSeriesTooltip = ({ active, payload, unit, series }) => {
                 <ChartTooltipRow
                     key={s.id}
                     color={s.color}
+                    opacity={s.opacity ?? 1}
                     label={s.label}
                     value={Number(point.value).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     unit={unit}
@@ -129,7 +130,7 @@ export function TimeSeriesLineChart({
     for (const s of shown) {
         if (seenLabels.has(s.label)) continue;
         seenLabels.add(s.label);
-        legendEntries.push({ id: s.id, label: s.label, color: s.color });
+        legendEntries.push({ id: s.id, label: s.label, color: s.color, opacity: s.opacity });
     }
 
     const tSecs = shown.flatMap(s => s.points.map(p => p.tSec)).filter(Number.isFinite);
@@ -183,6 +184,7 @@ export function TimeSeriesLineChart({
                                 name={s.label}
                                 dataKey="value"
                                 stroke={s.color}
+                                strokeOpacity={s.opacity ?? 1}
                                 strokeWidth={2}
                                 dot={maxLen <= 2 ? { r: 3 } : false}
                                 activeDot={{ r: 4 }}

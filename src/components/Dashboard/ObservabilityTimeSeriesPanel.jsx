@@ -22,6 +22,11 @@ import { getEntryLabel } from '../../utils/runLabel';
 import { buildStageSuffix } from '../../utils/dashboardHelpers';
 import { resolveUnitFamily } from '../../utils/benchmarkReportV02Parser';
 
+// Opacity steps for lines sharing a metric's hue, following the stat-bar
+// convention in skills/style.md. The tail repeats rather than fading out, since
+// past this many lines the shades stop being tellable apart anyway.
+const SHADES = [1, 0.65, 0.4, 0.25];
+
 // Elapsed-time observability charts for the browser-upload comparison view.
 // Co-selected metrics must share a unit family -- percent and fraction scale
 // onto one axis, but a percent and a count on one axis would misrepresent both.
@@ -104,27 +109,30 @@ export function ObservabilityTimeSeriesPanel({
         [getBenchmarkKey],
     );
 
-    // Color follows the entity (see skills/style.md), so hues are assigned over
-    // the whole set regardless of which series carry data, and the index runs
-    // per panel (one per run) so co-selected metrics overlay without colliding.
-    // Past MAX_SERIES a panel folds its tail rather than reusing a hue.
+    // Color follows the entity (see skills/style.md). With one metric the hue
+    // separates its lines; with several, the hue identifies the metric and the
+    // lines inside it separate by opacity (the stat-bar convention), so a run's
+    // stages read as one group instead of spending the whole palette.
     const colorOf = useMemo(() => {
         const map = new Map();
+        const multi = orderedActiveKeys.length > 1;
         const nextIndex = new Map();
-        for (const metricKey of orderedActiveKeys) {
+        for (const [metricIdx, metricKey] of orderedActiveKeys.entries()) {
             for (const { d, ts } of runs) {
                 const entry = ts[metricKey];
                 if (!entry) continue;
-                const runKey = getBenchmarkKey(d);
+                const scope = multi ? `${getBenchmarkKey(d)}::${metricKey}` : getBenchmarkKey(d);
                 const pods = (entry.components || []).map(c => c.pod || 'agg').sort();
                 for (const pod of pods) {
-                    const i = nextIndex.get(runKey) ?? 0;
-                    nextIndex.set(runKey, i + 1);
-                    map.set(seriesId(d, pod, metricKey), i < MAX_SERIES ? seriesColor(i) : null);
+                    const i = nextIndex.get(scope) ?? 0;
+                    nextIndex.set(scope, i + 1);
+                    map.set(seriesId(d, pod, metricKey), multi
+                        ? { color: seriesColor(metricIdx), opacity: SHADES[Math.min(i, SHADES.length - 1)] }
+                        : { color: i < MAX_SERIES ? seriesColor(i) : null, opacity: 1 });
                 }
             }
         }
-        return (id) => map.get(id) ?? null;
+        return (id) => map.get(id) ?? { color: null, opacity: 1 };
     }, [runs, orderedActiveKeys, seriesId, getBenchmarkKey]);
 
     const { series, unit, yLabel, unitsConflict } = useMemo(() => {
@@ -169,7 +177,7 @@ export function ObservabilityTimeSeriesPanel({
                         runKey: key,
                         runTitle,
                         label,
-                        color: colorOf(id),
+                        ...colorOf(id),
                         points: resolved.factor === 1
                             ? comp.points
                             : comp.points?.map(pt => (
@@ -213,9 +221,8 @@ export function ObservabilityTimeSeriesPanel({
             if (!byRun.has(s.runKey)) byRun.set(s.runKey, []);
             byRun.get(s.runKey).push(s);
         }
-        // Series past the budget carry no hue of their own (see colorOf); they
-        // fold onto one neutral and are named as a group so the ones that keep
-        // their identity stay readable.
+        // Only a single selected metric can outrun the palette (see colorOf);
+        // that tail carries no hue of its own and folds onto one neutral.
         return Array.from(byRun.values(), (group) => {
             const folded = group.filter(x => x.color === null);
             if (folded.length === 0) return group;
