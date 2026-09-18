@@ -87,6 +87,26 @@ export function unitToSecondsFactor(units) {
     return 1;
 }
 
+// Units that measure the same thing on a different scale can share one axis once
+// scaled; units that don't must never be co-plotted. Families mirror the report
+// spec's own compatibility lists, so a unit the spec keeps separate -- RATIO is
+// unbounded and is not a portion -- stays separate here. The unit enum is closed,
+// so anything unrecognized is its own family rather than joining one.
+const PORTION_FACTORS = { percent: 1, fraction: 100 };
+
+export function resolveUnitFamily(units) {
+    if (units === null || units === undefined || units === '') {
+        return { family: 'unitless', axisUnits: null, factor: 1 };
+    }
+    if (typeof units !== 'string') return { family: 'unknown', axisUnits: units, factor: 1 };
+    const u = units.trim();
+    if (u === '') return { family: 'unitless', axisUnits: null, factor: 1 };
+    if (u in PORTION_FACTORS) {
+        return { family: 'portion', axisUnits: 'percent', factor: PORTION_FACTORS[u] };
+    }
+    return { family: u, axisUnits: u, factor: 1 };
+}
+
 export function normalizeLatencyStatistics(statBlock, defaultToken = false) {
     if (!statBlock) return statBlock;
     if (typeof statBlock === 'number' && Number.isFinite(statBlock)) {
@@ -338,6 +358,118 @@ const pct = (val) => {
     return v <= 1 ? v * 100 : v;
 };
 
+// Human-readable labels for the TimeSeriesResourceMetrics fields the benchmark
+// harness embeds; unknown fields fall back to a humanized key so a future
+// schema field renders without code changes.
+const TIME_SERIES_LABELS = {
+    kv_cache_usage: 'KV Cache Usage',
+    gpu_cache_usage: 'GPU Cache Usage',
+    cpu_cache_usage: 'CPU Cache Usage',
+    gpu_memory_usage: 'GPU Memory Usage',
+    cpu_memory_usage: 'CPU Memory Usage',
+    storage_usage: 'Storage Usage',
+    gpu_utilization: 'GPU Utilization',
+    cpu_utilization: 'CPU Utilization',
+    power_consumption: 'Power Consumption',
+};
+
+const humanizeMetricKey = (key) => key
+    .replace(/^vllm_/, '')
+    .replace(/^epp_/, 'EPP ')
+    .replace(/_perc$/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Percent-like units that a 0..1 series should be rescaled to 0-100 for.
+const PORTION_UNITS = new Set(['percent', 'fraction']);
+
+// Extract embedded per-timestamp series from results.observability.components[].
+// v0.2 shape: each component is a ComponentObservability whose `time_series` is a
+// TimeSeriesResourceMetrics -- one TimeSeriesData per named field (kv_cache_usage,
+// gpu_utilization, ...). Pivots that per-component structure into a map keyed by
+// metric field, which is what the chart consumes:
+//   { label, units, components: [{ pod, role, points: [{ tSec, value }] }] }
+// tSec is seconds since the field's earliest sample across every component, so
+// pods that joined the run late stay aligned on a shared time origin.
+//
+// Two passes, because scale, units and the time origin are properties of the
+// field as a whole, not of whichever component happened to be parsed first:
+// deciding them per component put two pods of one run on the same axis 100x
+// apart, mislabelled a disagreeing unit, and drew a late-starting pod as though
+// it had started with the run.
+const extractTimeSeries = (obs) => {
+    if (!obs || typeof obs !== 'object') return null;
+    const comps = obs.components;
+    if (!Array.isArray(comps)) return null;
+
+    // Pass 1: collect every component's samples per field, keeping raw values.
+    const fields = new Map();
+    for (const comp of comps) {
+        const tsBlock = comp?.time_series;
+        if (!tsBlock || typeof tsBlock !== 'object') continue;
+
+        for (const [field, data] of Object.entries(tsBlock)) {
+            const series = data?.series;
+            if (!Array.isArray(series) || series.length === 0) continue;
+            const parsed = series
+                .map(p => ({ t: Date.parse(p.ts), value: safeNum(p.value) }))
+                .filter(p => Number.isFinite(p.t) && p.value !== null)
+                .sort((a, b) => a.t - b.t)
+                // Repeated timestamps would draw a vertical segment and the
+                // tooltip's exact-match lookup could only ever report the first.
+                .filter((p, i, arr) => i === 0 || p.t !== arr[i - 1].t);
+            if (parsed.length === 0) continue;
+
+            const entry = fields.get(field) || {
+                units: undefined,
+                unitsConflict: false,
+                raw: [],
+            };
+            const units = typeof data?.units === 'string' ? data.units.trim() || null : null;
+            if (entry.units === undefined) entry.units = units;
+            else if (entry.units !== units) entry.unitsConflict = true;
+            entry.raw.push({
+                pod: comp.replica_id || comp.pod || null,
+                role: comp.component_label || comp.role || null,
+                parsed,
+            });
+            fields.set(field, entry);
+        }
+    }
+
+    // Pass 2: resolve units and the shared origin per field, then scale.
+    const out = {};
+    for (const [field, entry] of fields) {
+        const { units, unitsConflict, raw } = entry;
+        // Fraction-vs-percent is decided once from every sample of the field:
+        // pct()'s per-value heuristic would rescale only the sub-1% samples and
+        // fabricate spikes in a series that legitimately dips near zero, and
+        // deciding per component would scale one pod but not its neighbour.
+        const isPortion = !unitsConflict && typeof units === 'string'
+            && PORTION_UNITS.has(units.toLowerCase());
+        const allPoints = raw.flatMap(r => r.parsed);
+        const scale = isPortion && allPoints.every(p => p.value <= 1) ? 100 : 1;
+        const t0 = Math.min(...allPoints.map(p => p.t));
+
+        out[field] = {
+            label: TIME_SERIES_LABELS[field] || humanizeMetricKey(field),
+            // Only claim percent when the values were actually rescaled: a
+            // fraction series holding one >1 glitch sample stays a fraction
+            // rather than being labelled "%" while reading ~0.
+            units: isPortion && scale === 100 ? 'percent' : units,
+            // Components disagreed on units, so the caller must not co-plot
+            // them on one axis under a single label.
+            ...(unitsConflict ? { unitsConflict: true } : {}),
+            components: raw.map(r => ({
+                pod: r.pod,
+                role: r.role,
+                points: r.parsed.map(p => ({ tSec: (p.t - t0) / 1000, value: p.value * scale })),
+            })),
+        };
+    }
+    return Object.keys(out).length > 0 ? out : null;
+};
+
 const deriveRunLabel = (doc) => {
     if (doc.run?.description) return doc.run.description;
     if (doc.run?.label) return doc.run.label;
@@ -398,6 +530,30 @@ const LatencyValuesSchema = z.preprocess((val) => {
     p99: z.number().optional().nullable(),
 }).passthrough().optional().nullable());
 
+// One TimeSeriesData: { units, series: [{ ts, value }] }.
+const TimeSeriesDataSchema = z.object({
+    units: z.string().nullable().optional(),
+    series: z.array(z.object({
+        ts: z.string(),
+        value: numericField,
+    })).optional(),
+});
+
+// TimeSeriesResourceMetrics: named fields (kv_cache_usage, gpu_utilization, ...),
+// each a TimeSeriesData. Modelled as an open record so a new schema field needs
+// no change here.
+const TimeSeriesResourceMetricsSchema = z
+    .record(z.string(), TimeSeriesDataSchema.nullable().optional())
+    .optional()
+    .nullable();
+
+// ComponentObservability: per-replica entry carrying the embedded series.
+const ObservabilityComponentSchema = z.object({
+    component_label: z.string().nullable().optional(),
+    replica_id: z.string().nullable().optional(),
+    time_series: TimeSeriesResourceMetricsSchema,
+}).passthrough();
+
 const ObservabilityMetricSchema = z.object({
     aggregated: MetricValuesSchema,
 }).passthrough().optional().nullable();
@@ -421,6 +577,7 @@ const ObservabilitySchema = z.object({
     vllm_num_requests_waiting: ObservabilityMetricSchema,
     vllm_num_preemptions_total: ObservabilityMetricSchema,
     pod_startup_times: PodStartupMetricSchema,
+    components: z.array(ObservabilityComponentSchema).optional().nullable(),
 }).passthrough().optional().nullable();
 
 const RawBRV02ReportSchema = z.object({
@@ -653,8 +810,10 @@ export function parseReportV02(yamlText, filename) {
             podStartupP99S:      podStartup.p99 ?? null,
         };
 
-        const hasAny = Object.values(obsValues).some(v => v !== null);
-        if (hasAny) observability = obsValues;
+        const timeSeries = extractTimeSeries(obs);
+
+        const hasAny = Object.values(obsValues).some(v => v !== null) || timeSeries !== null;
+        if (hasAny) observability = { ...obsValues, timeSeries };
     }
 
     const warnings = detectMissingUnitWarnings(rawDoc);
@@ -680,6 +839,37 @@ export function parseReportV02(yamlText, filename) {
         warnings,
         rawReport: rawDoc,
     };
+}
+
+// Derived time series are large -- a 1-hour 8-pod report adds ~65% on top of the
+// rawReport it was derived from -- and localStorage has a ~5MB budget shared by
+// every persisted run. Drop them on the way out and rebuild them on the way in,
+// so persistence costs nothing and a reloaded run still charts.
+export function stripDerivedTimeSeries(runs) {
+    if (!Array.isArray(runs)) return runs;
+    return runs.map(run => ({
+        ...run,
+        stages: (run.stages || []).map(stage => {
+            if (!stage?.observability?.timeSeries) return stage;
+            const rest = { ...stage.observability };
+            delete rest.timeSeries;
+            return { ...stage, observability: rest };
+        }),
+    }));
+}
+
+export function rehydrateDerivedTimeSeries(runs) {
+    if (!Array.isArray(runs)) return runs;
+    return runs.map(run => ({
+        ...run,
+        stages: (run.stages || []).map(stage => {
+            if (!stage?.observability || stage.observability.timeSeries) return stage;
+            const obs = stage.rawReport?.results?.observability;
+            const timeSeries = extractTimeSeries(obs);
+            if (!timeSeries) return stage;
+            return { ...stage, observability: { ...stage.observability, timeSeries } };
+        }),
+    }));
 }
 
 export function getOriginalStageIndex(entry) {

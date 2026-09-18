@@ -17,7 +17,7 @@ import { CacheManager } from '../utils/cacheManager';
 import { QualityParser } from '../utils/qualityParser';
 import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
-import { parseReportV02, groupStagesIntoRuns, stageToEntry, isPristineScannedRun, forwardBundleMetadata } from '../utils/benchmarkReportV02Parser';
+import { parseReportV02, groupStagesIntoRuns, stageToEntry, isPristineScannedRun, forwardBundleMetadata, stripDerivedTimeSeries, rehydrateDerivedTimeSeries } from '../utils/benchmarkReportV02Parser';
 import { scanLocalBenchmarks } from '../utils/gcsScanner';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
@@ -94,7 +94,9 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [brv02Runs, setBrv02Runs] = useState(() => {
         try {
             const saved = localStorage.getItem('prism_brv02_runs');
-            return saved ? JSON.parse(saved) : [];
+            // Time series are stripped before persisting, so rebuild them from
+            // the stored rawReport.
+            return saved ? rehydrateDerivedTimeSeries(JSON.parse(saved)) : [];
         } catch { return []; }
     });
     const [brv02Error, setBrv02Error] = useState(null);
@@ -120,7 +122,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     useEffect(() => {
         try {
-            localStorage.setItem('prism_brv02_runs', JSON.stringify(brv02Runs));
+            localStorage.setItem('prism_brv02_runs', JSON.stringify(stripDerivedTimeSeries(brv02Runs)));
         } catch (e) {
             console.error("Failed to persist brv02 runs to LocalStorage:", e);
         }
@@ -1299,9 +1301,14 @@ export const useDashboardData = (initialState, dashboardState) => {
                     suffix = ` [${newD.metadata.configuration}]`;
                 }
                 if (suffix) {
-                    newD.model = newD.model + suffix;
-                    newD.model_name = newD.model_name + suffix;
-                    newD.metadata.model_name = newD.metadata.model_name + suffix;
+                    // All three derive from metadata.model_name, the only one
+                    // backfilled above: the top-level model_name is optional
+                    // here, and appending to it directly yielded the literal
+                    // string "undefined [kv]" whenever it was absent.
+                    const suffixed = newD.metadata.model_name + suffix;
+                    newD.model = suffixed;
+                    newD.model_name = suffixed;
+                    newD.metadata.model_name = suffixed;
                 }
 
                 return newD;

@@ -83,8 +83,8 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
 | `Spinner` / `LoadingState` | `size` / `label, fullPage` | inline `animate-spin` loaders; `fullPage` = pre-data dashboard shell |
 | `PageHeader` | `title, subtitle, badge, onNavigateBack, onToggleMobileNav, actions` | dashboard header chrome |
 | `ShareLinkButton` | — (copies URL + "Link copied!" toast) | per-dashboard share buttons |
-| `ToggleGroup` | `options[{value,label}], value, onChange, fullWidth` | metric/mode pill selectors (single-select) |
-| `StatPills` | `options[], active[], onToggle` | stat/percentile visibility multi-toggles |
+| `ToggleGroup` | `options[{value,label,disabled}], value, onChange, fullWidth, multiSelect, variant` | metric/mode pill selectors; `multiSelect` takes a `Set` and reports the clicked value |
+| `StatPills` | `options[], active[], onToggle` | stat/percentile visibility multi-toggles (a `ToggleGroup variant="fill"` preset) |
 | `FactCell` | `label, value, title` | scenario-card label + mono value cells |
 
 ## Chart rules
@@ -98,9 +98,15 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
   - **Render every computed tick.** When you pass an explicit `ticks` list to `ChartXAxis`, all ticks are shown (`interval={0}` is applied automatically); do not let recharts auto-hide "overlapping" ticks, which makes an evenly-spaced axis look uneven and sparse.
 - Series colors: `CHART_SERIES` in fixed order — emerald, sky, amber, violet,
   pink. Assign by entity, never by rank: a series keeps its color when filters
-  change the series count. More than 5 series → fold into "Other" or use small
+  change the series count. More than 5 series → fold the tail onto
+  `CHART_SERIES_OTHER` (labelled "Other (n)", one legend entry) or use small
   multiples; never invent a 6th hue. The palette is CVD-validated for both
   themes; do not edit it without re-validating.
+- **Grouped series shade within a hue.** When lines fall into groups (e.g. one
+  metric's stages), the hue identifies the group and lines inside it separate by
+  opacity, as stat bars do — so a chart spends one hue per group, not per line.
+  Legend swatches and tooltip rows carry the same opacity (`ChartLegend` /
+  `ChartTooltipRow opacity`).
 - Status colors in charts come from `CHART_STATUS` and are reserved for state —
   never used as an extra series color; always paired with a label.
 - **One axis.** Never two y-scales on one chart. Two measures of different

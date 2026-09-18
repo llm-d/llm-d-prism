@@ -54,3 +54,12 @@ export function tooltipProps() {
         cursor: { fill: 'rgba(148, 163, 184, 0.08)' },
     };
 }
+
+// As tooltipProps, but for line/area charts, where the hover cursor reads as a
+// vertical rule on the active x position rather than a band fill.
+export function lineTooltipProps() {
+    return {
+        ...tooltipProps(),
+        cursor: { stroke: getChartTheme().axis, strokeWidth: 1, strokeDasharray: '4 4' },
+    };
+}

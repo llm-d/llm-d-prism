@@ -455,9 +455,16 @@ export const formatOriginLabel = (origin) => {
     return origin;
 };
 
+// getBenchmarkKey collapses a sweep's stages onto one key, so a series drawn
+// per stage needs this to name itself. Empty when the run isn't a sweep.
+export const buildStageSuffix = (d) => [
+    d?.workload?.stage != null ? `stage ${d.workload.stage}` : null,
+    d?.workload?.target_qps != null ? `${d.workload.target_qps} QPS` : null,
+].filter(Boolean).join(' · ');
+
 export const getBenchmarkKey = (d) => {
     if (!d) return 'unknown';
-    
+
     // For local BRV02 benchmark runs, group them as a single run instead of by stage.
     if (d.source && d.source.startsWith('brv02:')) {
         return d.source;

@@ -1,3 +1,5 @@
+// Copyright 2026 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +18,7 @@ import {
     groupStagesIntoRuns,
     stageToEntry,
     unitToSecondsFactor,
+    resolveUnitFamily,
     normalizeReportUnits,
     detectMissingUnitWarnings,
     forwardBundleMetadata,
@@ -24,6 +27,8 @@ import {
     isValidRunEid,
     groupStandaloneBRV02Stages,
     mergeStagedBundlesByRunEid,
+    stripDerivedTimeSeries,
+    rehydrateDerivedTimeSeries,
 } from './benchmarkReportV02Parser.js';
 import { validateBenchmark, validatePrismUploadStructure, formatZodIssuePath } from './benchmarkValidator.js';
 
@@ -1586,3 +1591,255 @@ describe('BRV0.2 run.eid grouping and standalone stage coalescing', () => {
 });
 
 
+
+// parseReportV02 accepts a pre-parsed object, so these build docs directly.
+const observabilityReport = (observability) => ({
+    version: '0.2',
+    run: { uid: 'u1', time: { start: '2026-01-01T00:00:00Z' } },
+    results: { observability },
+});
+
+// startSec offsets from RUN_START, matching the literal timestamps used below,
+// so cross-component alignment can be asserted meaningfully.
+const RUN_START = Date.parse('2026-01-01T00:00:00Z');
+
+const seriesOf = (units, values, startSec = 0) => ({
+    units,
+    series: values.map((value, i) => ({
+        ts: new Date(RUN_START + (startSec + i * 15) * 1000).toISOString(),
+        value,
+    })),
+});
+
+// v0.2 shape: results.observability.components[] holds ComponentObservability
+// entries whose time_series is a TimeSeriesResourceMetrics (named fields).
+const comps = (...components) => ({ components });
+
+const comp = (replicaId, timeSeries, componentLabel = 'decode-engine') => ({
+    component_label: componentLabel,
+    replica_id: replicaId,
+    time_series: timeSeries,
+});
+
+const tsOf = (doc, field) => parseReportV02(doc, 'f.yaml').observability.timeSeries[field];
+
+describe('extractTimeSeries', () => {
+    it('scales a fraction series once, uniformly, to 0-100', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.008, 0.01, 0.5, 1]) }),
+        )), 'kv_cache_usage');
+        expect(entry.components[0].points.map(p => p.value)).toEqual([0.8, 1, 50, 100]);
+        expect(entry.units).toBe('percent');
+    });
+
+    it('passes an already-percent series through unscaled even when it dips below 1', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { gpu_utilization: seriesOf('percent', [0.8, 1.2, 55, 99]) }),
+        )), 'gpu_utilization');
+        expect(entry.components[0].points.map(p => p.value)).toEqual([0.8, 1.2, 55, 99]);
+    });
+
+    it('never scales non-portion units', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { gpu_memory_usage: seriesOf('bytes', [0.25, 0.5, 3]) }),
+        )), 'gpu_memory_usage');
+        expect(entry.components[0].points.map(p => p.value)).toEqual([0.25, 0.5, 3]);
+        expect(entry.units).toBe('bytes');
+    });
+
+    it('rebases tSec to the field earliest sample across all components, order normalized', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { gpu_memory_usage: seriesOf('bytes', [1, 2, 3], 600) }),
+            comp('p2', {
+                gpu_memory_usage: {
+                    units: 'bytes',
+                    series: [
+                        { ts: '2026-01-01T00:00:30Z', value: 9 },
+                        { ts: '2026-01-01T00:00:00Z', value: 7 },
+                    ],
+                },
+            }),
+        )), 'gpu_memory_usage');
+        expect(entry.components[0].points.map(p => p.tSec)).toEqual([600, 615, 630]);
+        expect(entry.components[1].points.map(p => p.tSec)).toEqual([0, 30]);
+        expect(entry.components[1].points.map(p => p.value)).toEqual([7, 9]);
+    });
+
+    it('drops unparseable timestamps and null values instead of turning them into NaN', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', {
+                gpu_memory_usage: {
+                    units: 'bytes',
+                    series: [
+                        { ts: 'not-a-date', value: 5 },
+                        { ts: '2026-01-01T00:00:00Z', value: 4 },
+                        { ts: '2026-01-01T00:00:15Z', value: null },
+                        { ts: '2026-01-01T00:00:30Z', value: 6 },
+                    ],
+                },
+            }),
+        )), 'gpu_memory_usage');
+        expect(entry.components[0].points).toEqual([
+            { tSec: 0, value: 4 },
+            { tSec: 30, value: 6 },
+        ]);
+    });
+
+    it('omits components with no usable points and drops a field left with none', () => {
+        const doc = observabilityReport({
+            ...comps(
+                comp('empty', { gpu_memory_usage: { units: 'bytes', series: [] } }),
+                comp('bad', { gpu_memory_usage: { units: 'bytes', series: [{ ts: 'nope', value: 1 }] } }),
+            ),
+            vllm_num_requests_running: { aggregated: { mean: 2 } },
+        });
+        const parsed = parseReportV02(doc, 'f.yaml');
+        expect(parsed.observability.timeSeries).toBe(null);
+        expect(parsed.observability.numRequestsRunningMean).toBe(2);
+    });
+
+    it('humanizes a field with no curated label', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { some_future_field: seriesOf('count', [3, 4]) }),
+        )), 'some_future_field');
+        expect(entry.label).toBe('Some Future Field');
+        expect(entry.units).toBe('count');
+    });
+
+    it('uses the curated label for a known field', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.5]) }),
+        )), 'kv_cache_usage');
+        expect(entry.label).toBe('KV Cache Usage');
+    });
+
+    it('yields an observability object with every aggregate null when only series are present', () => {
+        const parsed = parseReportV02(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.25, 0.75]) }),
+        )), 'f.yaml');
+        expect(parsed.observability).not.toBe(null);
+        expect(parsed.observability.kvCacheUsageMean).toBe(null);
+        expect(parsed.observability.timeSeries.kv_cache_usage.components.length).toBe(1);
+    });
+
+    it('leaves observability null when neither aggregates nor series are present', () => {
+        const parsed = parseReportV02(observabilityReport({
+            vllm_kv_cache_usage_perc: { aggregated: {} },
+        }), 'f.yaml');
+        expect(parsed.observability).toBe(null);
+    });
+
+    it('fans one component carrying several fields into one entry per field', () => {
+        const parsed = parseReportV02(observabilityReport(comps(
+            comp('decode-1', {
+                kv_cache_usage: seriesOf('fraction', [0.2, 0.4]),
+                gpu_utilization: seriesOf('percent', [40, 80]),
+                power_consumption: seriesOf('Watts', [250.5, 310]),
+            }),
+        )), 'f.yaml');
+        const ts = parsed.observability.timeSeries;
+        expect(Object.keys(ts).sort()).toEqual(['gpu_utilization', 'kv_cache_usage', 'power_consumption']);
+        expect(ts.power_consumption.units).toBe('Watts');
+        expect(ts.kv_cache_usage.components[0].pod).toBe('decode-1');
+        expect(ts.kv_cache_usage.components[0].role).toBe('decode-engine');
+    });
+
+    it('keeps multiple replicas of one field as distinct components, in order', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('decode-1', { kv_cache_usage: seriesOf('fraction', [0.1]) }, 'decode-engine'),
+            comp('prefill-1', { kv_cache_usage: seriesOf('fraction', [0.9]) }, 'prefill-engine'),
+        )), 'kv_cache_usage');
+        expect(entry.components.map(c => c.pod)).toEqual(['decode-1', 'prefill-1']);
+        expect(entry.components.map(c => c.role)).toEqual(['decode-engine', 'prefill-engine']);
+    });
+
+    it('decides fraction-vs-percent over every component of a field so pods never end up 100x apart', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.2, 0.9]) }),
+            comp('p2', { kv_cache_usage: seriesOf('fraction', [0.2, 1.0000001]) }),
+        )), 'kv_cache_usage');
+        expect(entry.components[0].points.map(p => p.value)).toEqual([0.2, 0.9]);
+        expect(entry.components[1].points.map(p => p.value)).toEqual([0.2, 1.0000001]);
+        expect(entry.units).toBe('fraction');
+    });
+
+    it('keeps fraction units when one glitch sample exceeds 1', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.2, 0.4, 1.05, 0.6]) }),
+        )), 'kv_cache_usage');
+        expect(entry.components[0].points.map(p => p.value)).toEqual([0.2, 0.4, 1.05, 0.6]);
+        expect(entry.units).toBe('fraction');
+    });
+
+    it('flags components disagreeing on units instead of silently co-plotting them', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { power_consumption: seriesOf('Watts', [300]) }),
+            comp('p2', { power_consumption: seriesOf('milliwatts', [300000]) }),
+        )), 'power_consumption');
+        expect(entry.unitsConflict).toBe(true);
+        expect(entry.components.length).toBe(2);
+    });
+
+    it('sets no conflict flag when units agree, ignoring surrounding whitespace', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf(' fraction ', [0.5]) }),
+            comp('p2', { kv_cache_usage: seriesOf('fraction', [0.25]) }),
+        )), 'kv_cache_usage');
+        expect(entry.unitsConflict).toBeUndefined();
+        expect(entry.units).toBe('percent');
+        expect(entry.components.map(c => c.points[0].value)).toEqual([50, 25]);
+    });
+
+    it('collapses repeated timestamps to the first reading', () => {
+        const entry = tsOf(observabilityReport(comps(
+            comp('p1', {
+                gpu_memory_usage: {
+                    units: 'bytes',
+                    series: [
+                        { ts: '2026-01-01T00:00:00Z', value: 10 },
+                        { ts: '2026-01-01T00:00:00Z', value: 90 },
+                        { ts: '2026-01-01T00:00:15Z', value: 20 },
+                    ],
+                },
+            }),
+        )), 'gpu_memory_usage');
+        expect(entry.components[0].points).toEqual([
+            { tSec: 0, value: 10 },
+            { tSec: 15, value: 20 },
+        ]);
+    });
+
+    it('strips time series before persisting and rebuilds them from rawReport on load', () => {
+        const doc = observabilityReport(comps(
+            comp('p1', { kv_cache_usage: seriesOf('fraction', [0.2, 0.4]) }),
+        ));
+        const stage = parseReportV02(doc, 'f.yaml');
+        expect(stage.observability.timeSeries).not.toBe(null);
+
+        const runs = [{ runId: 'r1', stages: [stage] }];
+        const stripped = stripDerivedTimeSeries(runs);
+        expect(stripped[0].stages[0].observability.timeSeries).toBeUndefined();
+        expect('timeSeries' in stripped[0].stages[0].observability).toBe(false);
+        expect(stripped[0].stages[0].rawReport).not.toBeUndefined();
+        expect(runs[0].stages[0].observability.timeSeries).not.toBeUndefined();
+
+        const roundTripped = rehydrateDerivedTimeSeries(JSON.parse(JSON.stringify(stripped)));
+        expect(roundTripped[0].stages[0].observability.timeSeries).toEqual(
+            stage.observability.timeSeries,
+        );
+    });
+});
+
+describe('unit families', () => {
+    it('scales portion units onto one axis and keeps other families apart', () => {
+        expect(resolveUnitFamily('fraction')).toEqual({ family: 'portion', axisUnits: 'percent', factor: 100 });
+        expect(resolveUnitFamily('percent')).toEqual({ family: 'portion', axisUnits: 'percent', factor: 1 });
+        // the spec keeps RATIO out of the portion group: it is unbounded
+        expect(resolveUnitFamily('ratio').family).toBe('ratio');
+        expect(resolveUnitFamily('count').family).toBe('count');
+        expect(resolveUnitFamily(null)).toEqual({ family: 'unitless', axisUnits: null, factor: 1 });
+        // memory units are case-sensitive in the spec and must not be conflated
+        expect(resolveUnitFamily('MB').family).toBe('MB');
+        expect(resolveUnitFamily('MiB').family).toBe('MiB');
+    });
+});
