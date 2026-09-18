@@ -1831,13 +1831,15 @@ describe('extractTimeSeries', () => {
 });
 
 describe('unit families', () => {
-    it('unifies ratio units onto one scaled axis and isolates the rest', () => {
-        expect(resolveUnitFamily('fraction')).toEqual({ family: 'ratio', axisUnits: 'percent', factor: 100 });
-        expect(resolveUnitFamily('percent')).toEqual({ family: 'ratio', axisUnits: 'percent', factor: 1 });
-        expect(resolveUnitFamily('%').family).toBe('ratio');
+    it('scales portion units onto one axis and keeps other families apart', () => {
+        expect(resolveUnitFamily('fraction')).toEqual({ family: 'portion', axisUnits: 'percent', factor: 100 });
+        expect(resolveUnitFamily('percent')).toEqual({ family: 'portion', axisUnits: 'percent', factor: 1 });
+        // the spec keeps RATIO out of the portion group: it is unbounded
+        expect(resolveUnitFamily('ratio').family).toBe('ratio');
         expect(resolveUnitFamily('count').family).toBe('count');
         expect(resolveUnitFamily(null)).toEqual({ family: 'unitless', axisUnits: null, factor: 1 });
-        // an unknown unit is its own family, never folded in with another
-        expect(resolveUnitFamily('widgets').family).toBe('widgets');
+        // memory units are case-sensitive in the spec and must not be conflated
+        expect(resolveUnitFamily('MB').family).toBe('MB');
+        expect(resolveUnitFamily('MiB').family).toBe('MiB');
     });
 });

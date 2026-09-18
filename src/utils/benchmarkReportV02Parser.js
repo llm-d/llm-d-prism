@@ -87,32 +87,24 @@ export function unitToSecondsFactor(units) {
     return 1;
 }
 
-// Units that measure the same thing on a different scale can share one axis
-// once scaled; units that don't must never be co-plotted. Returns the family a
-// unit belongs to, the unit to label the shared axis with, and the factor that
-// brings values onto it. Unknown units are their own family, so they stay
-// isolated rather than silently joining one.
-const RATIO_FAMILY = {
-    percent: 1,
-    percentage: 1,
-    '%': 1,
-    pct: 1,
-    fraction: 100,
-    ratio: 100,
-    frac: 100,
-};
+// Units that measure the same thing on a different scale can share one axis once
+// scaled; units that don't must never be co-plotted. Families mirror the report
+// spec's own compatibility lists, so a unit the spec keeps separate -- RATIO is
+// unbounded and is not a portion -- stays separate here. The unit enum is closed,
+// so anything unrecognized is its own family rather than joining one.
+const PORTION_FACTORS = { percent: 1, fraction: 100 };
 
 export function resolveUnitFamily(units) {
     if (units === null || units === undefined || units === '') {
         return { family: 'unitless', axisUnits: null, factor: 1 };
     }
     if (typeof units !== 'string') return { family: 'unknown', axisUnits: units, factor: 1 };
-    const u = units.trim().toLowerCase();
+    const u = units.trim();
     if (u === '') return { family: 'unitless', axisUnits: null, factor: 1 };
-    if (u in RATIO_FAMILY) {
-        return { family: 'ratio', axisUnits: 'percent', factor: RATIO_FAMILY[u] };
+    if (u in PORTION_FACTORS) {
+        return { family: 'portion', axisUnits: 'percent', factor: PORTION_FACTORS[u] };
     }
-    return { family: u, axisUnits: units.trim(), factor: 1 };
+    return { family: u, axisUnits: u, factor: 1 };
 }
 
 export function normalizeLatencyStatistics(statBlock, defaultToken = false) {
