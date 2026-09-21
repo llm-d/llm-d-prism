@@ -3,7 +3,7 @@ import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, 
 import { v4 as uuidv4 } from 'uuid';
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure } from '../../utils/benchmarkValidator';
-import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits } from '../../utils/benchmarkReportV02Parser';
+import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags } from '../../utils/benchmarkReportV02Parser';
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 import { isValidUuid } from '../../utils/shareLinkEncoder';
@@ -150,6 +150,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
     const _existingRunIds = React.useMemo(() => brv02Runs.map(r => r.runId), [brv02Runs]);
 
     const [stagedFiles, setStagedFiles] = useState([]);
+    const [tagDrafts, setTagDrafts] = useState({});
     const [manifestUrlInputs, setManifestUrlInputs] = useState({});
     const [evidenceUrlInputs, setEvidenceUrlInputs] = useState({});
     const hasInitialized = React.useRef(false);
@@ -341,7 +342,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 inference_tool: selectedBundles.find(b => b.payload?.inference_tool)?.payload?.inference_tool || '',
                 inference_tool_version: selectedBundles.find(b => b.payload?.inference_tool_version)?.payload?.inference_tool_version || '',
                 benchmark_harness: selectedBundles.find(b => b.payload?.benchmark_harness)?.payload?.benchmark_harness || '',
-                benchmark_harness_version: selectedBundles.find(b => b.payload?.benchmark_harness_version)?.payload?.benchmark_harness_version || ''
+                benchmark_harness_version: selectedBundles.find(b => b.payload?.benchmark_harness_version)?.payload?.benchmark_harness_version || '',
+                tags: normalizeTags(selectedBundles.flatMap(b => b.payload?.tags || []))
             };
             executeCoalesce(selectedBundles, resolvedMetadata);
         }
@@ -390,6 +392,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     model_name: resolvedMetadata.model_name,
                     hardware_name: resolvedMetadata.hardware_name,
                     runLabel: resolvedMetadata.runLabel,
+                    tags: resolvedMetadata.tags,
                     inference_tool: resolvedMetadata.inference_tool,
                     inference_tool_version: resolvedMetadata.inference_tool_version,
                     benchmark_harness: resolvedMetadata.benchmark_harness,
@@ -438,6 +441,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 accelerator_count: resolvedMetadata.accelerator_count
             },
             ...(allForkedFrom.length > 0 ? { forked_from: allForkedFrom } : {}),
+            tags: resolvedMetadata.tags,
             attribution: targetBundles[0].payload?.attribution || null,
             manifests: targetBundles.reduce((acc, b) => ({ ...acc, ...(b.payload?.manifests || {}) }), {}),
             evidence: targetBundles.reduce((acc, b) => ({ ...acc, ...(b.payload?.evidence || {}) }), {}),
@@ -608,7 +612,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         inference_tool: bundlesToCoalesce.find(b => b.payload?.inference_tool)?.payload?.inference_tool || '',
                         inference_tool_version: bundlesToCoalesce.find(b => b.payload?.inference_tool_version)?.payload?.inference_tool_version || '',
                         benchmark_harness: bundlesToCoalesce.find(b => b.payload?.benchmark_harness)?.payload?.benchmark_harness || '',
-                        benchmark_harness_version: bundlesToCoalesce.find(b => b.payload?.benchmark_harness_version)?.payload?.benchmark_harness_version || ''
+                        benchmark_harness_version: bundlesToCoalesce.find(b => b.payload?.benchmark_harness_version)?.payload?.benchmark_harness_version || '',
+                        tags: normalizeTags(bundlesToCoalesce.flatMap(b => b.payload?.tags || []))
                     };
                     executeCoalesce(bundlesToCoalesce, resolvedMetadata, true);
                     autoGroupedCount += bundlesToCoalesce.length;
@@ -940,6 +945,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     updatedPayload.acceleratorCountInferred = false;
                 } else if (key === 'runLabel') {
                     updatedPayload.runLabel = value;
+                } else if (key === 'tags') {
+                    updatedPayload.tags = normalizeTags(String(value).split(','));
                 } else {
                     updatedPayload[key] = value;
                 }
@@ -948,6 +955,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     key === 'model_name' ||
                     key === 'hardware_name' ||
                     key === 'runLabel' ||
+                    key === 'tags' ||
                     key === 'accelerator_count' ||
                     key === 'inference_tool' ||
                     key === 'inference_tool_version' ||
@@ -961,6 +969,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                             model_name: updatedPayload.model_name,
                             hardware_name: updatedPayload.hardware?.hardware_name,
                             runLabel: updatedPayload.runLabel,
+                            tags: updatedPayload.tags,
                             accelerator_count: updatedPayload.hardware?.accelerator_count,
                             inference_tool: updatedPayload.inference_tool,
                             inference_tool_version: updatedPayload.inference_tool_version,
@@ -1774,6 +1783,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 entry.prism_stage_index = idx;
             });
 
+            const initialTags = normalizeTags(
+                payloadEntries.flatMap(e => e.raw_report?.run?.keywords || [])
+            );
+
             let initialInferenceTool = "";
             let initialInferenceToolVersion = "";
             let initialBenchmarkHarness = "";
@@ -1883,6 +1896,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                 entries: payloadEntries,
                 well_lit_path: null,
+                tags: initialTags,
                 metadata: {},
                 inference_tool: initialInferenceTool,
                 inference_tool_version: initialInferenceToolVersion,
@@ -2228,6 +2242,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     },
                     ...(forkedFromVal ? { forked_from: forkedFromVal } : {}),
                     well_lit_path: bundle.payload?.well_lit_path,
+                    tags: bundle.payload?.tags,
                     inference_tool: bundle.payload?.inference_tool,
                     inference_tool_version: bundle.payload?.inference_tool_version,
                     run_metadata: bundle.payload?.run_metadata,
@@ -3356,6 +3371,54 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                                                               </div>
                                                                           ) : (
                                                                               <span className="text-slate-300 font-semibold select-all text-xs">{bundle.name || bundle.payload?.runLabel || <span className="text-red-400 italic font-normal">Missing</span>}</span>
+                                                                          )}
+                                                                      </td>
+                                                                  </tr>
+                                                                  <tr className="hover:bg-slate-900/20">
+                                                                      <td className="px-3.5 py-2.5 font-semibold text-slate-400 border-r border-slate-800/45 bg-slate-950/30" style={{ width: '220px', minWidth: '220px' }}>
+                                                                          <span>Tags</span>
+                                                                      </td>
+                                                                      <td className="px-3.5 py-2.5">
+                                                                          {wizardStep === 2 ? (
+                                                                              <div className="w-full">
+                                                                                  <div className="relative flex items-center w-full group">
+                                                                                      <input
+                                                                                          type="text"
+                                                                                          value={tagDrafts[bundle.id] ?? (bundle.payload?.tags || []).join(', ')}
+                                                                                          onChange={(e) => {
+                                                                                              setTagDrafts(prev => ({ ...prev, [bundle.id]: e.target.value }));
+                                                                                              updateSingleField(bundle.id, 'tags', e.target.value);
+                                                                                          }}
+                                                                                          onBlur={() => setTagDrafts(prev => {
+                                                                                              const next = { ...prev };
+                                                                                              delete next[bundle.id];
+                                                                                              return next;
+                                                                                          })}
+                                                                                          className="w-full bg-slate-900/20 border border-slate-800/60 rounded-lg pl-3 pr-8 py-1.5 text-slate-200 focus:ring-0 focus:outline-none transition-all text-xs"
+                                                                                          placeholder="baseline, latency"
+                                                                                      />
+                                                                                      <div className="absolute right-2.5 flex items-center gap-2 pointer-events-none select-none">
+                                                                                          <Pencil size={10} className="text-slate-650 group-focus-within:text-cyan-400 transition-colors" />
+                                                                                      </div>
+                                                                                  </div>
+                                                                                  {(bundle.payload?.tags || []).length > 0 && (
+                                                                                      <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                                          {bundle.payload.tags.map(tag => (
+                                                                                              <Badge key={tag} size="xs" tone="brand">{tag}</Badge>
+                                                                                          ))}
+                                                                                      </div>
+                                                                                  )}
+                                                                              </div>
+                                                                          ) : (
+                                                                              (bundle.payload?.tags || []).length > 0 ? (
+                                                                                  <div className="flex flex-wrap gap-1">
+                                                                                      {bundle.payload.tags.map(tag => (
+                                                                                          <Badge key={tag} size="xs" tone="brand">{tag}</Badge>
+                                                                                      ))}
+                                                                                  </div>
+                                                                              ) : (
+                                                                                  <span className="text-slate-500 italic text-xs">None</span>
+                                                                              )
                                                                           )}
                                                                       </td>
                                                                   </tr>

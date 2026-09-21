@@ -1193,7 +1193,8 @@ export const UnifiedDataTable = (props) => {
             tp: new Set(), isl: new Set(), osl: new Set(), ratio: new Set(),
             acc_count: new Set(), modelServer: new Set(), useCase: new Set(),
             servingStack: new Set(), optimizations: new Set(), components: new Set(),
-            pdRatio: new Set(), origins: new Set(), connectionNames: new Set()
+            pdRatio: new Set(), origins: new Set(), connectionNames: new Set(),
+            tags: new Set()
         });
         setShowSelectedOnly(false);
         if (setKpiFilter) setKpiFilter(null);

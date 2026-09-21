@@ -112,6 +112,13 @@ describe('globUtils', () => {
     });
 
     describe('matchesBenchmarkStat', () => {
+        it('matches tags on underlying run data', () => {
+            const stat = { data: [{ metadata: { tags: ['baseline', 'latency'] } }] };
+            expect(matchesBenchmarkStat(stat, createGlobMatcher('latency'))).toBe(true);
+            expect(matchesBenchmarkStat(stat, createGlobMatcher('base*'))).toBe(true);
+            expect(matchesBenchmarkStat(stat, createGlobMatcher('throughput'))).toBe(false);
+        });
+
         const sampleStat = {
             benchmarkKey: 'meta-llama/Meta-Llama-3-70B-Instruct::8x H100 SXM5 80GB::vLLM 0.6.3::isl=512_osl=128',
             model: 'meta-llama/Meta-Llama-3-70B-Instruct',

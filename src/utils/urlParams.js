@@ -28,7 +28,8 @@ export const FILTER_KEYS_MAP = {
     useCase: 'f_uc',
     optimizations: 'f_opt',
     components: 'f_comp',
-    models: 'f_models'
+    models: 'f_models',
+    tags: 'f_tags'
 };
 
 export const RESULTS_STORE_EXTRA_PARAM_KEYS = [

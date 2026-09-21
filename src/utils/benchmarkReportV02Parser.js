@@ -591,6 +591,9 @@ const RawBRV02ReportSchema = z.object({
             start: z.string().nullable().optional(),
         }).passthrough().nullable().optional(),
         description: z.string().nullable().optional(),
+        // Loose on purpose: a strict shape here rejects the whole report, and
+        // normalizeTags already tolerates anything.
+        keywords: z.any().optional(),
     }).passthrough().nullable().optional(),
     scenario: z.object({
         stack: z.array(z.any()).nullable().optional(),
@@ -826,6 +829,7 @@ export function parseReportV02(yamlText, filename) {
         runCid: doc.run?.cid || null,
         runPid: doc.run?.pid || null,
         timestamp: doc.run?.time?.start || null,
+        tags: normalizeTags(doc.run?.keywords),
         stageIndex: doc.workload?.stage ?? load.stage ?? null,
         loadMetadata: doc.scenario?.load?.metadata || null,
         inference_tool: inferenceToolVal || null,
@@ -927,6 +931,21 @@ export function compareStageOrder(a, b) {
     return compareOriginalStageOrder(a, b);
 }
 
+// Collapse casing so filter options and predicates agree by construction.
+export function normalizeTags(raw) {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const t of raw) {
+        if (typeof t !== 'string') continue;
+        const tag = t.trim().toLowerCase();
+        if (!tag || seen.has(tag)) continue;
+        seen.add(tag);
+        out.push(tag);
+    }
+    return out;
+}
+
 /**
  * Merge an array of stage records into grouped runs.
  */
@@ -966,6 +985,7 @@ export function forwardBundleMetadata(stage, payload) {
     if (payload.benchmark_harness !== undefined && payload.benchmark_harness !== null) stage.benchmark_harness = payload.benchmark_harness;
     if (payload.benchmark_harness_version !== undefined && payload.benchmark_harness_version !== null) stage.benchmark_harness_version = payload.benchmark_harness_version;
     if (payload.other_tools) stage.other_tools = payload.other_tools;
+    if (payload.tags) stage.tags = normalizeTags(payload.tags);
     if (payload.manifests) stage.manifests = payload.manifests;
     if (payload.evidence) stage.evidence = payload.evidence;
     if (payload.run_metadata) stage.run_metadata = payload.run_metadata;
@@ -1399,6 +1419,10 @@ export function stageToEntry(stage) {
     // the description never reaches a label.
     const variant = stage.runLabel || '';
 
+    const tags = normalizeTags(
+        stage.tags || stage.payload?.tags || stage.metadata?.tags || stage.payload?.metadata?.tags
+    );
+
     return createEntry({
         payload: stage.payload || null,
         forked_from: stage.forked_from || stage.payload?.forked_from || null,
@@ -1418,6 +1442,7 @@ export function stageToEntry(stage) {
         latency,
         ttft,
         components: components || [],
+        tags,
         well_lit_path: stage.well_lit_path || stage.wellLitPath || stage.payload?.well_lit_path || null,
         wellLitPath: stage.well_lit_path || stage.wellLitPath || stage.payload?.well_lit_path || null,
         inference_tool: stage.inference_tool || stage.payload?.inference_tool || scenarioInferenceTool || '',
@@ -1467,6 +1492,7 @@ export function stageToEntry(stage) {
             tp: scenario.tp || 1,
             architecture: scenario.role || 'aggregate',
             components: components || [],
+            tags,
             stage_index: stage.prism_stage_index !== undefined && stage.prism_stage_index !== null
                 ? stage.prism_stage_index
                 : (stage.stageIndex !== undefined && stage.stageIndex !== null ? stage.stageIndex : null),
@@ -1518,13 +1544,14 @@ export function stageToEntry(stage) {
 }
 
 /**
- * Mutates/synchronizes metadata fields (model_name, hardware_name, runLabel, inference_tool, inference_tool_version, benchmark_harness, benchmark_harness_version, accelerator_count) in a BRV02 raw_report.
+ * Mutates/synchronizes metadata fields (model_name, hardware_name, runLabel, tags, inference_tool, inference_tool_version, benchmark_harness, benchmark_harness_version, accelerator_count) in a BRV02 raw_report.
  * Note: Stage numbers / uids are intentionally untouched.
  */
 export function mutateRawReportMetadata(rawReport, {
     model_name,
     hardware_name,
     runLabel,
+    tags,
     inference_tool,
     inference_tool_version,
     benchmark_harness,
@@ -1539,6 +1566,11 @@ export function mutateRawReportMetadata(rawReport, {
     if (runLabel) {
         if (!newReport.run) newReport.run = {};
         newReport.run.description = runLabel;
+    }
+
+    if (tags !== undefined && tags !== null) {
+        if (!newReport.run) newReport.run = {};
+        newReport.run.keywords = normalizeTags(tags);
     }
 
     // 2. Update model name in scenario.stack and load.native

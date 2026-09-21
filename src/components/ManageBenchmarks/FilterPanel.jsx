@@ -56,7 +56,8 @@ const FILTER_FIELD_LABELS = {
     ratio: 'Workload Type',
     useCase: 'Use Case',
     hardware: 'Accelerators',
-    acc_count: 'Accelerator Count'
+    acc_count: 'Accelerator Count',
+    tags: 'Tags'
 };
 
 const GROUP_BY_OPTIONS = ['Model', 'Hardware', 'Origin', 'OriginFolder'];
@@ -1072,13 +1073,23 @@ export const FilterPanel = ({
                             />
                         </div>
 
-                        <div className="w-40 flex-shrink-0 border-r border-slate-800/40 pr-3">
+                        <div className="w-40 flex-shrink-0">
                             <MultiSelectDropdown 
                                 label="Accelerators"
                                 options={filterOptions.hardware}
                                 selected={activeFilters.hardware}
                                 onChange={(val) => toggleFilter('hardware', val)}
                                 counts={facetCounts.hardware}
+                            />
+                        </div>
+
+                        <div className="w-40 flex-shrink-0 border-r border-slate-800/40 pr-3">
+                            <MultiSelectDropdown 
+                                label="Tags"
+                                options={filterOptions.tags || []}
+                                selected={activeFilters.tags || new Set()}
+                                onChange={(val) => toggleFilter('tags', val)}
+                                counts={facetCounts.tags || {}}
                             />
                         </div>
 

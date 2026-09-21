@@ -700,7 +700,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             optimizations: {},
             origins: {},
             components: {},
-            pdRatio: {}
+            pdRatio: {},
+            tags: {}
         };
 
         const canonicalModelMap = {};
@@ -778,6 +779,13 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                 if (!hasMatchingComp) return false;
             }
 
+            if (ignoreKey !== 'tags' && activeFilters.tags && activeFilters.tags.size > 0) {
+                const tags = d.tags || d.metadata?.tags;
+                if (!tags || !Array.isArray(tags) || tags.length === 0) return false;
+                const wanted = new Set([...activeFilters.tags].map(t => String(t).toLowerCase()));
+                if (!tags.some(t => wanted.has(String(t).toLowerCase()))) return false;
+            }
+
             return true;
         };
 
@@ -853,15 +861,21 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             if (comps.length > 0 && check(d, 'components')) {
                 comps.forEach(c => add('components', c, modelId));
             }
+
+            const entryTags = d.tags || d.metadata?.tags || [];
+            if (entryTags.length > 0 && check(d, 'tags')) {
+                entryTags.forEach(t => add('tags', t, modelId));
+            }
         });
 
         // Convert Sets to counts
         const finalCounts = {
             models: {}, hardware: {}, machines: {}, precisions: {}, tp: {}, isl: {}, osl: {}, ratio: {}, acc_count: {}, modelServer: {}, useCase: {}, servingStack: {}, optimizations: {}, origins: {},
             components: {},
+            tags: {},
             pdRatio: tempCounts.pdRatio
         };
-        ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins', 'components'].forEach(cat => {
+        ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins', 'components', 'tags'].forEach(cat => {
             Object.keys(tempCounts[cat]).forEach(key => {
                 finalCounts[cat][key] = tempCounts[cat][key].size;
             });
@@ -933,6 +947,13 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                 if (!hasMatchingComp) return false;
             }
 
+            if (activeFilters.tags && activeFilters.tags.size > 0) {
+                const tags = d.tags || d.metadata?.tags;
+                if (!tags || !Array.isArray(tags) || tags.length === 0) return false;
+                const wanted = new Set([...activeFilters.tags].map(t => String(t).toLowerCase()));
+                if (!tags.some(t => wanted.has(String(t).toLowerCase()))) return false;
+            }
+
             if (activeFilters.origins.size > 0) {
                 const origin = d.source_info?.origin || d.source;
                 if (!activeFilters.origins.has(origin)) return false;
@@ -964,7 +985,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             servingStack: new Set(),
             optimizations: new Set(),
             pdRatio: new Set(),
-            origins: new Set()
+            origins: new Set(),
+            tags: new Set()
         };
 
         const seenModelsLower = new Set();
@@ -1016,6 +1038,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             // Extract Origin (Folder/Bucket/Upload Name)
             const origin = d.source_info?.origin || d.source;
             if (origin && origin !== 'Unknown') options.origins.add(origin);
+
+            (d.tags || d.metadata?.tags || []).forEach(t => options.tags.add(t));
         });
 
         return {
@@ -1048,7 +1072,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
                 if (pa !== pb) return pa - pb;
                 return da - db;
             }),
-            origins: [...options.origins].sort()
+            origins: [...options.origins].sort(),
+            tags: [...options.tags].sort()
         };
     }, [baseData]);
 

@@ -104,7 +104,8 @@ export const createEntry = (base) => ({
         accelerator_count: 1,
         accelerator_type: 'Unknown',
         precision: 'Unknown',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        tags: []
     },
     workload: {
         input_tokens: null,

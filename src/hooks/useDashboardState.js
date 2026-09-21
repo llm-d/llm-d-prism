@@ -54,6 +54,7 @@ export const getSharedState = () => {
             ucFilter: params.has('f_uc') ? parseSet('f_uc') : null,
             optFilter: params.has('f_opt') ? parseSet('f_opt') : null,
             compFilter: params.has('f_comp') ? parseSet('f_comp') : null,
+            tagsFilter: params.has('f_tags') ? parseSet('f_tags') : null,
             sources: params.has('src') ? parseSet('src') : null,
             buckets: params.getAll('buckets'),
             giqProjects: params.getAll('apis'),
@@ -244,7 +245,8 @@ export const useDashboardState = () => {
             pdRatio: resolveFilterSet(initialState.pdRatioFilter, savedFilters.pdRatio),
             acc_count: resolveFilterSet(initialState.accFilter, savedFilters.acc_count),
             useCase: resolveFilterSet(initialState.ucFilter, savedFilters.useCase),
-            optimizations: resolveFilterSet(initialState.optFilter, savedFilters.optimizations)
+            optimizations: resolveFilterSet(initialState.optFilter, savedFilters.optimizations),
+            tags: resolveFilterSet(initialState.tagsFilter, savedFilters.tags)
         };
     });
 
@@ -295,6 +297,7 @@ export const useDashboardState = () => {
         if (activeFilters.useCase.size > 0) [...activeFilters.useCase].forEach(v => params.append('f_uc', v));
         if (activeFilters.optimizations.size > 0) [...activeFilters.optimizations].forEach(v => params.append('f_opt', v));
         if (activeFilters.components.size > 0) [...activeFilters.components].forEach(v => params.append('f_comp', v));
+        if (activeFilters.tags && activeFilters.tags.size > 0) [...activeFilters.tags].forEach(v => params.append('f_tags', v));
         
         bucketConfigs.forEach(b => params.append('buckets', typeof b === 'string' ? b : b.bucket));
         apiConfigs.forEach(c => params.append('apis', typeof c === 'string' ? c : c.projectId));

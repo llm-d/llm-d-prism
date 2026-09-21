@@ -120,6 +120,8 @@ export const PrismResultPayloadSchema = z.object({
     submitted_at: z.string().datetime().nullable().optional(),
     /** Selected "Well-Lit Path" optimization and deployment classification. Example: "optimized-baseline" */
     well_lit_path: z.string().nullable().optional(),
+    /** Free-form keywords used to group and filter runs. Persisted to run.keywords. Example: ["baseline", "latency"] */
+    tags: z.array(z.string()).nullable().optional(),
     /** Name of the primary backend inference execution engine. Example: "vllm" | "tgi" | "sglang" */
     inference_tool: z.string().nullable().optional(),
     /** Software version of the main inference execution tool. Example: "v0.4.2" */

@@ -553,7 +553,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                     acc_count: new Set(),
                     useCase: new Set(),
                     optimizations: new Set(),
-                    connectionNames: new Set()
+                    connectionNames: new Set(),
+                    tags: new Set()
                 });
             }
         }
@@ -675,6 +676,13 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                 if (!hasMatchingComp) return false;
             }
 
+            if (activeFilters.tags && activeFilters.tags.size > 0) {
+                const tags = d.tags || d.metadata?.tags;
+                if (!tags || !Array.isArray(tags) || tags.length === 0) return false;
+                const wanted = new Set([...activeFilters.tags].map(t => String(t).toLowerCase()));
+                if (!tags.some(t => wanted.has(String(t).toLowerCase()))) return false;
+            }
+
             return true;
         });
         return res;
@@ -782,7 +790,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             servingStack: new Set(),
             pdRatio: new Set(),
             origins: new Set(),
-            connectionNames: new Set()
+            connectionNames: new Set(),
+            tags: new Set()
         };
 
         const baseData = data;
@@ -831,6 +840,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
             const connName = getSourceTag(d);
             if (connName && connName !== 'UNK') options.connectionNames.add(connName);
+
+            (d.tags || d.metadata?.tags || []).forEach(t => options.tags.add(t));
         });
 
         return {
@@ -861,7 +872,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                 return da - db;
             }),
             origins: [...options.origins].sort(),
-            connectionNames: [...options.connectionNames].sort()
+            connectionNames: [...options.connectionNames].sort(),
+            tags: [...options.tags].sort()
         };
     }, [data]);
 
@@ -885,7 +897,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             origins: {},
             connectionNames: {},
             components: {},
-            pdRatio: {}
+            pdRatio: {},
+            tags: {}
         };
 
         const baseData = data;
@@ -989,6 +1002,13 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                 if (!hasMatchingComp) return false;
             }
 
+            if (ignoreKey !== 'tags' && activeFilters.tags && activeFilters.tags.size > 0) {
+                const tags = d.tags || d.metadata?.tags;
+                if (!tags || !Array.isArray(tags) || tags.length === 0) return false;
+                const wanted = new Set([...activeFilters.tags].map(t => String(t).toLowerCase()));
+                if (!tags.some(t => wanted.has(String(t).toLowerCase()))) return false;
+            }
+
             return true;
         };
 
@@ -1043,15 +1063,20 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
             const accCount = getAcceleratorCount(d);
             if (accCount && check(d, 'acc_count')) add('acc_count', accCount, modelId);
+
+            const entryTags = d.tags || d.metadata?.tags || [];
+            if (entryTags.length > 0 && check(d, 'tags')) {
+                entryTags.forEach(t => add('tags', t, modelId));
+            }
         });
 
         // Convert Sets of unique modelIds to numeric counts
         const finalCounts = {
             models: {}, hardware: {}, machines: {}, precisions: {}, tp: {}, isl: {}, osl: {}, ratio: {}, acc_count: {}, modelServer: {}, useCase: {}, servingStack: {}, optimizations: {}, origins: {}, connectionNames: {},
-            components: {}, pdRatio: {}
+            components: {}, pdRatio: {}, tags: {}
         };
 
-        const categories = ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins', 'connectionNames', 'components'];
+        const categories = ['models', 'hardware', 'machines', 'precisions', 'tp', 'isl', 'osl', 'ratio', 'acc_count', 'modelServer', 'useCase', 'servingStack', 'optimizations', 'pdRatio', 'origins', 'connectionNames', 'components', 'tags'];
         categories.forEach(cat => {
             Object.keys(tempCounts[cat]).forEach(key => {
                 finalCounts[cat][key] = tempCounts[cat][key].size;

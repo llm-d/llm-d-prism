@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     parseReportV02,
+    normalizeTags,
     groupStagesIntoRuns,
     stageToEntry,
     unitToSecondsFactor,
@@ -1841,5 +1842,55 @@ describe('unit families', () => {
         // memory units are case-sensitive in the spec and must not be conflated
         expect(resolveUnitFamily('MB').family).toBe('MB');
         expect(resolveUnitFamily('MiB').family).toBe('MiB');
+    });
+});
+
+describe('tags', () => {
+    it('normalizes casing, padding and duplicates', () => {
+        expect(normalizeTags(['  Baseline ', 'baseline', 'Latency', '', null, 3])).toEqual(['baseline', 'latency']);
+        expect(normalizeTags(null)).toEqual([]);
+        expect(normalizeTags('baseline')).toEqual([]);
+    });
+
+    const reportWithKeywords = (keywords) => ({
+        version: '0.2',
+        run: { uid: 'tag-uid-1', eid: 'e5a2b5d0-0000-4000-8000-000000000001', description: 'tagged', keywords },
+        scenario: {
+            stack: [{ standardized: { model: { name: 'meta/llama-3-8b' }, accelerator: { count: 1, model: 'H100' } } }],
+            load: { standardized: { rate: 1 } },
+        },
+        results: { performance: { requests: { total: 1 } } },
+    });
+
+    it('reads run.keywords', () => {
+        expect(parseReportV02(reportWithKeywords(['Baseline', 'baseline', ' latency '])).tags).toEqual(['baseline', 'latency']);
+        expect(parseReportV02(reportWithKeywords(undefined)).tags).toEqual([]);
+    });
+
+    it('exposes tags on the entry', () => {
+        const stage = parseReportV02(reportWithKeywords(['baseline']));
+        const entry = stageToEntry(stage);
+        expect(entry.tags).toEqual(['baseline']);
+        expect(entry.metadata.tags).toEqual(['baseline']);
+    });
+
+    it('tolerates malformed keywords without dropping the report', () => {
+        for (const kw of ['baseline,latency', ['ok', 3], [['a']], 42]) {
+            const parsed = parseReportV02(reportWithKeywords(kw));
+            expect(parsed).not.toBeNull();
+            expect(parsed.performance).toBeTruthy();
+        }
+        expect(parseReportV02(reportWithKeywords(['ok', 3])).tags).toEqual(['ok']);
+    });
+
+    it('forwards payload tags onto the stage', () => {
+        const stage = parseReportV02(reportWithKeywords(['fromreport']));
+        expect(forwardBundleMetadata(stage, { tags: ['FromPayload'] }).tags).toEqual(['frompayload']);
+    });
+
+    it('writes back to run.keywords', () => {
+        const mutated = mutateRawReportMetadata(reportWithKeywords(['old']), { tags: ['New', 'new'] });
+        expect(mutated.run.keywords).toEqual(['new']);
+        expect(mutateRawReportMetadata(reportWithKeywords(['old']), {}).run.keywords).toEqual(['old']);
     });
 });

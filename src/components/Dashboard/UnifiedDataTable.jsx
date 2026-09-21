@@ -164,7 +164,8 @@ export const UnifiedDataTable = (props) => {
                                                         optimizations: new Set(),
                                                         components: new Set(),
                                                         pdRatio: new Set(),
-                                                        origins: new Set()
+                                                        origins: new Set(),
+                                                        tags: new Set()
                                                     });
                                                     setShowSelectedOnly(false);
 

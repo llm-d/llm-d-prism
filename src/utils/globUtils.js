@@ -126,6 +126,8 @@ export function matchesBenchmarkStat(stat, search) {
             if (item.backend && matcher(item.backend)) return true;
             if (item.metadata?.model_name && matcher(item.metadata.model_name)) return true;
             if (item.metadata?.hardware && matcher(item.metadata.hardware)) return true;
+            const itemTags = item.tags || item.metadata?.tags;
+            if (Array.isArray(itemTags) && itemTags.some(t => matcher(t))) return true;
         }
     }
 
