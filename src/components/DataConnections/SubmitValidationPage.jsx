@@ -1064,6 +1064,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     const accLower = gkeAcc.toLowerCase();
                     if (accLower.includes('h100')) resolvedHw = 'H100';
                     else if (accLower.includes('a100')) resolvedHw = 'A100';
+                    else if (accLower.includes('l40s')) resolvedHw = 'L40S';
+                    else if (accLower.includes('l40')) resolvedHw = 'L40';
                     else if (accLower.includes('l4')) resolvedHw = 'L4';
                     else if (accLower.includes('t4')) resolvedHw = 'T4';
                     else resolvedHw = gkeAcc;

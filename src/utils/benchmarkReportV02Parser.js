@@ -1326,7 +1326,7 @@ export function stageToEntry(stage) {
         const accBackend = config.kustomize?.acceleratorBackend;
         let inferredHw = null;
         if (accBackend) {
-            const match = accBackend.match(/^(tpu-v\d+|h100|a100|l4)/i);
+            const match = accBackend.match(/^(tpu-v\d+|h100|a100|l40s|l40|l4)/i);
             if (match) {
                 const accel = match[1].toLowerCase();
                 if (accel.includes('v6')) inferredHw = 'TPU v6e';
@@ -1334,13 +1334,15 @@ export function stageToEntry(stage) {
                 else if (accel.includes('v5')) inferredHw = 'TPU v5e';
                 else if (accel.includes('h100')) inferredHw = 'H100';
                 else if (accel.includes('a100')) inferredHw = 'A100';
+                else if (accel.includes('l40s')) inferredHw = 'L40S';
+                else if (accel.includes('l40')) inferredHw = 'L40';
                 else if (accel.includes('l4')) inferredHw = 'L4';
             }
         }
         if (!inferredHw) {
             const stdType = config.standalone?.acceleratorType?.labelValue || config.prefill?.acceleratorType?.labelValue;
             if (stdType) {
-                const match = stdType.match(/(h100|a100|l4|tpu-v\d+)/i);
+                const match = stdType.match(/(h100|a100|l40s|l40|l4|tpu-v\d+)/i);
                 if (match) {
                     const accel = match[1].toLowerCase();
                     if (accel.includes('v6')) inferredHw = 'TPU v6e';
@@ -1348,6 +1350,8 @@ export function stageToEntry(stage) {
                     else if (accel.includes('v5')) inferredHw = 'TPU v5e';
                     else if (accel.includes('h100')) inferredHw = 'H100';
                     else if (accel.includes('a100')) inferredHw = 'A100';
+                    else if (accel.includes('l40s')) inferredHw = 'L40S';
+                    else if (accel.includes('l40')) inferredHw = 'L40';
                     else if (accel.includes('l4')) inferredHw = 'L4';
                 }
             }

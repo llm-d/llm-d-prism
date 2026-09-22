@@ -180,6 +180,8 @@ export const normalizeHardware = (hw) => {
     if (s.includes('h200')) return 'H200';
     if (s.includes('h100')) return 'H100';
     if (s.includes('a100')) return 'A100';
+    if (s.includes('l40s')) return 'L40S';
+    if (s.includes('l40')) return 'L40';
     if (s.includes('l4')) return 'L4';
     if (s.includes('t4')) return 'T4';
 
@@ -1208,6 +1210,8 @@ export function parseLpgLifecycleMetrics(json, filename, metadataOverride = {}) 
         else if (lowerName.includes('h200')) hardware = 'H200';
         else if (lowerName.includes('h100')) hardware = 'H100';
         else if (lowerName.includes('a100')) hardware = 'A100';
+        else if (lowerName.includes('l40s')) hardware = 'L40S';
+        else if (lowerName.includes('l40')) hardware = 'L40';
         else if (lowerName.includes('l4')) hardware = 'L4';
         else if (lowerName.includes('tpu') && lowerName.includes('v6e')) hardware = 'TPU v6e';
         else if (lowerName.includes('tpu') && lowerName.includes('v5e')) hardware = 'TPU v5e';
@@ -1403,6 +1407,8 @@ export function parseLpgRequestLog(jsonArray, filename, metadataOverride = {}) {
         else if (lowerName.includes('h200')) { hardware = 'H200'; }
         else if (lowerName.includes('h100')) { hardware = 'H100'; }
         else if (lowerName.includes('a100')) { hardware = 'A100'; }
+        else if (lowerName.includes('l40s')) { hardware = 'L40S'; }
+        else if (lowerName.includes('l40')) { hardware = 'L40'; }
         else if (lowerName.includes('l4')) { hardware = 'L4'; }
         else if (lowerName.includes('tpu') && lowerName.includes('v6e')) { hardware = 'TPU v6e'; }
         else if (lowerName.includes('tpu') && lowerName.includes('v5e')) { hardware = 'TPU v5e'; }

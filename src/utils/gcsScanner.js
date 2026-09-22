@@ -17,6 +17,8 @@ export const normalizeHardware = (hw) => {
     const s = String(hw).toUpperCase();
     if (s.includes('H100')) return 'NVIDIA H100';
     if (s.includes('A100')) return 'NVIDIA A100';
+    if (s.includes('L40S')) return 'NVIDIA L40S';
+    if (s.includes('L40')) return 'NVIDIA L40';
     if (s.includes('L4')) return 'NVIDIA L4';
     if (s.includes('T4')) return 'NVIDIA T4';
     if (s.includes('B200')) return 'NVIDIA B200';
