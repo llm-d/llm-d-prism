@@ -15,51 +15,58 @@ import {
     BarChart, Bar, Cell, CartesianGrid, ReferenceLine,
     ResponsiveContainer, LabelList, Tooltip,
 } from 'recharts';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import {
-    ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
+    Button, ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
     CHART_SERIES, EmptyState, ToggleGroup, gridProps,
 } from '../ui';
 import { cn } from '../../utils/cn';
 import { getEntryLabel, getCustomLabelRunId } from '../../utils/runLabel';
 
-// One-bar-per-run comparison chart. Metrics are grouped into families
-// (TTFT / TPOT / ITL / E2E / observability) so the user picks the family
-// once and then chooses any combination of mean / p50 / p99 — selected
-// stats render as side-by-side grouped bars in the same plot.
+// One-bar-per-run comparison chart. Metrics sit in groups, so the user picks a
+// group, then a metric, then any combination of mean / p50 / p99 — selected
+// stats render as side-by-side grouped bars in the same plot. Groups and metrics
+// the selected runs do not report are left out of the selector.
+
+// A zero total has no rate, so it shows as missing instead of 0%.
+const failureRate = (failed, total) => {
+    if (failed === null || failed === undefined) return null;
+    if (total === null || total === undefined || total === 0) return null;
+    return (failed / total) * 100;
+};
 
 const METRICS = [
     // Throughput family — single stat each
-    { id: 'output_tput', label: 'Output Tput', unit: 'tok/s', dec: 0, higher: true,
+    { id: 'output_tput', group: 'throughput', label: 'Output Tput', unit: 'tok/s', dec: 0, higher: true,
       stats: [{ id: 'mean', label: 'mean',
                 fn: d => d.metrics?.output_tput ?? d.throughput }] },
-    { id: 'input_tput',  label: 'Input Tput',  unit: 'tok/s', dec: 0, higher: true,
+    { id: 'input_tput',  group: 'throughput', label: 'Input Tput',  unit: 'tok/s', dec: 0, higher: true,
       stats: [{ id: 'mean', label: 'mean',
                 fn: d => d.metrics?.input_tput }] },
-    { id: 'request_rate', label: 'Request rate', unit: 'req/s', dec: 2, higher: true,
+    { id: 'request_rate', group: 'throughput', label: 'Request rate', unit: 'req/s', dec: 2, higher: true,
       stats: [{ id: 'mean', label: 'mean',
                 fn: d => d.metrics?.request_rate ?? d.qps }] },
 
     // Latency family — mean / p50 / p99 sub-toggles
-    { id: 'ttft', label: 'TTFT', unit: 'ms', dec: 1, higher: false,
+    { id: 'ttft', group: 'latency', label: 'TTFT', unit: 'ms', dec: 1, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.ttft?.mean ?? d.ttft?.mean },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.ttft?.p50  ?? d.ttft?.p50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.ttft?.p99  ?? d.ttft?.p99 },
       ] },
-    { id: 'tpot', label: 'TPOT', unit: 'ms', dec: 2, higher: false,
+    { id: 'tpot', group: 'latency', label: 'TPOT', unit: 'ms', dec: 2, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.tpot ?? d.time_per_output_token },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.tpot_p50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.tpot_p99 },
       ] },
-    { id: 'itl', label: 'ITL', unit: 'ms', dec: 2, higher: false,
+    { id: 'itl', group: 'latency', label: 'ITL', unit: 'ms', dec: 2, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.itl ?? d.itl },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.itl_p50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.itl_p99 },
       ] },
-    { id: 'e2e', label: 'E2E', unit: 'ms', dec: 1, higher: false,
+    { id: 'e2e', group: 'latency', label: 'E2E', unit: 'ms', dec: 1, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.e2e_latency ?? d.latency?.mean },
         { id: 'p50',  label: 'p50',  fn: d => d.latency?.p50 ?? d.metrics?.latency?.p50 },
@@ -67,30 +74,67 @@ const METRICS = [
       ] },
 
     // Observability — only present in v0.2 reports
-    { id: 'kv_cache_usage', label: 'KV cache usage', unit: '%', dec: 1, higher: false,
+    { id: 'kv_cache_usage', group: 'observability', label: 'KV cache usage', unit: '%', dec: 1, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.kvCacheUsageMean },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.kvCacheUsageP50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.kvCacheUsageP99 },
       ] },
-    { id: 'prefix_cache_hit', label: 'Prefix cache hit', unit: '%', dec: 1, higher: true,
+    { id: 'prefix_cache_hit', group: 'observability', label: 'Prefix cache hit', unit: '%', dec: 1, higher: true,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.prefixCacheHitMean },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.prefixCacheHitP50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.prefixCacheHitP99 },
       ] },
-    { id: 'epp_queue', label: 'EPP queue size', unit: '', dec: 1, higher: false,
+    { id: 'epp_queue', group: 'observability', label: 'EPP queue size', unit: '', dec: 1, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.eppQueueMean },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.eppQueueP50 },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.eppQueueP99 },
       ] },
-    { id: 'pod_startup', label: 'Pod startup', unit: 's', dec: 1, higher: false,
+    { id: 'pod_startup', group: 'observability', label: 'Pod startup', unit: 's', dec: 1, higher: false,
       stats: [
         { id: 'mean', label: 'mean', fn: d => d.metrics?.observability?.podStartupMeanS },
         { id: 'p50',  label: 'p50',  fn: d => d.metrics?.observability?.podStartupP50S },
         { id: 'p99',  label: 'p99',  fn: d => d.metrics?.observability?.podStartupP99S },
       ] },
+
+    // Sessions and requests come in separate files, so a run usually has one
+    // group or the other, not both.
+    { id: 'sessions_completed', group: 'sessions', label: 'Sessions completed', unit: '', dec: 0, higher: true,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => d.metrics?.sessions?.sessionsCompleted }] },
+    { id: 'sessions_failed', group: 'sessions', label: 'Sessions failed', unit: '', dec: 0, higher: false,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => d.metrics?.sessions?.sessionsFailed }] },
+    { id: 'sessions_failed_pct', group: 'sessions', label: 'Sessions failed %', unit: '%', dec: 2, higher: false,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => failureRate(d.metrics?.sessions?.sessionsFailed, d.metrics?.sessions?.sessionsTotal) }] },
+    { id: 'session_duration', group: 'sessions', label: 'Session duration', unit: 's', dec: 1, higher: false,
+      stats: [
+        { id: 'mean', label: 'mean', fn: d => d.metrics?.sessions?.sessionDurationMeanS },
+        { id: 'p50',  label: 'p50',  fn: d => d.metrics?.sessions?.sessionDurationP50S },
+        { id: 'p99',  label: 'p99',  fn: d => d.metrics?.sessions?.sessionDurationP99S },
+      ] },
+
+    // No request duration here: it is the E2E metric above.
+    { id: 'requests_completed', group: 'requests', label: 'Requests completed', unit: '', dec: 0, higher: true,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => d.metrics?.requests_completed }] },
+    { id: 'requests_failed', group: 'requests', label: 'Requests failed', unit: '', dec: 0, higher: false,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => d.metrics?.requests_failed }] },
+    { id: 'requests_failed_pct', group: 'requests', label: 'Requests failed %', unit: '%', dec: 2, higher: false,
+      stats: [{ id: 'mean', label: 'mean',
+                fn: d => failureRate(d.metrics?.requests_failed, d.metrics?.requests_total) }] },
+];
+
+const METRIC_GROUPS = [
+    { id: 'throughput',    label: 'Throughput' },
+    { id: 'latency',       label: 'Latency' },
+    { id: 'observability', label: 'Observability' },
+    { id: 'sessions',      label: 'Sessions' },
+    { id: 'requests',      label: 'Requests' },
 ];
 
 // Stable colors per stat — used for both bar fill and the legend.
@@ -129,6 +173,35 @@ const splitStages = (entries) => {
 
 const stageKey = (key, entry) => `${key}#stage${entry.workload?.stage}`;
 const runKeyOf = (key) => key.split('#stage')[0];
+
+// A run's stages are separate operating points, so each gets its own bar unless
+// the user has collapsed the run back to one. Stage keys stay local to this
+// chart: getBenchmarkKey still identifies the run, so selections and baselines
+// saved elsewhere keep working.
+const buildBarGroups = (filteredBySource, selectedBenchmarks, getBenchmarkKey, hiddenStages, collapsedRuns) => {
+    const byKey = new Map();
+    filteredBySource.forEach(d => {
+        const key = getBenchmarkKey(d);
+        if (!selectedBenchmarks.has(key)) return;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(d);
+    });
+
+    const groups = new Map();
+    byKey.forEach((entries, key) => {
+        const stages = splitStages(entries);
+        if (stages.length < 2 || collapsedRuns.has(key)) {
+            groups.set(key, entries);
+            return;
+        }
+        stages.forEach(entry => {
+            const sk = stageKey(key, entry);
+            if (hiddenStages.has(sk)) return;
+            groups.set(sk, [entry]);
+        });
+    });
+    return groups;
+};
 
 // A sweep's stages are separate operating points, so taking the best value of
 // each metric independently reports a configuration that never ran: peak
@@ -283,12 +356,14 @@ export const RunComparisonChart = ({
     brv02CustomLabels,
     theme,
 }) => {
+    const [groupId, setGroupId] = useState('throughput');
     const [metricId, setMetricId] = useState('output_tput');
     // Multi-select: any combination of {'mean','p50','p99'} for the active metric.
     const [statIds, setStatIds] = useState(() => new Set(['mean']));
     const [viewOverride, setViewOverride] = useState(null);
     const [hiddenStages, setHiddenStages] = useState(() => new Set());
     const [collapsedRuns, setCollapsedRuns] = useState(() => new Set());
+    const [showChartFilters, setShowChartFilters] = useState(true);
 
     useEffect(() => {
         if (!baselineBenchmarkKey) setViewOverride(null);
@@ -296,26 +371,6 @@ export const RunComparisonChart = ({
 
     const canDiff = !!baselineBenchmarkKey;
     const view = viewOverride ?? (canDiff ? 'diff' : 'absolute');
-
-    const metric = METRICS.find(m => m.id === metricId) || METRICS[0];
-
-    // Stats actually visible on the chart: intersection of the user's selection
-    // with the stats this metric supports. Always at least one; default 'mean'.
-    const activeStats = useMemo(() => {
-        const visible = metric.stats.filter(s => statIds.has(s.id));
-        return visible.length > 0 ? visible : [metric.stats[0]];
-    }, [metric, statIds]);
-
-    // When the user changes metric, drop selected stat ids that the new metric
-    // doesn't expose; if nothing remains, default back to mean.
-    useEffect(() => {
-        const supported = new Set(metric.stats.map(s => s.id));
-        setStatIds(prev => {
-            const next = new Set([...prev].filter(id => supported.has(id)));
-            if (next.size === 0) next.add('mean');
-            return next;
-        });
-    }, [metricId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const toggleStat = (id) => {
         setStatIds(prev => {
@@ -349,34 +404,73 @@ export const RunComparisonChart = ({
         return out;
     }, [filteredBySource, selectedBenchmarks, getBenchmarkKey]);
 
+    // The chart needs two bars to draw, so a metric that cannot reach two is
+    // not offered at all.
+    const availableMetricIds = useMemo(() => {
+        const groups = buildBarGroups(filteredBySource, selectedBenchmarks, getBenchmarkKey, hiddenStages, collapsedRuns);
+        const samples = [];
+        groups.forEach(entries => {
+            const sample = representativeEntry(entries);
+            if (sample) samples.push(sample);
+        });
+
+        // Any stat counts, not just the selected ones, so toggling a stat cannot
+        // make a metric vanish from the selector under the user's cursor.
+        const ids = new Set();
+        METRICS.forEach(m => {
+            const plottable = samples.filter(sample =>
+                m.stats.some(st => statValue(sample, st.fn) !== null)
+            ).length;
+            if (plottable >= 2) ids.add(m.id);
+        });
+        return ids;
+    }, [filteredBySource, selectedBenchmarks, getBenchmarkKey, hiddenStages, collapsedRuns]);
+
+    const availableGroups = useMemo(
+        () => METRIC_GROUPS.filter(g => METRICS.some(m => m.group === g.id && availableMetricIds.has(m.id))),
+        [availableMetricIds]
+    );
+
+    // Picked while rendering, not in an effect: a selection change can drop the
+    // active group or metric, and falling back here means no frame ever points
+    // at one with nothing to draw.
+    const activeGroupId = availableGroups.some(g => g.id === groupId)
+        ? groupId
+        : (availableGroups[0]?.id ?? groupId);
+
+    const groupMetrics = useMemo(
+        () => METRICS.filter(m => m.group === activeGroupId && availableMetricIds.has(m.id)),
+        [activeGroupId, availableMetricIds]
+    );
+
+    const activeMetricId = groupMetrics.some(m => m.id === metricId)
+        ? metricId
+        : (groupMetrics[0]?.id ?? metricId);
+
+    const metric = METRICS.find(m => m.id === activeMetricId) || METRICS[0];
+
+    // Stats actually visible on the chart: intersection of the user's selection
+    // with the stats this metric supports. Always at least one; default 'mean'.
+    const activeStats = useMemo(() => {
+        const visible = metric.stats.filter(s => statIds.has(s.id));
+        return visible.length > 0 ? visible : [metric.stats[0]];
+    }, [metric, statIds]);
+
+    // When the user changes metric, drop selected stat ids that the new metric
+    // doesn't expose; if nothing remains, default back to mean.
+    useEffect(() => {
+        const supported = new Set(metric.stats.map(s => s.id));
+        setStatIds(prev => {
+            const next = new Set([...prev].filter(id => supported.has(id)));
+            if (next.size === 0) next.add('mean');
+            return next;
+        });
+    }, [activeMetricId]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const chartData = useMemo(() => {
         if (selectedBenchmarks.size < 2) return [];
 
-        const byKey = new Map();
-        filteredBySource.forEach(d => {
-            const key = getBenchmarkKey(d);
-            if (!selectedBenchmarks.has(key)) return;
-            if (!byKey.has(key)) byKey.set(key, []);
-            byKey.get(key).push(d);
-        });
-
-        // A run's stages are separate operating points, so each gets its own bar
-        // unless the user has collapsed the run back to one. Stage keys stay local
-        // to this chart: getBenchmarkKey still identifies the run, so selections
-        // and baselines saved elsewhere keep working.
-        const groups = new Map();
-        byKey.forEach((entries, key) => {
-            const stages = splitStages(entries);
-            if (stages.length < 2 || collapsedRuns.has(key)) {
-                groups.set(key, entries);
-                return;
-            }
-            stages.forEach(entry => {
-                const sk = stageKey(key, entry);
-                if (hiddenStages.has(sk)) return;
-                groups.set(sk, [entry]);
-            });
-        });
+        const groups = buildBarGroups(filteredBySource, selectedBenchmarks, getBenchmarkKey, hiddenStages, collapsedRuns);
 
         // One hue per run so a sweep's stage bars read as a family.
         const runHues = new Map();
@@ -580,7 +674,15 @@ export const RunComparisonChart = ({
     const inactiveToggleClass = 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/50';
 
     return (
-        <ChartContainer title="Run Comparison">
+        <ChartContainer
+            title="Run Comparison"
+            actions={
+                <Button variant="secondary" size="sm" onClick={() => setShowChartFilters(v => !v)}>
+                    Filters
+                    {showChartFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </Button>
+            }
+        >
             {plotData.length > 20 && (
                 <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-start gap-2.5 leading-relaxed font-sans">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -590,113 +692,130 @@ export const RunComparisonChart = ({
                 </div>
             )}
             {/* Toggle row */}
-            <div className="flex items-center gap-3 flex-wrap mb-4">
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Metric</span>
-                    <ToggleGroup
-                        options={METRICS.map(opt => ({ value: opt.id, label: opt.label }))}
-                        value={metricId}
-                        onChange={setMetricId}
-                        className="flex-wrap"
-                    />
-                </div>
+            {showChartFilters && (
+                <div className="flex items-center gap-3 flex-wrap mb-4">
+                    {availableGroups.length > 1 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Group</span>
+                            <ToggleGroup
+                                options={availableGroups.map(g => ({ value: g.id, label: g.label }))}
+                                value={activeGroupId}
+                                onChange={setGroupId}
+                                aria-label="Metric group"
+                                className="flex-wrap"
+                            />
+                        </div>
+                    )}
 
-                {sweeps.map(({ key, stages }) => {
-                    const collapsed = collapsedRuns.has(key);
-                    const shown = stages.filter(e => !hiddenStages.has(stageKey(key, e))).length;
-                    return (
-                        <div key={key} className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
-                            <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stages</span>
-                            <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
-                            <button
-                                onClick={() => setCollapsedRuns(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(key)) next.delete(key); else next.add(key);
-                                    return next;
+                    {groupMetrics.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider">Metric</span>
+                            <ToggleGroup
+                                options={groupMetrics.map(opt => ({ value: opt.id, label: opt.label }))}
+                                value={activeMetricId}
+                                onChange={setMetricId}
+                                className="flex-wrap"
+                            />
+                        </div>
+                    )}
+
+                    {sweeps.map(({ key, stages }) => {
+                        const collapsed = collapsedRuns.has(key);
+                        const shown = stages.filter(e => !hiddenStages.has(stageKey(key, e))).length;
+                        return (
+                            <div key={key} className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                                <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stages</span>
+                                <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
+                                <button
+                                    onClick={() => setCollapsedRuns(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(key)) next.delete(key); else next.add(key);
+                                        return next;
+                                    })}
+                                    title={collapsed ? 'Show each stage as its own bar' : 'Combine the stages into one bar'}
+                                    className={cn(baseTogglesClass, collapsed ? activeClass('purple') : inactiveToggleClass)}
+                                >
+                                    {collapsed ? 'Combined' : 'Split'}
+                                </button>
+                                {!collapsed && stages.map(entry => {
+                                    const sk = stageKey(key, entry);
+                                    const isOn = !hiddenStages.has(sk);
+                                    const load = entry.workload?.concurrency ?? entry.workload?.target_qps;
+                                    return (
+                                        <button
+                                            key={sk}
+                                            onClick={() => setHiddenStages(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(sk)) next.delete(sk);
+                                                else if (shown > 1) next.add(sk);
+                                                return next;
+                                            })}
+                                            title={isOn && shown === 1 ? 'Keep at least one stage' : `Stage ${entry.workload?.stage}${load != null ? ` · ${load}` : ''}`}
+                                            className={cn(baseTogglesClass, isOn ? activeClass('cyan') : inactiveToggleClass)}
+                                        >
+                                            {entry.workload?.stage}
+                                        </button>
+                                    );
                                 })}
-                                title={collapsed ? 'Show each stage as its own bar' : 'Combine the stages into one bar'}
-                                className={cn(baseTogglesClass, collapsed ? activeClass('purple') : inactiveToggleClass)}
-                            >
-                                {collapsed ? 'Combined' : 'Split'}
-                            </button>
-                            {!collapsed && stages.map(entry => {
-                                const sk = stageKey(key, entry);
-                                const isOn = !hiddenStages.has(sk);
-                                const load = entry.workload?.concurrency ?? entry.workload?.target_qps;
+                            </div>
+                        );
+                    })}
+
+                    {metric.stats.length > 1 && (
+                        <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                            <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stat</span>
+                            <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
+                            {metric.stats.map(opt => {
+                                const isOn = statIds.has(opt.id);
                                 return (
                                     <button
-                                        key={sk}
-                                        onClick={() => setHiddenStages(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(sk)) next.delete(sk);
-                                            else if (shown > 1) next.add(sk);
-                                            return next;
-                                        })}
-                                        title={isOn && shown === 1 ? 'Keep at least one stage' : `Stage ${entry.workload?.stage}${load != null ? ` · ${load}` : ''}`}
-                                        className={cn(baseTogglesClass, isOn ? activeClass('cyan') : inactiveToggleClass)}
+                                        key={opt.id}
+                                        onClick={() => toggleStat(opt.id)}
+                                        title={isOn && statIds.size === 1 ? 'Keep at least one stat' : ''}
+                                        className={cn(
+                                            baseTogglesClass,
+                                            'flex items-center gap-1.5',
+                                            isOn ? activeClass('purple') : inactiveToggleClass
+                                        )}
                                     >
-                                        {entry.workload?.stage}
+                                        <span
+                                            className="w-2 h-2 rounded-sm"
+                                            style={{ background: STAT_COLORS[opt.id], opacity: isOn ? 1 : 0.45 }}
+                                        />
+                                        {opt.label}
                                     </button>
                                 );
                             })}
                         </div>
-                    );
-                })}
+                    )}
 
-                {metric.stats.length > 1 && (
                     <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
-                        <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">Stat</span>
+                        <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">View</span>
                         <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
-                        {metric.stats.map(opt => {
-                            const isOn = statIds.has(opt.id);
-                            return (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => toggleStat(opt.id)}
-                                    title={isOn && statIds.size === 1 ? 'Keep at least one stat' : ''}
-                                    className={cn(
-                                        baseTogglesClass,
-                                        'flex items-center gap-1.5',
-                                        isOn ? activeClass('purple') : inactiveToggleClass
-                                    )}
-                                >
-                                    <span
-                                        className="w-2 h-2 rounded-sm"
-                                        style={{ background: STAT_COLORS[opt.id], opacity: isOn ? 1 : 0.45 }}
-                                    />
-                                    {opt.label}
-                                </button>
-                            );
-                        })}
+                        <button
+                            onClick={() => setViewOverride('absolute')}
+                            className={cn(baseTogglesClass, view === 'absolute' ? activeClass('emerald') : inactiveToggleClass)}
+                        >
+                            Absolute
+                        </button>
+                        <button
+                            onClick={() => canDiff && setViewOverride('diff')}
+                            disabled={!canDiff}
+                            title={canDiff ? '' : 'Set a baseline (📌) on a row in the table to enable Δ% view'}
+                            className={cn(
+                                baseTogglesClass,
+                                !canDiff
+                                    ? 'text-slate-600 cursor-not-allowed opacity-50'
+                                    : view === 'diff'
+                                        ? activeClass('cyan')
+                                        : inactiveToggleClass
+                            )}
+                        >
+                            Δ% vs baseline
+                        </button>
                     </div>
-                )}
-
-                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
-                    <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider mr-1">View</span>
-                    <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mr-1" />
-                    <button
-                        onClick={() => setViewOverride('absolute')}
-                        className={cn(baseTogglesClass, view === 'absolute' ? activeClass('emerald') : inactiveToggleClass)}
-                    >
-                        Absolute
-                    </button>
-                    <button
-                        onClick={() => canDiff && setViewOverride('diff')}
-                        disabled={!canDiff}
-                        title={canDiff ? '' : 'Set a baseline (📌) on a row in the table to enable Δ% view'}
-                        className={cn(
-                            baseTogglesClass,
-                            !canDiff
-                                ? 'text-slate-600 cursor-not-allowed opacity-50'
-                                : view === 'diff'
-                                    ? activeClass('cyan')
-                                    : inactiveToggleClass
-                        )}
-                    >
-                        Δ% vs baseline
-                    </button>
                 </div>
-            </div>
+            )}
 
             <div className="h-[260px] overflow-x-auto overflow-y-hidden">
                 {hasPlotData ? (
@@ -773,14 +892,16 @@ export const RunComparisonChart = ({
                     <EmptyState
                         className="h-full py-0"
                         title={`No data for ${metric.label}`}
-                        message="The selected benchmarks don't include this metric. Try a different metric (observability metrics like KV cache usage and pod startup are only available in v0.2 reports), or select more benchmarks."
+                        message={metric.stats.length > 1
+                            ? 'Fewer than two of the selected benchmarks report this metric for the selected stats. Try another stat, another metric, or select more benchmarks.'
+                            : 'Fewer than two of the selected benchmarks report this metric. Try a different metric, or select more benchmarks.'}
                     />
                 )}
             </div>
 
             <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-center">
-                One bar per selected benchmark{activeStats.length > 1 ? ` × ${activeStats.length} stats` : ''} ·
-                multi-stage runs are shown at their peak-throughput stage
+                One bar per selected benchmark{activeStats.length > 1 ? ` × ${activeStats.length} stats` : ''}
+                {plotData.some(r => r.stageCount > 1) ? ' · combined runs are shown at their peak-throughput stage' : ''}
                 {canDiff
                     ? ' · Δ% in green = improvement, red = regression'
                     : ' · set a baseline (📌) on a run to enable Δ% comparison'}

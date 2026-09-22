@@ -269,6 +269,17 @@ export function detectMissingUnitWarnings(rawReport, filename = '') {
         }
     }
 
+    // 6. Session duration and rate
+    const sessions = doc.results?.session_performance?.sessions;
+    if (sessions && typeof sessions === 'object' && !Array.isArray(sessions)) {
+        if (isMissingUnits(sessions.session_duration)) {
+            addWarning('$.results.session_performance.sessions.session_duration', "'s' (seconds)");
+        }
+        if (isMissingUnits(sessions.session_rate)) {
+            addWarning('$.results.session_performance.sessions.session_rate', "'queries/s'");
+        }
+    }
+
     return warnings;
 }
 
@@ -645,20 +656,63 @@ const RawBRV02ReportSchema = z.object({
             aggregate: z.object({
                 latency: z.record(z.string(), z.unknown()).optional().nullable(),
             }).passthrough().optional().nullable(),
+            // Left opaque on purpose: typing it would make one bad session field
+            // reject the whole report and lose request metrics that are fine.
+            // The reader coerces each field itself.
+            sessions: z.unknown().optional().nullable(),
         }).passthrough().optional().nullable(),
         observability: ObservabilitySchema,
     }).passthrough().nullable().optional(),
 }).passthrough();
 
+const requestsCompleted = (reqs) => {
+    const total = safeNum(reqs?.total);
+    const failures = safeNum(reqs?.failures);
+    if (total === null || failures === null) return null;
+    const completed = total - failures;
+    return completed >= 0 ? completed : null;
+};
+
+// Sessions come in their own report file, so one report holds either request
+// metrics or session metrics, not both.
+const extractSessionStats = (doc) => {
+    const s = doc?.results?.session_performance?.sessions;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+
+    const stats = (val) => (val && typeof val === 'object' && !Array.isArray(val) ? val : {});
+
+    const total = safeNum(s.total);
+    const failed = safeNum(s.failed);
+    const succeeded = safeNum(s.succeeded);
+    // Some reports give total and failed but no succeeded. A negative result
+    // cannot happen in a real run, so treat it as a broken report, not a count.
+    const derived = total !== null && failed !== null ? total - failed : null;
+    const completed = succeeded ?? (derived !== null && derived >= 0 ? derived : null);
+
+    const dur = stats(s.session_duration);
+    const durFactor = unitToSecondsFactor(dur.units);
+    const toSeconds = (v) => {
+        const n = safeNum(v);
+        return n === null ? null : n * durFactor;
+    };
+
+    const values = {
+        sessionsTotal:     total,
+        sessionsCompleted: completed,
+        sessionsFailed:    failed,
+        sessionDurationMeanS: toSeconds(dur.mean),
+        sessionDurationP50S:  toSeconds(dur.p50),
+        sessionDurationP99S:  toSeconds(dur.p99),
+        sessionRateMean:   safeNum(stats(s.session_rate).mean),
+    };
+
+    const hasAny = Object.values(values).some(v => v !== null);
+    return hasAny ? values : null;
+};
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
-
-/**
- * Parse a single benchmark_report_v0.2 YAML file text.
- *
- * Returns a stage record or null if the content is not a valid v0.2 report.
- */
 const extractComponents = (stack) => {
     const components = [];
     if (!Array.isArray(stack)) return components;
@@ -685,6 +739,11 @@ const extractComponents = (stack) => {
     return components;
 };
 
+/**
+ * Parse a single benchmark_report_v0.2 YAML file text.
+ *
+ * Returns a stage record or null if the content is not a valid v0.2 report.
+ */
 export function parseReportV02(yamlText, filename) {
     let rawDoc;
     if (typeof yamlText === 'object' && yamlText !== null) {
@@ -774,6 +833,10 @@ export function parseReportV02(yamlText, filename) {
         e2eP99: lat.request_latency?.p99 ?? null,
         totalRequests: reqs.total ?? null,
         failures: reqs.failures ?? null,
+        // Derived here, not per caller, so a missing block stays null instead
+        // of turning into a zero that looks measured. A negative result cannot
+        // happen in a real run, so treat it as a broken report, not a count.
+        requestsCompleted: requestsCompleted(reqs),
     };
 
     // --- Observability (optional) ---
@@ -819,6 +882,8 @@ export function parseReportV02(yamlText, filename) {
         if (hasAny) observability = { ...obsValues, timeSeries };
     }
 
+    const sessionStats = extractSessionStats(doc);
+
     const warnings = detectMissingUnitWarnings(rawDoc);
 
     return {
@@ -839,6 +904,7 @@ export function parseReportV02(yamlText, filename) {
         scenario,
         performance,
         observability,
+        sessionStats,
         components,
         warnings,
         rawReport: rawDoc,
@@ -1535,7 +1601,13 @@ export function stageToEntry(stage) {
             itl_p99: performance.itlP99 ?? null,
             e2e_latency: performance.e2eMean ?? null,
             error_count: performance.failures ?? 0,
+            requests_total: performance.totalRequests ?? null,
+            requests_completed: performance.requestsCompleted ?? null,
+            // Not error_count above: that one says 0 when the block is missing,
+            // which would look like a measured zero.
+            requests_failed: performance.failures ?? null,
             observability: stage.observability || null,
+            sessions: stage.sessionStats || null,
         },
 
         rawReport: stage.rawReport || null,

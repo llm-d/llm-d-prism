@@ -1894,3 +1894,129 @@ describe('tags', () => {
         expect(mutateRawReportMetadata(reportWithKeywords(['old']), {}).run.keywords).toEqual(['old']);
     });
 });
+
+describe('session performance and request counts', () => {
+    const sessionReport = {
+        version: '0.2.1',
+        scenario: {
+            stack: [{ standardized: { role: 'decode', model: { name: 'test-model' }, accelerator: { model: 'H200' } } }],
+            load: { standardized: { tool: 'inference-perf', stage: 0 } },
+        },
+        results: {
+            session_performance: {
+                sessions: {
+                    total: 22,
+                    succeeded: 22,
+                    failed: 0,
+                    session_duration: {
+                        mean: 2158.9936878356066,
+                        p50: 1076.757747888565,
+                        p99: 6866.580248386859,
+                        units: 's',
+                    },
+                    session_rate: { mean: 0.0027579513872681605, units: 'queries/s' },
+                },
+            },
+        },
+    };
+
+    it('extracts session counts and keeps durations in seconds', () => {
+        const stage = parseReportV02(sessionReport, 'stage_0_session_lifecycle_metrics.json.yaml');
+
+        expect(stage.sessionStats.sessionsTotal).toBe(22);
+        expect(stage.sessionStats.sessionsCompleted).toBe(22);
+        expect(stage.sessionStats.sessionsFailed).toBe(0);
+        expect(stage.sessionStats.sessionDurationMeanS).toBeCloseTo(2158.9937, 3);
+        expect(stage.sessionStats.sessionDurationP50S).toBeCloseTo(1076.7577, 3);
+        expect(stage.sessionStats.sessionDurationP99S).toBeCloseTo(6866.5802, 3);
+        expect(stage.sessionStats.sessionRateMean).toBeCloseTo(0.0027579, 6);
+
+        expect(stageToEntry(stage).metrics.sessions.sessionsCompleted).toBe(22);
+    });
+
+    it('derives completed sessions when only total and failed are reported', () => {
+        const report = JSON.parse(JSON.stringify(sessionReport));
+        delete report.results.session_performance.sessions.succeeded;
+        report.results.session_performance.sessions.failed = 2;
+
+        const stage = parseReportV02(report, 'stage_0_session_lifecycle_metrics.json.yaml');
+        expect(stage.sessionStats.sessionsCompleted).toBe(20);
+        expect(stage.sessionStats.sessionsFailed).toBe(2);
+    });
+
+    const requestReport = {
+        version: '0.2.1',
+        scenario: {
+            stack: [{ standardized: { role: 'decode', model: { name: 'test-model' }, accelerator: { model: 'H200' } } }],
+            load: { standardized: { tool: 'inference-perf', stage: 0 } },
+        },
+        results: {
+            request_performance: {
+                aggregate: {
+                    requests: { total: 400, failures: 3 },
+                },
+            },
+        },
+    };
+
+    it('reports no sessions for a request-only report', () => {
+        const stage = parseReportV02(requestReport, 'stage_0_lifecycle_metrics.json.yaml');
+        expect(stage.sessionStats).toBeNull();
+        expect(stageToEntry(stage).metrics.sessions).toBeNull();
+    });
+
+    it('derives completed requests and keeps absent counts null', () => {
+        const stage = parseReportV02(requestReport, 'stage_0_lifecycle_metrics.json.yaml');
+        const entry = stageToEntry(stage);
+        expect(entry.metrics.requests_total).toBe(400);
+        expect(entry.metrics.requests_completed).toBe(397);
+        expect(entry.metrics.requests_failed).toBe(3);
+
+        const sessionEntry = stageToEntry(parseReportV02(sessionReport, 'stage_0.yaml'));
+        expect(sessionEntry.metrics.requests_total).toBeNull();
+        expect(sessionEntry.metrics.requests_completed).toBeNull();
+        expect(sessionEntry.metrics.requests_failed).toBeNull();
+        expect(sessionEntry.metrics.error_count).toBe(0);
+    });
+
+    it('converts session durations to seconds using the declared units', () => {
+        const report = JSON.parse(JSON.stringify(sessionReport));
+        report.results.session_performance.sessions.session_duration = {
+            mean: 2000, p50: 1000, p99: 4000, units: 'ms',
+        };
+
+        const stage = parseReportV02(report, 'stage_0.yaml');
+        expect(stage.sessionStats.sessionDurationMeanS).toBe(2);
+        expect(stage.sessionStats.sessionDurationP50S).toBe(1);
+        expect(stage.sessionStats.sessionDurationP99S).toBe(4);
+    });
+
+    it('warns when session durations carry no units', () => {
+        const report = JSON.parse(JSON.stringify(sessionReport));
+        delete report.results.session_performance.sessions.session_duration.units;
+
+        const stage = parseReportV02(report, 'stage_0.yaml');
+        expect(stage.warnings.some(w => w.includes('sessions.session_duration'))).toBe(true);
+    });
+
+    it('keeps the report when the session block is malformed', () => {
+        for (const sessions of [5, 'many', [], { session_duration: 42 }, { session_duration: { mean: 1, units: 7 } }]) {
+            const report = JSON.parse(JSON.stringify(requestReport));
+            report.results.session_performance = { sessions };
+
+            const stage = parseReportV02(report, 'stage_0.yaml');
+            expect(stage).not.toBeNull();
+            expect(stageToEntry(stage).metrics.requests_total).toBe(400);
+        }
+    });
+
+    it('nulls counts that cannot happen in a real run', () => {
+        const sessions = JSON.parse(JSON.stringify(sessionReport));
+        sessions.results.session_performance.sessions = { total: 3, failed: 5 };
+        expect(parseReportV02(sessions, 'stage_0.yaml').sessionStats.sessionsCompleted).toBeNull();
+
+        const requests = JSON.parse(JSON.stringify(requestReport));
+        requests.results.request_performance.aggregate.requests = { total: 3, failures: 5 };
+        expect(stageToEntry(parseReportV02(requests, 'stage_0.yaml')).metrics.requests_completed).toBeNull();
+    });
+});
