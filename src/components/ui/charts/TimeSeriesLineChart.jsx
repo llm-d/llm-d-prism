@@ -117,11 +117,14 @@ export function TimeSeriesLineChart({
     // across small multiples instead of every panel auto-fitting its own range.
     const axis = clampPercent
         ? { domain: [0, 100], ticks: [0, 20, 40, 60, 80, 100] }
-        : getAxisConfig(values.length ? Math.min(...values) : 0, values.length ? Math.max(...values) : 1);
+        : getAxisConfig(
+            values.length ? values.reduce((min, value) => Math.min(min, value), Infinity) : 0,
+            values.length ? values.reduce((max, value) => Math.max(max, value), -Infinity) : 1,
+        );
 
     // A one-sample series has no segment to draw, so without a dot it renders as
     // nothing at all.
-    const maxLen = Math.max(...shown.map(s => s.points.length));
+    const maxLen = shown.reduce((max, s) => Math.max(max, s.points.length), 0);
 
     // A folded tail shares one label and hue across many lines, so collapse it
     // to a single legend entry.
@@ -134,7 +137,7 @@ export function TimeSeriesLineChart({
     }
 
     const tSecs = shown.flatMap(s => s.points.map(p => p.tSec)).filter(Number.isFinite);
-    const axisMode = elapsedAxisMode(tSecs.length ? Math.max(...tSecs) : 0);
+    const axisMode = elapsedAxisMode(tSecs.reduce((max, t) => Math.max(max, t), 0));
     const fmtTick = ELAPSED_FORMATTERS[axisMode];
     const resolvedXLabel = xLabel ?? ELAPSED_AXIS_LABELS[axisMode];
 

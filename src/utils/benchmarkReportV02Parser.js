@@ -449,7 +449,7 @@ const extractTimeSeries = (obs) => {
             && PORTION_UNITS.has(units.toLowerCase());
         const allPoints = raw.flatMap(r => r.parsed);
         const scale = isPortion && allPoints.every(p => p.value <= 1) ? 100 : 1;
-        const t0 = Math.min(...allPoints.map(p => p.t));
+        const t0 = raw.reduce((earliest, r) => Math.min(earliest, r.parsed[0].t), Infinity);
 
         out[field] = {
             label: TIME_SERIES_LABELS[field] || humanizeMetricKey(field),

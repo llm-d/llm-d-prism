@@ -1666,6 +1666,22 @@ describe('extractTimeSeries', () => {
         expect(entry.components[1].points.map(p => p.value)).toEqual([7, 9]);
     });
 
+    it('parses large time series without exceeding the argument limit', () => {
+        const pointCount = 100000;
+        const entry = tsOf(observabilityReport(comps(
+            comp('late', { gpu_memory_usage: seriesOf('bytes', Array(pointCount).fill(2), 30) }),
+            comp('early', { gpu_memory_usage: seriesOf('bytes', Array(pointCount).fill(1)) }),
+        )), 'gpu_memory_usage');
+
+        expect(entry.components.map(c => c.points.length)).toEqual([pointCount, pointCount]);
+        expect(entry.components[0].points[0]).toEqual({ tSec: 30, value: 2 });
+        expect(entry.components[1].points[0]).toEqual({ tSec: 0, value: 1 });
+        expect(entry.components[1].points.at(-1)).toEqual({
+            tSec: (pointCount - 1) * 15,
+            value: 1,
+        });
+    });
+
     it('drops unparseable timestamps and null values instead of turning them into NaN', () => {
         const entry = tsOf(observabilityReport(comps(
             comp('p1', {
