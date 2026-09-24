@@ -1682,7 +1682,7 @@ describe('extractTimeSeries', () => {
         });
     });
 
-    it('drops unparseable timestamps and null values instead of turning them into NaN', () => {
+    it('drops unparsable timestamps and null values instead of turning them into NaN', () => {
         const entry = tsOf(observabilityReport(comps(
             comp('p1', {
                 gpu_memory_usage: {
