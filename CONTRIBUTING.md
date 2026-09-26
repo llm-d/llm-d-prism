@@ -34,17 +34,17 @@ We follow a **lazy consensus** approach: changes proposed by people with respons
 To ensure high-fidelity UI/UX design matches technical capabilities and backend architecture, all new user-facing features must progress through the following sequential phases:
 
 1. **Product Specification**:
-   - Product requirements must be drafted as a spec (e.g., `product_spec.md` or `prd.md`) within a new subdirectory under `specs/changes/[feature-name]/`.
+   - Product requirements must be drafted in a feature spec markdown file under `specs/changes/[feature-name].md`.
    - The spec must be referenced in the main roadmap ([specs/main/roadmap.md](specs/main/roadmap.md)), showing the relative prioritization and ordering of the feature specs.
 
 2. **UI/UX Mockups & Functional Specs**:
    - The UI/UX team consumes the product specs and designs the interface mocks.
-   - These mocks must be paired with an **Implementation Spec** (e.g., `ui_spec.md`) that outlines each added UI element, component interactions, and intended user flow.
+   - These mocks must be paired with a **UI/UX Specification** section in `specs/changes/[feature-name].md` that outlines each added UI element, component interactions, and intended user flow.
    - Any UI/UX mock implementations, frontend-only code, or visual prototypes must be pushed to a dedicated `next` branch (separate from `main`) for early feedback and stakeholder review.
 
 3. **Engineering Design & Alignment**:
-   - Engineering consumes the implementation and product specs to produce an **Engineering Design Spec** (e.g., `design.md`), defining changes required in the Prism backend services and the benchmark results store (GCS/Drive schemas).
-   - This phase ensures that backend infrastructure can support the workflows mocked by UI/UX. No code implementing the mock features may be merged to the `main` branch until the Engineering Design Spec has been reviewed and approved.
+   - Engineering consumes the UI/UX and product specs to produce an **Engineering Design Specification** section in `specs/changes/[feature-name].md`, defining changes required in the Prism backend services and the benchmark results store (GCS/Drive schemas).
+   - This phase ensures that backend infrastructure can support the workflows mocked by UI/UX. No code implementing the mock features may be merged to the `main` branch until the Engineering Design has been reviewed and approved.
 
 ### Types of Contributions
 

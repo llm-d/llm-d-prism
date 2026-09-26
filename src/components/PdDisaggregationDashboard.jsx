@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Prefill/Decode Disaggregation well-lit path dashboard.
-// Design spec: specs/main/completed/pd-disaggregation-dashboard/proposal.md
+// Design spec: specs/main/completed/pd-disaggregation-dashboard.md
 // (approved at Gate A). Six benchmark runs sweeping the prefill:decode
 // replica ratio at a fixed total of 8 replicas; data served from GCS via
 // /api/pd-disaggregation/data.

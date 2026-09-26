@@ -15,7 +15,7 @@ benchmark reports (llm-d-benchmark format v0.2+)
 Stage 1 — Analyze & design        skills/analyze_benchmark_results.md
         │   extracts scenario vs. sweep, audits available stats,
         │   designs charts/KPIs/table, writes
-        │   specs/changes/<name>/proposal.md
+        │   specs/changes/<name>.md
         ▼
 Gate A — Spec approval            one of @seanhorgan, @diamondburned, @jjk-g
         │
@@ -30,7 +30,7 @@ Stage 2 — Implement               skills/style.md
 Gate B — Implementation approval  one of @jjk-g, @diamondburned, @seanhorgan
         │
         ▼
-merge; move the change dir to specs/main/completed/ per specs/README.md
+merge; move the change spec to specs/main/completed/<name>.md per specs/README.md
 ```
 
 ### Stage 1 — Analysis and design spec
@@ -39,7 +39,7 @@ Input: a directory of benchmark reports in the
 [llm-d-benchmark report format](https://github.com/llm-d/llm-d-benchmark)
 v0.2+ (YAML/JSON), optionally with a README. Run
 `skills/analyze_benchmark_results.md`. Its output is a short design spec at
-`specs/changes/<name>/proposal.md`: scenario constants vs. sweep dimension,
+`specs/changes/<name>.md`: scenario constants vs. sweep dimension,
 the metrics the data actually supports (no promised charts the data can't
 back), chart/KPI/results-table design under the style contract, and the data
 flow (report location + `/api/<name>/data` endpoint shape).
@@ -49,7 +49,7 @@ flow (report location + `/api/<name>/data` endpoint shape).
 ### Gate A — Spec approval
 
 The design spec must be approved by **one of @seanhorgan, @diamondburned, or
-@jjk-g** (PR review on the change directory, per the OPSX protocol in
+@jjk-g** (PR review on the change spec, per the OPSX protocol in
 `specs/README.md`). Agents must treat this as a hard stop: absence of an
 approval is a "no", and proposed defaults in the spec are not self-approving.
 
@@ -78,7 +78,7 @@ Changes to those artifacts have their own approvers:
 |---|---|
 | `skills/style.md` (and the `src/components/ui/` contract it governs) | one of **@seanhorgan**, **@raji14** |
 | `specs/main/roadmap.md` | one of **@seanhorgan**, **@jjk-g** |
-| Design specs (`specs/changes/*/proposal.md`) | Gate A approvers above |
+| Design specs (`specs/changes/*.md`) | Gate A approvers above |
 | Dashboard implementations | Gate B approvers above |
 
 These gates are mechanically enforced via `.github/CODEOWNERS`. Enforcement

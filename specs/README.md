@@ -6,7 +6,7 @@ This directory governs the evolution of the codebase. We follow a simplified ver
 
 *   `main/`: The "Living Source of Truth." Contains the current architecture, functional specs of the production system, roadmap, and completed specifications.
     *   `main/completed/`: Completed and implemented specifications.
-*   `changes/`: Active work-in-progress. Every feature, bug fix, or experiment gets its own markdown file (e.g. `[feature-name].md`) or directory.
+*   `changes/`: Active work-in-progress. Every feature, bug fix, or experiment gets its own markdown file (e.g. `[feature-name].md`).
 *   `archive/`: Abandoned or rejected proposals. This serves as the "organizational memory" to prevent re-litigating past decisions.
 
 ---
@@ -23,7 +23,7 @@ Create a single markdown file `/specs/changes/[short-feature-name].md` that outl
 ### 2. Implementation & Completion / Archiving
 Once the code is merged:
 1.  **Update Main:** Any permanent changes to the system architecture must be reflected in `specs/main/`.
-2.  **Move to Completed:** Once implemented, the specific change file is moved to `specs/main/completed/[short-feature-name].md` (or directory if structured as a folder).
+2.  **Move to Completed:** Once implemented, the specific change file is moved to `specs/main/completed/[short-feature-name].md`.
     *   *Note:* If a proposal is abandoned or rejected, move it to `specs/archive/` with a `# Status: Rejected` header explaining why.
 
 ---
@@ -46,4 +46,4 @@ When tasked with a new feature or research item, you **must** adhere to the foll
 
 ---
 
-> **Note to Humans:** When reviewing PRs, prioritize the validity of the `proposal.md`. If the "Why" is wrong, the "How" doesn't matter.
+> **Note to Humans:** When reviewing PRs, prioritize the validity of the change spec. If the "Why" is wrong, the "How" doesn't matter.

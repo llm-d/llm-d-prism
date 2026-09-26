@@ -2,7 +2,7 @@
 
 - **Status:** Approved at Gate A by @jjk-g (2026-07-16), as written; proposed defaults in §8 confirmed. Stage 2 implemented and verified; awaiting Gate B (implementation PR review).
 - **Pipeline:** `specs/main/dashboard-pipeline.md`, Stage 1 output (per `skills/analyze_benchmark_results.md`)
-- **Change dir:** `specs/changes/pd-disaggregation-dashboard/`
+- **Spec file:** `specs/main/completed/pd-disaggregation-dashboard.md`
 
 ## 1. Context / Intent
 
@@ -13,9 +13,8 @@ have been published to `gs://llm-d-benchmarks/pd-disaggregation/`. The
 proposal turns those results into the fourth well-lit path dashboard
 (after Intelligent routing, Prefix cache offloading, Agentic serving),
 following the style contract in `skills/style.md`. Prior context:
-`specs/changes/disagg-benchmarks-proposal.md` (analysis PRD) and
-`specs/changes/disagg-guide-proposal.md` (path overview) — neither was
-rejected; this spec is the concrete dashboard for the data we actually have.
+`specs/main/completed/disagg-benchmarks-proposal.md` (analysis PRD) — this spec
+is the concrete dashboard for the data we actually have.
 
 ## 2. Benchmark scenario (constants across all six runs)
 

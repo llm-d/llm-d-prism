@@ -235,7 +235,7 @@ This is the path for a new well-lit-path dashboard (e.g. **P/D disaggregation**,
 wide EP). Input: benchmark results (GCS bucket, `/api/...` endpoint, or a JSON
 drop). Output: a registered, on-blueprint dashboard.
 
-1. **Spec first (OPSX).** Create `specs/changes/<name>/proposal.md`: what the
+1. **Spec first (OPSX).** Create `specs/changes/<name>.md`: what the
    dashboard shows, which metrics, which comparisons. See `specs/README.md`.
 2. **Data in.** Prefer a small server endpoint that returns parsed run objects
    (see `server/server.js`'s `/api/prefix-cache/data` for the pattern):

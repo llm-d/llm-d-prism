@@ -394,7 +394,7 @@ app.get('/api/prefix-cache/data', async (req, res) => {
 // Reads llm-d-benchmark BRv0.2.x reports from
 // gs://llm-d-benchmarks/pd-disaggregation/pd-ratio-<P>-<D>/reports-<timestamp>/
 // and returns one normalized run object per P:D ratio (see
-// specs/main/completed/pd-disaggregation-dashboard/proposal.md).
+// specs/main/completed/pd-disaggregation-dashboard.md).
 app.get('/api/pd-disaggregation/data', async (req, res) => {
     try {
         let client;

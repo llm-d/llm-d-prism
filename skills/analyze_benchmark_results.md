@@ -69,7 +69,7 @@ components), and `results` (`request_performance.aggregate`).
    endpoint that parses them (pattern: `/api/<name>/data` in
    `server/server.js`, like `/api/prefix-cache/data`; `js-yaml` is available),
    and the normalized run-object shape the frontend receives.
-7. **Write the spec** to `specs/changes/<name>/proposal.md` (OPSX — see
+7. **Write the spec** to `specs/changes/<name>.md` (OPSX — see
    `specs/README.md`). Keep it short: scenario summary, metrics table, the
    design per §5, data flow per §6, open questions. Include the implementation
    checklist from `skills/style.md` (scaffold → register view → enable nav).
