@@ -477,8 +477,17 @@ export const FilterPanel = ({
         return { staged, unlisted, processing, inReview, approved, rejected };
     }, [modelStats, submissionsMap, user, isPlaygroundMode]);
 
-    // Calculate totals for KPI category cards
-    const totalCount = modelStats.length;
+    const publicCount = modelStats.filter(s => {
+        const firstEntry = s.data?.[0];
+        if (!firstEntry) return false;
+        const src = firstEntry.source || '';
+        const isBrv02 = src.startsWith('brv02:') || firstEntry.source_info?.type === 'benchmark_report_v02';
+        if (!isBrv02) return true;
+
+        const runId = src.startsWith('brv02:') ? src.replace('brv02:', '') : firstEntry.run_id;
+        const status = submissionsMap[runId]?.status || firstEntry.source_info?.submission_state;
+        return status === 'public' || status === 'promoted' || status === 'approved';
+    }).length;
     
     const verifiedCount = isPlaygroundMode
         ? (statusCounts.staged + statusCounts.unlisted + statusCounts.processing + statusCounts.inReview + statusCounts.rejected)
@@ -491,8 +500,6 @@ export const FilterPanel = ({
             const isMine = src.startsWith('brv02:') || (user && firstEntry.github_author?.username === user.username);
             return isMine;
         }).length;
-
-    const legacyCount = totalCount - verifiedCount;
 
     const hiddenBuiltinCount = React.useMemo(() => {
         return modelStats.filter(s => {
@@ -707,7 +714,7 @@ export const FilterPanel = ({
                                     >
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Public Store</span>
                                         <span className={cn('text-sm font-black transition-colors duration-200', kpiFilter === null ? 'text-cyan-400' : 'text-slate-350')}>
-                                            {totalCount}
+                                            {publicCount}
                                         </span>
                                     </button>
 
@@ -909,7 +916,7 @@ export const FilterPanel = ({
                                                         
                                                         <div className="flex flex-col items-end border-l border-slate-800/80 pl-4 h-9 justify-center">
                                                             <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider leading-none">Total Runs</span>
-                                                            <span className="text-base font-black text-cyan-400 mt-1 leading-none">{totalCount}</span>
+                                                            <span className="text-base font-black text-cyan-400 mt-1 leading-none">{publicCount}</span>
                                                         </div>
                                                     </div>
                                                 </div>
