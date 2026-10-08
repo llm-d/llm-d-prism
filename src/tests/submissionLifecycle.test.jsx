@@ -66,7 +66,7 @@ function buildMockModelStat({
     const entry = {
         id: `entry-${runId}`,
         run_id: runId,
-        runLabel: 'adin-v6e',
+        runLabel: 'admin-v6e',
         model: 'gemma-3-27b-it',
         model_name: 'gemma-3-27b-it',
         hardware: 'V6E',
