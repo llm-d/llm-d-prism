@@ -157,10 +157,16 @@ export function createRunZipBuffer(payload: PrismResultPayload): { buffer: Buffe
     const zipFiles: Record<string, Uint8Array> = {};
 
     const entries = payload.entries || [];
+    const stageNameCounts = new Map<string, number>();
     entries.forEach((entry, idx) => {
         const rawYaml = serializeRawReportToYaml(entry.raw_report);
         const stageNum = entry.prism_stage_index ?? idx;
-        const cleanStageName = getBRV02StageFilename(stageNum);
+        const canonicalName = getBRV02StageFilename(stageNum);
+        const count = (stageNameCounts.get(canonicalName) || 0) + 1;
+        stageNameCounts.set(canonicalName, count);
+        const cleanStageName = count === 1
+            ? canonicalName
+            : canonicalName.replace('.json.yaml', `_${count}.json.yaml`);
         const fullPath = `${archiveName}/${cleanStageName}`;
         zipFiles[fullPath] = strToU8(rawYaml);
     });
