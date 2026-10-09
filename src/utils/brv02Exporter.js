@@ -267,10 +267,16 @@ export function downloadRunBRV02(runPayloadOrStat, benchmarkData = []) {
     const shortRunId = rawRunId ? (rawRunId.split('-')[0] || rawRunId.substring(0, 8)) : '';
     const archiveName = shortRunId ? `${sanitizedLabel}-${shortRunId}` : sanitizedLabel;
 
+    const stageNameCounts = new Map();
     stages.forEach((stage, idx) => {
         const rawYaml = serializeRawReportToYaml(stage.rawReport);
         const stageNum = stage.stageIndex ?? idx;
-        const cleanStageName = getBRV02StageFilename(stageNum);
+        const canonicalName = getBRV02StageFilename(stageNum);
+        const count = (stageNameCounts.get(canonicalName) || 0) + 1;
+        stageNameCounts.set(canonicalName, count);
+        const cleanStageName = count === 1
+            ? canonicalName
+            : canonicalName.replace('.json.yaml', `_${count}.json.yaml`);
         const fullPath = `${archiveName}/${cleanStageName}`;
         zipFiles[fullPath] = strToU8(rawYaml);
     });

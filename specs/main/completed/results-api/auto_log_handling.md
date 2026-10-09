@@ -68,7 +68,9 @@ When an user or API client requests a benchmark ZIP export
 `data:` URIs:
 
 1. **Stage YAML Reports**: Dissected from `entries[].raw_report` and serialized
-   to `benchmark_report_v0.2,_stage_${i}_lifecycle_metrics.json.yaml`.
+   to `benchmark_report_v0.2,_stage_${i}_lifecycle_metrics.json.yaml`. Reports
+   sharing a stage index add a numeric suffix before `.json.yaml` after the first
+   report, so both browser and API archives retain every report.
 2. **Root Manifests**: Entries in `payload.manifests` containing `data:` URIs
    are decoded and unpacked into the root directory of the archive
    (`<archive_name>/<key>`).
