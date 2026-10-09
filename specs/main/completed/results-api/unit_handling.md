@@ -80,7 +80,9 @@ Metrics measuring overall request duration or execution phases:
 - `pod_startup_times` (`aggregate` and `by_pod.*`)
 - Session performance latencies
 
-**Canonical Unit:** `s` (displayed as `ms` or `s`).
+**Canonical Unit:** `s` (displayed as `ms` or `s`). Pod startup comparisons
+convert the declared input units to seconds while retaining the source units in
+the raw report.
 
 > [!IMPORTANT]
 >
