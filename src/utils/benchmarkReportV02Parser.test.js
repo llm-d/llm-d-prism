@@ -2233,3 +2233,34 @@ describe('session performance and request counts', () => {
     });
 });
 
+describe('pod startup duration units', () => {
+    it.each([
+        ['s', 1],
+        ['ms', 1000],
+        ['us', 1000000],
+        ['ns', 1000000000],
+    ])('imports %s startup durations as seconds', (units, scale) => {
+        const report = {
+            version: '0.2',
+            results: {
+                observability: {
+                    pod_startup_times: {
+                        aggregate: { mean: 2 * scale, p50: scale, p99: 4 * scale, units },
+                    },
+                },
+            },
+        };
+        const stage = parseReportV02(report, 'startup.yaml');
+        const values = {
+            podStartupMeanS: 2,
+            podStartupP50S: 1,
+            podStartupP99S: 4,
+        };
+        expect(stage.observability).toMatchObject(values);
+        expect(stageToEntry(stage).metrics.observability).toMatchObject(values);
+        expect(parseReportV02(normalizeReportUnits(report), 'startup.yaml').observability)
+            .toMatchObject(values);
+        expect(stage.rawReport.results.observability.pod_startup_times.aggregate)
+            .toEqual(report.results.observability.pod_startup_times.aggregate);
+    });
+});

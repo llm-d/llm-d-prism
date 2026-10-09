@@ -852,7 +852,7 @@ export function parseReportV02(yamlText, filename) {
         const numRunAgg = obs.vllm_num_requests_running?.aggregated || {};
         const numWaitAgg = obs.vllm_num_requests_waiting?.aggregated || {};
         const preemptAgg = obs.vllm_num_preemptions_total?.aggregated || {};
-        const podStartup = obs.pod_startup_times?.aggregate || {};
+        const podStartup = normalizeLatencyStatistics(obs.pod_startup_times?.aggregate) || {};
 
         const obsValues = {
             kvCacheUsageMean:    kvAgg.mean ?? null,
