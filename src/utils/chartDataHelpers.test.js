@@ -294,3 +294,95 @@ describe('computeThroughputChartData - Per Chip scaling logic', () => {
         expect(result.visibleDataPoints[0].vy).toBeCloseTo(297.69 / 8, 2);
     });
 });
+
+describe('computeThroughputChartData - Pareto metric directions', () => {
+    it('maximizes tokens per second on the X axis', () => {
+        const result = computeThroughputChartData({
+            filteredData: [
+                { benchmarkKey: 'slow', tokens_per_second: 40, throughput: 100 },
+                { benchmarkKey: 'fast', tokens_per_second: 80, throughput: 100 },
+            ],
+            config: { xKey: 'tokens_per_second', yKey: 'throughput' },
+            showPareto: true,
+        });
+        expect(result.paretoData.map(p => p.benchmarkKey)).toEqual(['fast']);
+    });
+
+    it.each(['quality.mmlu_pro', 'quality.arena', 'quality.live_code_bench'])(
+        'maximizes %s on the X axis while minimizing cost', (xKey) => {
+            const result = computeThroughputChartData({
+                filteredData: [
+                    { benchmarkKey: 'low', model: 'Low', metrics: { cost: 1 } },
+                    { benchmarkKey: 'high', model: 'High', metrics: { cost: 1 } },
+                ],
+                qualityMetrics: { data: {
+                    low: { mmlu_pro: 50, arena_score_text: 1000, live_code_bench: 40 },
+                    high: { mmlu_pro: 80, arena_score_text: 1200, live_code_bench: 70 },
+                } },
+                config: { xKey, yKey: 'metrics.cost' },
+                tputType: 'cost',
+                showPareto: true,
+            });
+            expect(result.paretoData.map(p => p.benchmarkKey)).toEqual(['high']);
+        }
+    );
+
+    it('keeps both points when higher quality costs more', () => {
+        const result = computeThroughputChartData({
+            filteredData: [
+                { benchmarkKey: 'low', model: 'Low', metrics: { cost: 1 } },
+                { benchmarkKey: 'high', model: 'High', metrics: { cost: 2 } },
+            ],
+            qualityMetrics: { data: {
+                low: { mmlu_pro: 50 }, high: { mmlu_pro: 80 },
+            } },
+            config: { xKey: 'quality.mmlu_pro', yKey: 'metrics.cost' },
+            tputType: 'cost',
+            showPareto: true,
+        });
+        expect(result.paretoData.map(p => p.benchmarkKey)).toEqual(['high', 'low']);
+    });
+
+    it('minimizes latency on the X axis', () => {
+        const result = computeThroughputChartData({
+            filteredData: [
+                { benchmarkKey: 'slow', time_per_output_token: 80, throughput: 100 },
+                { benchmarkKey: 'fast', time_per_output_token: 40, throughput: 100 },
+            ],
+            config: { xKey: 'time_per_output_token', yKey: 'throughput' },
+            showPareto: true,
+        });
+        expect(result.paretoData.map(p => p.benchmarkKey)).toEqual(['fast']);
+    });
+});
+
+describe('computeThroughputChartData - equal-coordinate dominance', () => {
+    it.each([
+        { maximizeX: false, maximizeY: false },
+        { maximizeX: false, maximizeY: true },
+        { maximizeX: true, maximizeY: false },
+        { maximizeX: true, maximizeY: true },
+    ])('excludes dominated ties with directions %j', ({ maximizeX, maximizeY }) => {
+        const points = [
+            { benchmarkKey: 'a', x: 10, y: maximizeY ? 20 : 30 },
+            { benchmarkKey: 'b', x: 10, y: maximizeY ? 30 : 20 },
+            { benchmarkKey: 'c', x: 20, y: maximizeY ? 20 : 30 },
+            { benchmarkKey: 'd', x: 20, y: maximizeY ? 30 : 20 },
+        ];
+        const expected = points.filter(point => !points.some(other => {
+            const xBetterOrEqual = maximizeX ? other.x >= point.x : other.x <= point.x;
+            const yBetterOrEqual = maximizeY ? other.y >= point.y : other.y <= point.y;
+            return xBetterOrEqual && yBetterOrEqual && (other.x !== point.x || other.y !== point.y);
+        }));
+        const xKey = maximizeX ? 'tokens_per_second' : 'time_per_output_token';
+        const result = computeThroughputChartData({
+            filteredData: points.map(point => ({ ...point, [xKey]: point.x })),
+            config: { xKey, yKey: 'y' },
+            tputType: maximizeY ? 'output' : 'cost',
+            showPareto: true,
+        });
+        expect(result.paretoData.map(p => p.benchmarkKey).sort()).toEqual(
+            expected.map(p => p.benchmarkKey).sort()
+        );
+    });
+});

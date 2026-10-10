@@ -273,7 +273,10 @@ export const findParetoPoint = (dataset, xKey, yKey, minimizeX, maximizeY) => {
 export const getParetoFrontier = (dataset, minimizeX, maximizeY) => {
     if (!dataset || dataset.length === 0) return [];
     
-    const sorted = [...dataset].sort((a, b) => minimizeX ? a.vx - b.vx : b.vx - a.vx);
+    const sorted = [...dataset].sort((a, b) => {
+        const xOrder = minimizeX ? a.vx - b.vx : b.vx - a.vx;
+        return xOrder || (maximizeY ? b.vy - a.vy : a.vy - b.vy);
+    });
     
     const frontier = [];
     let bestY = maximizeY ? -Infinity : Infinity;

@@ -117,7 +117,7 @@ export const computeThroughputChartData = ({
     let paretoData = [];
     if (showPareto && visibleDataPoints.length > 0) {
          const maximizeY = tputType !== 'cost';
-         const minimizeX = true;
+         const minimizeX = config.xKey !== 'tokens_per_second' && !config.xKey?.startsWith('quality.');
          paretoData = getParetoFrontier(visibleDataPoints, minimizeX, maximizeY);
     }
 
