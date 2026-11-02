@@ -4,7 +4,7 @@
 # Later rules take precedence over earlier ones.
 
 # Gate B — implementation approval (default for all code)
-* @jjk-g @diamondburned @seanhorgan
+* @jjk-g @diamondburned @seanhorgan @bslabe123
 
 # Gate A — design spec approval (OPSX change directories)
 /specs/changes/ @seanhorgan @diamondburned @jjk-g
