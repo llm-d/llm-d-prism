@@ -1153,7 +1153,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         });
 
         const headers = {};
-        const token = typeof window !== 'undefined' ? localStorage.getItem('prism_github_token') : null;
+        const token = typeof window !== 'undefined' ? localStorage.getItem('prism_github_access_token') : null;
         if (token) {
             headers['X-Prism-Github-Token'] = token;
         }

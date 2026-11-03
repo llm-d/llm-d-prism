@@ -41,6 +41,7 @@ export const PrismSubmissionStateSchema = z.enum([
     'submitted_pending_processing',
     'unlisted',
     'submitted_pending_review',
+    'changes_requested',
     'public',
     'promoted',
     'rejected',
@@ -126,6 +127,10 @@ export const PrismResultPayloadSchema = z.object({
     inference_tool: z.string().nullable().optional(),
     /** Software version of the main inference execution tool. Example: "v0.4.2" */
     inference_tool_version: z.string().nullable().optional(),
+    /** Name of the load generation / benchmark harness tool. Example: "inference-perf" | "guidellm" */
+    benchmark_harness: z.string().nullable().optional(),
+    /** Software version of the benchmark harness tool. Example: "v0.5.0" */
+    benchmark_harness_version: z.string().nullable().optional(),
     /** Flat key-value record mapping secondary software dependencies/tools to their versions. Example: { "guidellm": "v0.1.0" } */
     other_tools: z.record(z.string(), z.string()).nullable().optional(),
     /** Flat key-value record mapping deployment configuration manifest files to their hosted URLs. Example: { "vllm_service": "https://github.com/.../vllm.yaml" } */
@@ -162,6 +167,7 @@ export const PrismResultContextSchema = z.object({
     github_user: ContextValueSchema,
     run_id: ContextValueSchema,
     hardware_name: ContextValueSchema,
+    accelerator_count: ContextValueSchema.optional(),
     model_name: ContextValueSchema,
     run_label: ContextValueSchema,
     feedback: ContextValueSchema.optional(),

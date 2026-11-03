@@ -94,9 +94,6 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
     if (isPlaygroundMode()) {
         return { username: 'anonymous', permission: 'admin' };
     }
-    if (token === 'mock_token_prism') {
-        return { username: 'test-user', permission: 'admin', avatarUrl: 'https://avatars.githubusercontent.com/u/9919?v=4' };
-    }
     const userResponse = await fetch('https://api.github.com/user', {
         headers: {
             'Authorization': `Bearer ${token}`,

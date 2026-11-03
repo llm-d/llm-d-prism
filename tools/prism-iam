@@ -23,6 +23,44 @@ usage() {
     exit 1
 }
 
+# Read an allowlist object from GCS into a destination file.
+# Treats missing objects (404 / no matching URLs) as empty, but fails loudly on
+# auth, Context-Aware Access, permission, or network errors to prevent silent
+# empty output or accidental allowlist overwrites.
+read_gcs_allowlist() {
+    local gcs_uri="$1"
+    local dest_file="$2"
+    local err_file
+    err_file=$(mktemp)
+
+    local rc=0
+    if command -v gcloud &> /dev/null; then
+        gcloud storage cat "$gcs_uri" > "$dest_file" 2> "$err_file" || rc=$?
+    elif command -v gsutil &> /dev/null; then
+        gsutil cat "$gcs_uri" > "$dest_file" 2> "$err_file" || rc=$?
+    else
+        rm -f "$err_file"
+        echo "Error: Neither 'gcloud' nor 'gsutil' CLI is available." >&2
+        return 1
+    fi
+
+    if [ "$rc" -eq 0 ]; then
+        rm -f "$err_file"
+        return 0
+    fi
+
+    if grep -Eiq "matched no objects|No URLs matched|No such object" "$err_file"; then
+        : > "$dest_file"
+        rm -f "$err_file"
+        return 0
+    fi
+
+    echo "Error: Failed to read allowlist from ${gcs_uri}:" >&2
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    return 1
+}
+
 # Helper for summarize command
 print_allowlist() {
     local bucket="$1"
@@ -32,10 +70,9 @@ print_allowlist() {
     
     local temp_out
     temp_out=$(mktemp)
-    if command -v gcloud &> /dev/null; then
-        gcloud storage cat "gs://${bucket}/prism-iam/${filename}" > "$temp_out" 2>/dev/null || touch "$temp_out"
-    elif command -v gsutil &> /dev/null; then
-        gsutil cat "gs://${bucket}/prism-iam/${filename}" > "$temp_out" 2>/dev/null || touch "$temp_out"
+    if ! read_gcs_allowlist "gs://${bucket}/prism-iam/${filename}" "$temp_out"; then
+        rm -f "$temp_out"
+        exit 1
     fi
     
     echo "${list_type} ${env}:"
@@ -133,14 +170,7 @@ trap 'rm -f "$TEMP_FILE"' EXIT
 
 # Fetch current file from GCS. If it doesn't exist, we treat it as empty or create it.
 fetch_file() {
-    if command -v gcloud &> /dev/null; then
-        gcloud storage cat "$GCS_URI" > "$TEMP_FILE" 2>/dev/null || touch "$TEMP_FILE"
-    elif command -v gsutil &> /dev/null; then
-        gsutil cat "$GCS_URI" > "$TEMP_FILE" 2>/dev/null || touch "$TEMP_FILE"
-    else
-        echo "Error: Neither 'gcloud' nor 'gsutil' CLI is available." >&2
-        exit 1
-    fi
+    read_gcs_allowlist "$GCS_URI" "$TEMP_FILE" || exit 1
 }
 
 upload_file() {

@@ -241,7 +241,7 @@ export function syncPayloadMetadataToRawReport(rawReport: unknown, payload: Pris
     // Tags
     if (payload.tags !== undefined && payload.tags !== null) {
         if (!newReport.run) newReport.run = {};
-        const rawTags = payload.tags;
+        const rawTags: unknown = payload.tags;
         const normalized = Array.isArray(rawTags)
             ? rawTags.map(t => String(t).trim()).filter(Boolean)
             : (typeof rawTags === 'string' ? rawTags.split(',').map(t => t.trim()).filter(Boolean) : []);
