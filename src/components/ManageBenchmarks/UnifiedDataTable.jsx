@@ -32,6 +32,7 @@ import { downloadRunBRV02, downloadSingleStageYaml, getRawPrismCloudPayload } fr
 import { parseDataUri, extractAcceleratorCount } from '../../utils/dataParser';
 import { forkBenchmark } from '../../utils/benchmarkForker';
 import { createGlobMatcher, matchesBenchmarkStat } from '../../utils/globUtils';
+import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
 
 const GROUP_BY_TAGS = {
     Model: 'MODEL',
@@ -749,20 +750,43 @@ export const UnifiedDataTable = (props) => {
 
 
 
+    // Bundles reach the upload wizard through localStorage. When they do not
+    // fit, the wizard would open empty, so say why and stay on the table.
+    // Depends on addToast alone, not dashboardData, so the handlers built on it
+    // stay stable for the memoized rows.
+    const dashboardAddToast = dashboardData?.addToast;
+    const openWizardWithBundles = React.useCallback((bundles, intent) => {
+        const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', bundles);
+        if (!persisted.ok) {
+            console.error('Failed to hand staged bundles to the upload wizard:', persisted.error);
+            const msg = bundles.length === 1
+                ? 'This run is too large for browser storage, so it cannot be opened in the upload wizard.'
+                : `These ${bundles.length} runs are too large for browser storage to open in the upload wizard together. Select fewer runs at once.`;
+            if (addToast) addToast(msg, 'error');
+            else if (dashboardAddToast) dashboardAddToast(msg, 'error');
+            else {
+                setToastMessage(msg);
+                setShowToast(true);
+            }
+            return;
+        }
+
+        try {
+            localStorage.setItem('prism_upload_wizard_step', '2');
+            localStorage.setItem('prism_submit_intent', intent);
+        } catch (e) {
+            console.error('Failed to set wizard state in localStorage:', e);
+        }
+
+        onOpenSubmitDialog && onOpenSubmitDialog(intent);
+    }, [addToast, dashboardAddToast, onOpenSubmitDialog]);
+
     const handlePublishSelected = () => {
         if (selectedStagedRuns.length === 0) return;
 
         const bundles = selectedStagedRuns.map(buildBundleForRun);
 
-        try {
-            localStorage.setItem('prism_active_staged_bundles', JSON.stringify(bundles));
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', 'submit-review');
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog('submit-review');
+        openWizardWithBundles(bundles, 'submit-review');
     };
 
     const handleEditStagedRun = React.useCallback((run, runId) => {
@@ -775,32 +799,16 @@ export const UnifiedDataTable = (props) => {
 
         const bundle = buildBundleForRun(run);
 
-        try {
-            localStorage.setItem('prism_active_staged_bundles', JSON.stringify([bundle]));
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', 'stage-locally');
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
-    }, [onOpenSubmitDialog]);
+        openWizardWithBundles([bundle], 'stage-locally');
+    }, [openWizardWithBundles]);
 
     const handleEditSelected = React.useCallback(() => {
         if (selectedStagedRuns.length === 0) return;
 
         const bundles = selectedStagedRuns.map(buildBundleForRun);
 
-        try {
-            localStorage.setItem('prism_active_staged_bundles', JSON.stringify(bundles));
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', 'stage-locally');
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog('stage-locally');
-    }, [selectedStagedRuns, onOpenSubmitDialog]);
+        openWizardWithBundles(bundles, 'stage-locally');
+    }, [selectedStagedRuns, openWizardWithBundles]);
 
     const handleSubmitStagedRunForReview = React.useCallback((run, runId) => {
         if (!run) {
@@ -812,16 +820,8 @@ export const UnifiedDataTable = (props) => {
 
         const bundle = buildBundleForRun(run);
 
-        try {
-            localStorage.setItem('prism_active_staged_bundles', JSON.stringify([bundle]));
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', 'submit-review');
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog('submit-review');
-    }, [onOpenSubmitDialog]);
+        openWizardWithBundles([bundle], 'submit-review');
+    }, [openWizardWithBundles]);
 
     const [showPostForkModal, setShowPostForkModal] = useState(false);
     const [lastForkedCount, setLastForkedCount] = useState(1);

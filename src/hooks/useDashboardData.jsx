@@ -19,6 +19,7 @@ import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
 import { parseReportV02, groupStagesIntoRuns, stageToEntry, isPristineScannedRun, forwardBundleMetadata, stripDerivedTimeSeries, rehydrateDerivedTimeSeries } from '../utils/benchmarkReportV02Parser';
 import { scanLocalBenchmarks } from '../utils/gcsScanner';
+import { trySetLocalStorageJSON } from '../utils/localStorageJSON';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
@@ -119,14 +120,6 @@ export const useDashboardData = (initialState, dashboardState) => {
             return saved ? JSON.parse(saved) : {};
         } catch { return {}; }
     });
-
-    useEffect(() => {
-        try {
-            localStorage.setItem('prism_brv02_runs', JSON.stringify(stripDerivedTimeSeries(brv02Runs)));
-        } catch (e) {
-            console.error("Failed to persist brv02 runs to LocalStorage:", e);
-        }
-    }, [brv02Runs]);
 
     useEffect(() => {
         try {
@@ -330,6 +323,24 @@ export const useDashboardData = (initialState, dashboardState) => {
         });
         setTimeout(() => removeToast(id), 8000); // 8 Seconds
     }, [removeToast]);
+
+    // Declared after addToast so it can warn: staged runs that overflow
+    // localStorage stay usable in memory but are gone after a reload, which the
+    // user otherwise only finds out about then. Warn once per overflow, not on
+    // every later change to the runs.
+    const brv02PersistWarned = useRef(false);
+    useEffect(() => {
+        const persisted = trySetLocalStorageJSON('prism_brv02_runs', stripDerivedTimeSeries(brv02Runs));
+        if (persisted.ok) {
+            brv02PersistWarned.current = false;
+            return;
+        }
+        console.error("Failed to persist brv02 runs to LocalStorage:", persisted.error);
+        if (!brv02PersistWarned.current) {
+            brv02PersistWarned.current = true;
+            addToast('Staged runs are too large for browser storage and will be lost when the page reloads. Stage fewer runs at once to keep them.', 'warning');
+        }
+    }, [brv02Runs, addToast]);
 
     // --- Extracted Block ---
     // Drive Sync Function
