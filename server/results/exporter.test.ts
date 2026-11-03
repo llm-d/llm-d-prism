@@ -40,8 +40,10 @@ describe('server exporter syncPayloadMetadataToRawReport', () => {
             runId: '11111111-1111-4111-8111-111111111111',
             runLabel: 'Run TPU v7x Explicit Count',
             model_name: 'qwen3-32b',
+            format: 'brv02',
             hardware: { hardware_name: 'TPU v7x', accelerator_count: 4 },
             entries: [{
+                run_id: '11111111-1111-4111-8111-111111111112',
                 filename: 'stage_0.yaml',
                 raw_report: {
                     version: '0.2',
@@ -67,12 +69,14 @@ describe('server exporter syncPayloadMetadataToRawReport', () => {
     });
 
     it('exports a payload where hardware: { hardware_name: "TPU v7x" } (no accelerator_count) and raw_report has accelerator: { model: "tpu7x-2x2x1" }, preserving/setting accelerator.count: 4 in exported YAML', () => {
-        const payload: PrismResultPayload = {
+        const payload = {
             runId: '22222222-2222-4222-8222-222222222222',
             runLabel: 'Run TPU v7x Topology Count',
             model_name: 'qwen3-32b',
+            format: 'brv02' as const,
             hardware: { hardware_name: 'TPU v7x' },
             entries: [{
+                run_id: '22222222-2222-4222-8222-222222222223',
                 filename: 'stage_0.yaml',
                 raw_report: {
                     version: '0.2',
@@ -87,7 +91,7 @@ describe('server exporter syncPayloadMetadataToRawReport', () => {
                     },
                 },
             }],
-        };
+        } as unknown as PrismResultPayload;
 
         const synced = syncPayloadMetadataToRawReport(payload.entries[0].raw_report, payload);
         const yamlStr = serializeRawReportToYaml(synced);
@@ -102,8 +106,10 @@ describe('server exporter syncPayloadMetadataToRawReport', () => {
             runId: '33333333-3333-4333-8333-333333333333',
             runLabel: 'Run TPU Zip',
             model_name: 'qwen3-32b',
+            format: 'brv02',
             hardware: { hardware_name: 'TPU v7x', accelerator_count: 4 },
             entries: [{
+                run_id: '33333333-3333-4333-8333-333333333334',
                 filename: 'stage_0.yaml',
                 prism_stage_index: 0,
                 raw_report: {

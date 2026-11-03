@@ -415,4 +415,26 @@ describe('URL Parameter Lifecycle Integration Tests', () => {
             expect(parsed).toContain(`results-store:${targetUuid}`);
         });
     });
+
+    it('forwards prism_github_access_token as X-Prism-Github-Token when hydrating shared runs', async () => {
+        const missingUuid = '11111111-2222-4333-8444-555555555555';
+        localStorage.setItem('prism_github_access_token', 'gho_share_link_token');
+        const encoded = encodeShareLink([missingUuid]);
+        window.history.replaceState(null, '', `/?view=results-store&benchmarks=${encoded}`);
+
+        render(
+            <GitHubAuthProvider>
+                <App />
+            </GitHubAuthProvider>
+        );
+
+        await waitFor(() => {
+            const resultFetchCall = mockFetch.mock.calls.find(([url]) =>
+                url.toString().includes(`/api/results/${missingUuid}`)
+            );
+            expect(resultFetchCall).toBeDefined();
+            const [, options] = resultFetchCall;
+            expect(options?.headers?.['X-Prism-Github-Token']).toBe('gho_share_link_token');
+        });
+    });
 });

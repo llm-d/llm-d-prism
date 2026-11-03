@@ -427,7 +427,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
             if (missingUuids.length > 0) {
                 const headers = {};
-                const token = localStorage.getItem('prism_github_token');
+                const token = localStorage.getItem('prism_github_access_token');
                 if (token) {
                     headers['X-Prism-Github-Token'] = token;
                 }

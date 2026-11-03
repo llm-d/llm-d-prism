@@ -53,8 +53,9 @@ export function getPrismResultsPrefix(): string {
     return getResultsStorePrefix();
 }
 
-export type ResultsListItem = Omit<PrismResultPayload, 'entries'> & {
+export type ResultsListItem = Omit<PrismResultPayload, 'entries' | 'forked_from'> & {
     state: PrismSubmissionState;
+    forked_from?: PrismResultPayload['forked_from'] | boolean;
 };
 
 export interface ListResultsOptions {
