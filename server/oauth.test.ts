@@ -24,12 +24,24 @@ vi.mock('./iam', () => ({
     isPlaygroundMode: vi.fn(() => false)
 }));
 
-import { validateGitHubToken } from './oauth';
+import { validateGitHubToken, buildGitHubAuthUrl, GITHUB_OAUTH_SCOPE } from './oauth';
 import { validateGitHubUser, isPlaygroundMode } from './iam';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PRISM_IAM_PATH = path.resolve(__dirname, '../tools/prism-iam');
+
+describe('buildGitHubAuthUrl', () => {
+    it('requests both read:user and read:org scopes for llm-d organization membership checks', () => {
+        expect(GITHUB_OAUTH_SCOPE).toBe('read:user read:org');
+        const url = new URL(buildGitHubAuthUrl('client-123', 'https://prism.llm-d.ai/api/auth/github/callback', 'state-xyz'));
+        expect(url.origin + url.pathname).toBe('https://github.com/login/oauth/authorize');
+        expect(url.searchParams.get('client_id')).toBe('client-123');
+        expect(url.searchParams.get('redirect_uri')).toBe('https://prism.llm-d.ai/api/auth/github/callback');
+        expect(url.searchParams.get('state')).toBe('state-xyz');
+        expect(url.searchParams.get('scope')).toBe('read:user read:org');
+    });
+});
 
 describe('validateGitHubToken', () => {
     const originalFetch = globalThis.fetch;
@@ -92,6 +104,75 @@ describe('validateGitHubToken', () => {
             permission: 'admin',
             avatarUrl: 'https://example.com/a.png'
         });
+    });
+
+    it('grants user permission to active llm-d org members even when absent from GCS allowlist', async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ login: 'org-member', avatar_url: 'https://example.com/m.png' })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({ state: 'active', role: 'member' })
+            });
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        vi.mocked(validateGitHubUser).mockResolvedValueOnce('none');
+
+        const result = await validateGitHubToken('gho_read_org_token');
+        expect(result).toEqual({
+            username: 'org-member',
+            permission: 'user',
+            avatarUrl: 'https://example.com/m.png'
+        });
+    });
+
+    it('does not grant permission to pending (unaccepted) llm-d org invitations', async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ login: 'invited-user' })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({ state: 'pending', role: 'member' })
+            });
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        vi.mocked(validateGitHubUser).mockResolvedValueOnce('none');
+
+        const result = await validateGitHubToken('gho_read_org_token');
+        expect(result.permission).toBe('none');
+    });
+
+    it('falls back to public_members check when private org membership check returns 403', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ login: 'public-org-member', avatar_url: 'https://example.com/p.png' })
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                statusText: 'Forbidden'
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 204
+            });
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        vi.mocked(validateGitHubUser).mockResolvedValueOnce('none');
+
+        const result = await validateGitHubToken('gho_legacy_read_user_only');
+        expect(result).toEqual({
+            username: 'public-org-member',
+            permission: 'user',
+            avatarUrl: 'https://example.com/p.png'
+        });
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('returned 403'));
+        warnSpy.mockRestore();
     });
 });
 
