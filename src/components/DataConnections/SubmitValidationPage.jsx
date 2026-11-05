@@ -7,13 +7,23 @@ import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 import { isValidUuid } from '../../utils/shareLinkEncoder';
-import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
 
 import IntelligentRoutingChart from '../IntelligentRoutingChart';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { Badge, Button, Checkbox, Input, Label, Modal, Panel, Select, Spinner } from '../ui';
 import { cn } from '../../utils/cn';
 import CoalesceConflictModal from './CoalesceConflictModal';
+import {
+    peekWizardStartupState,
+    loadActiveStagedBundles,
+    saveActiveStagedBundles,
+    clearActiveStagedBundles,
+    clearWizardHandoffFlags,
+    loadStagedUploadCache,
+    saveStagedUploadCache,
+    clearStagedUploadCache,
+    formatStorageError
+} from '../../utils/stagedBundlesStore';
 
 const checkStageMetrics = (entry, format) => {
     let parsedStage = null;
@@ -149,6 +159,36 @@ const checkStageMetrics = (entry, format) => {
     };
 };
 
+const sanitizeStagedBundles = (bundles) => {
+    if (!Array.isArray(bundles)) return [];
+    return bundles.map(bundle => {
+        if (!bundle || !bundle.payload) return bundle;
+        const fallbackDesc = bundle.name || bundle.payload.runLabel || 'Unnamed Run';
+        const rawEntries = Array.isArray(bundle.payload.entries) ? bundle.payload.entries : [];
+        const entries = rawEntries.map((entry, idx) => ({
+            ...entry,
+            run_id: (entry.run_id && isValidUuid(entry.run_id)) ? entry.run_id : uuidv4(),
+            run_description: entry.run_description || fallbackDesc,
+            prism_stage_index: entry.prism_stage_index !== undefined ? entry.prism_stage_index : idx
+        }));
+        const updatedPayload = {
+            ...bundle.payload,
+            entries
+        };
+        const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
+        return {
+            ...bundle,
+            payload: updatedPayload,
+            validation: {
+                ...bundle.validation,
+                errors: uploadValidation.errors || [],
+                warnings: uploadValidation.warnings || [],
+                fieldErrors: uploadValidation.fieldErrors || {}
+            }
+        };
+    });
+};
+
 export default function UploadValidationPage({ onNavigateBack, onNavigate, dashboardState, dashboardData, initialIntent }) {
     const {
         baselineBenchmarkKey: _baselineBenchmarkKey,
@@ -164,25 +204,30 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         handleValidatedUpload: onCommit,
         loadSubmissions,
         loadAllData,
-        clearAllBrv02Runs,
         promoteStagedRunId,
         removeBrv02Run
     } = dashboardData;
 
     const _existingRunIds = React.useMemo(() => brv02Runs.map(r => r.runId), [brv02Runs]);
 
-    const [stagedFiles, setStagedFiles] = useState([]);
+    const [startupState] = useState(() =>
+        peekWizardStartupState({
+            initialIntent,
+            search: typeof window !== 'undefined' ? window.location.search : ''
+        })
+    );
+    const [stagedFiles, setStagedFiles] = useState(() =>
+        Array.isArray(startupState.syncBundles) && startupState.syncBundles.length > 0
+            ? sanitizeStagedBundles(startupState.syncBundles)
+            : []
+    );
+    const [isHydratingStaged, setIsHydratingStaged] = useState(() => startupState.needsAsyncHydration);
     const [tagDrafts, setTagDrafts] = useState({});
     const [manifestUrlInputs, setManifestUrlInputs] = useState({});
     const [evidenceUrlInputs, setEvidenceUrlInputs] = useState({});
-    const hasInitialized = React.useRef(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [uploadIntent, setUploadIntent] = useState(() => {
-        if (initialIntent) return initialIntent;
-        const params = new URLSearchParams(window.location.search);
-        return params.get('intent') || 'submit-review';
-    }); // 'stage-locally' or 'submit-review'
-    const [ingestionSource, setIngestionSource] = useState('local'); // 'local' or 'cloud'
+    const [uploadIntent, setUploadIntent] = useState(() => startupState.uploadIntent); // 'stage-locally' or 'submit-review'
+    const [ingestionSource, setIngestionSource] = useState(() => startupState.ingestionSource); // 'local' or 'cloud'
     const [cloudPath, setCloudPath] = useState('');
     const [cloudProvider, setCloudProvider] = useState('gcs'); // 'gcs' or 's3'
 
@@ -190,7 +235,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
     // Wizard navigation & Attribution states
     const { isAuthenticated, isConfigured, isPlaygroundMode, user, login, logout, accessToken } = useGitHubAuth();
-    const [wizardStep, setWizardStep] = useState(1);
+    const [wizardStep, setWizardStep] = useState(() => startupState.wizardStep);
     const [customAuthorName, setCustomAuthorName] = useState('');
     const [dcoSigned, setDcoSigned] = useState(false);
     const [selectedReviewers, setSelectedReviewers] = useState([]);
@@ -2054,124 +2099,108 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         }
     };
 
-    const sanitizeStagedBundles = (bundles) => {
-        if (!Array.isArray(bundles)) return [];
-        return bundles.map(bundle => {
-            if (!bundle || !bundle.payload) return bundle;
-            const fallbackDesc = bundle.name || bundle.payload.runLabel || 'Unnamed Run';
-            const rawEntries = Array.isArray(bundle.payload.entries) ? bundle.payload.entries : [];
-            const entries = rawEntries.map((entry, idx) => ({
-                ...entry,
-                run_id: (entry.run_id && isValidUuid(entry.run_id)) ? entry.run_id : uuidv4(),
-                run_description: entry.run_description || fallbackDesc,
-                prism_stage_index: entry.prism_stage_index !== undefined ? entry.prism_stage_index : idx
-            }));
-            const updatedPayload = {
-                ...bundle.payload,
-                entries
-            };
-            const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
-            return {
-                ...bundle,
-                payload: updatedPayload,
-                validation: {
-                    ...bundle.validation,
-                    errors: uploadValidation.errors || [],
-                    warnings: uploadValidation.warnings || [],
-                    fieldErrors: uploadValidation.fieldErrors || {}
-                }
-            };
-        });
-    };
-
     React.useEffect(() => {
-        if (hasInitialized.current) return;
-        hasInitialized.current = true;
-
-        // Check if we have a temporary staged redirect cache from GitHub auth flow
-        const cached = localStorage.getItem('prism_staged_upload_cache');
-        const trigger = localStorage.getItem('prism_trigger_resume_upload');
-        const wizardStepSaved = localStorage.getItem('prism_upload_wizard_step');
-
-        if (cached) {
-            try {
-                const parsed = JSON.parse(cached);
-                setStagedFiles(sanitizeStagedBundles(parsed));
-                setWizardStep(3);
-                setUploadIntent('submit-review');
-            } catch (e) {
-                console.warn("Failed to load cached staged files", e);
-                setStagedFiles([]);
-            }
-            localStorage.removeItem('prism_staged_upload_cache');
-        } else if (trigger === 'true') {
-            localStorage.removeItem('prism_trigger_resume_upload');
-            setWizardStep(3);
-            setUploadIntent('submit-review');
-            
-            try {
-                const savedBundles = localStorage.getItem('prism_active_staged_bundles');
-                if (savedBundles) {
-                    setStagedFiles(sanitizeStagedBundles(JSON.parse(savedBundles)));
-                }
-            } catch { /* ignore */ }
-        } else if (wizardStepSaved) {
-            localStorage.removeItem('prism_upload_wizard_step');
-            const stepNum = parseInt(wizardStepSaved, 10);
-            setWizardStep(stepNum);
-            const savedIntent = localStorage.getItem('prism_submit_intent') || 'submit-review';
-            localStorage.removeItem('prism_submit_intent');
-            setUploadIntent(savedIntent);
-            if (savedIntent === 'stage-locally') {
-                setIngestionSource('local');
-            }
-            
-            try {
-                const savedBundles = localStorage.getItem('prism_active_staged_bundles');
-                if (savedBundles) {
-                    setStagedFiles(sanitizeStagedBundles(JSON.parse(savedBundles)));
-                }
-            } catch (err) {
-                console.error("Failed to parse saved staged bundles:", err);
-            }
-        } else if (initialIntent) {
-            setUploadIntent(initialIntent);
-            if (initialIntent === 'stage-locally') {
-                setIngestionSource('local');
-                setStagedFiles([]);
+        if (startupState.needsAsyncHydration) {
+            let cancelled = false;
+            const hydrateFromIndexedDB = async () => {
                 try {
-                    localStorage.removeItem('prism_active_staged_bundles');
+                    if (startupState.mode === 'oauth-cache') {
+                        const cached = await loadStagedUploadCache();
+                        if (cancelled) return;
+                        if (Array.isArray(cached) && cached.length > 0) {
+                            setStagedFiles(sanitizeStagedBundles(cached));
+                            setWizardStep(3);
+                            setUploadIntent('submit-review');
+                        } else {
+                            setStagedFiles([]);
+                            setWizardStep(1);
+                            if (addToast) {
+                                addToast('Could not restore cached staged runs after sign-in. Please re-select your runs.', 'error');
+                            }
+                        }
+                        await clearStagedUploadCache();
+                    } else if (startupState.mode === 'resume-trigger') {
+                        const saved = await loadActiveStagedBundles();
+                        if (cancelled) return;
+                        if (Array.isArray(saved) && saved.length > 0) {
+                            setStagedFiles(sanitizeStagedBundles(saved));
+                            setWizardStep(3);
+                            setUploadIntent('submit-review');
+                        } else {
+                            setStagedFiles([]);
+                            setWizardStep(1);
+                        }
+                        clearWizardHandoffFlags();
+                    } else if (startupState.mode === 'wizard-step') {
+                        const saved = await loadActiveStagedBundles();
+                        if (cancelled) return;
+                        if (Array.isArray(saved) && saved.length > 0) {
+                            setStagedFiles(sanitizeStagedBundles(saved));
+                        } else if (startupState.wizardStep > 1) {
+                            setWizardStep(1);
+                            if (addToast) {
+                                addToast('Could not restore selected staged runs. Please re-select your runs from the Results Store.', 'error');
+                            }
+                        }
+                        clearWizardHandoffFlags();
+                    }
+                } catch (err) {
+                    console.error('Failed to hydrate staged bundles from IndexedDB:', err);
+                    if (!cancelled) {
+                        setWizardStep(1);
+                        if (addToast) {
+                            addToast(`Failed to restore staged runs: ${formatStorageError(err)}`, 'error');
+                        }
+                    }
+                } finally {
+                    if (!cancelled) {
+                        setIsHydratingStaged(false);
+                    }
+                }
+            };
+            hydrateFromIndexedDB();
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        // StrictMode-safe deferred cleanup of one-shot handoff markers after synchronous hydration.
+        const timer = setTimeout(() => {
+            if (startupState.mode === 'oauth-cache') {
+                clearStagedUploadCache();
+            } else if (startupState.mode === 'resume-trigger' || startupState.mode === 'wizard-step') {
+                if (
+                    startupState.mode === 'wizard-step' &&
+                    startupState.wizardStep > 1 &&
+                    (!Array.isArray(startupState.syncBundles) || startupState.syncBundles.length === 0)
+                ) {
+                    setWizardStep(1);
+                    if (addToast) {
+                        addToast('Could not restore selected staged runs. Please re-select your runs from the Results Store.', 'error');
+                    }
+                }
+                clearWizardHandoffFlags();
+            } else if (startupState.mode === 'intent') {
+                if (startupState.hasSavedSubmitIntentFlag) {
+                    clearWizardHandoffFlags();
+                }
+                if (startupState.shouldClearActiveStaged) {
+                    clearActiveStagedBundles();
+                }
+            } else if (startupState.mode === 'reset') {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.has('intent')) {
+                        params.delete('intent');
+                        const qs = params.toString();
+                        window.history.replaceState({}, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash || ''}`);
+                    }
                 } catch { /* ignore */ }
             }
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlIntent = urlParams.get('intent');
-            const submitIntent = localStorage.getItem('prism_submit_intent');
+        }, 0);
 
-            if (urlIntent) {
-                setUploadIntent(urlIntent);
-                if (urlIntent === 'stage-locally') {
-                    setIngestionSource('local');
-                    setStagedFiles([]);
-                    try {
-                        localStorage.removeItem('prism_active_staged_bundles');
-                    } catch { /* ignore */ }
-                }
-            } else if (submitIntent) {
-                localStorage.removeItem('prism_submit_intent');
-                setUploadIntent(submitIntent);
-                if (submitIntent === 'stage-locally') {
-                    setIngestionSource('local');
-                    setStagedFiles([]);
-                    try {
-                        localStorage.removeItem('prism_active_staged_bundles');
-                    } catch { /* ignore */ }
-                }
-            } else {
-                resetWizard();
-            }
-        }
-    }, [clearAllBrv02Runs, initialIntent]);
+        return () => clearTimeout(timer);
+    }, [startupState, addToast]);
 
     const handleDrop = async (e) => {
         e.preventDefault();
@@ -2280,11 +2309,11 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         });
         // An uncaught throw here used to leave the button doing nothing at all.
         try {
-            // Staging itself works from memory; this copy is only read back when
-            // the wizard is resumed, so failing to store it must not abort staging.
-            const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', validBundles);
-            if (!persisted.ok) {
-                console.warn('Staged bundles are too large to keep in localStorage:', persisted.error);
+            // Staging itself works from memory + brv02Runs; this copy is only read back when
+            // the wizard is resumed, so failing to store it warns rather than aborting staging.
+            const saveRes = await saveActiveStagedBundles(validBundles);
+            if (!saveRes.ok) {
+                console.warn('Staged bundles are too large to persist for wizard resume:', saveRes.error);
             }
             await onCommit(validBundles);
 
@@ -2301,16 +2330,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
 
             resetWizard();
-            localStorage.setItem('prism_activate_staged_filter', 'true');
-            if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
-                localStorage.setItem('prism_show_post_upload_dialog', 'staged');
+            try {
+                localStorage.setItem('prism_activate_staged_filter', 'true');
+                if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
+                    localStorage.setItem('prism_show_post_upload_dialog', 'staged');
+                }
+            } catch {
+                /* ignore non-critical UI hint quota errors */
             }
             if (onNavigate) {
                 onNavigate('results-store');
             }
-        } catch (e) {
-            console.error('Failed to stage runs locally:', e);
-            if (addToast) addToast(`Failed to stage runs locally: ${e.message}`, "error");
+        } catch (err) {
+            console.error('Failed to stage runs locally:', err);
+            if (addToast) {
+                addToast(`Failed to stage runs locally: ${formatStorageError(err)}`, "error");
+            }
         }
     };
 
@@ -2433,9 +2468,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
 
             // Close and reset
+            await clearActiveStagedBundles();
             resetWizard();
-            localStorage.setItem('prism_activate_my_submissions_filter', 'true');
-            localStorage.setItem('prism_show_post_upload_dialog', targetState === 'unlisted' ? 'unlisted' : 'submitted');
+            try {
+                localStorage.setItem('prism_activate_my_submissions_filter', 'true');
+                localStorage.setItem('prism_show_post_upload_dialog', targetState === 'unlisted' ? 'unlisted' : 'submitted');
+            } catch {
+                /* ignore non-critical UI hint quota errors */
+            }
             if (onNavigate) {
                 onNavigate('results-store');
             } else if (onNavigateBack) {
@@ -2463,9 +2503,23 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         } catch { /* ignore */ }
     };
 
-    const handleGithubLoginRedirect = () => {
-        localStorage.setItem('prism_staged_upload_cache', JSON.stringify(stagedFiles));
-        login({ showSubmitDialog: true });
+    const handleGithubLoginRedirect = async () => {
+        try {
+            const res = await saveStagedUploadCache(stagedFiles);
+            if (!res.ok) {
+                console.error("Failed to cache staged runs before GitHub login:", res.error);
+                if (addToast) {
+                    addToast(`Failed to cache staged runs before GitHub sign-in: ${formatStorageError(res.error)}`, "error");
+                }
+                return;
+            }
+            login({ showSubmitDialog: true });
+        } catch (err) {
+            console.error("Failed to cache staged runs before GitHub login:", err);
+            if (addToast) {
+                addToast(`Failed to cache staged runs before GitHub sign-in: ${formatStorageError(err)}`, "error");
+            }
+        }
     };
 
     const handleGithubDisconnect = () => {
@@ -3024,7 +3078,13 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                 {/* Content */}
                 <div className="flex-1 flex overflow-hidden">
-                    
+                    {isHydratingStaged ? (
+                        <div className="w-full flex flex-col items-center justify-center p-8 min-h-[50vh] gap-3 text-slate-400">
+                            <Spinner size="md" />
+                            <span className="text-xs font-semibold tracking-wide">Restoring staged benchmark runs...</span>
+                        </div>
+                    ) : (
+                    <>
                     {/* Left Pane: Ingestion Source Toggle & Input */}
                     {wizardStep === 1 && (
                         <div className={cn(
@@ -4575,6 +4635,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     )}
                     {wizardStep === 3 && renderStep3()}
                     {wizardStep === 4 && renderStep4()}
+                    </>
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -4671,7 +4733,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         )}
 
                         {wizardStep === 3 && (() => {
-                            const canProceedStep3 = isPlaygroundMode ? true : (isAuthenticated && user?.username && dcoSigned);
+                            const canProceedStep3 = !isHydratingStaged && stagedFiles.filter(f => !f.isSkipped).length > 0 && (isPlaygroundMode ? true : (isAuthenticated && user?.username && dcoSigned));
                             return (
                                 <div className="flex items-center gap-3">
                                     {!canProceedStep3 && (

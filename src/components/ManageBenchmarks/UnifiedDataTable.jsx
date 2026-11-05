@@ -32,7 +32,12 @@ import { downloadRunBRV02, downloadSingleStageYaml, getRawPrismCloudPayload } fr
 import { parseDataUri, extractAcceleratorCount } from '../../utils/dataParser';
 import { forkBenchmark } from '../../utils/benchmarkForker';
 import { createGlobMatcher, matchesBenchmarkStat } from '../../utils/globUtils';
-import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
+import {
+    hasIndexedDB,
+    saveWizardHandoff,
+    saveWizardHandoffSync,
+    formatWizardHandoffError
+} from '../../utils/stagedBundlesStore';
 
 const GROUP_BY_TAGS = {
     Model: 'MODEL',
@@ -509,7 +514,7 @@ export const UnifiedDataTable = (props) => {
         _toggleBenchmark, toggleModelExpansion,
         baselineBenchmarkKey, setBaselineBenchmarkKey,
         hideShowSelectedOnly = false,
-        renameClearToUnselectAll = false,
+        renameClearToUnselectAll: _renameClearToUnselectAll = false,
         brv02Runs = [], brv02CustomLabels = {}, removeBrv02Run, scannedFilenames = null,
         setShowDataPanel,
         searchTerm = '',
@@ -750,78 +755,82 @@ export const UnifiedDataTable = (props) => {
 
 
 
-    // Bundles reach the upload wizard through localStorage. When they do not
-    // fit, the wizard would open empty, so say why and stay on the table.
-    // Depends on addToast alone, not dashboardData, so the handlers built on it
-    // stay stable for the memoized rows.
+    // Depends on addToast + dashboardAddToast alone, not dashboardData, so the
+    // handlers built on it stay stable for the memoized rows.
     const dashboardAddToast = dashboardData?.addToast;
+    const notifyToast = React.useCallback((message, type = 'error') => {
+        if (addToast) {
+            addToast(message, type);
+        } else if (dashboardAddToast) {
+            dashboardAddToast(message, type);
+        } else {
+            setToastMessage(message);
+            setShowToast(true);
+        }
+    }, [addToast, dashboardAddToast]);
+
     const openWizardWithBundles = React.useCallback((bundles, intent) => {
-        const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', bundles);
-        if (!persisted.ok) {
-            console.error('Failed to hand staged bundles to the upload wizard:', persisted.error);
-            const msg = bundles.length === 1
-                ? 'This run is too large for browser storage, so it cannot be opened in the upload wizard.'
-                : `These ${bundles.length} runs are too large for browser storage to open in the upload wizard together. Select fewer runs at once.`;
-            if (addToast) addToast(msg, 'error');
-            else if (dashboardAddToast) dashboardAddToast(msg, 'error');
-            else {
-                setToastMessage(msg);
-                setShowToast(true);
+        if (!hasIndexedDB()) {
+            const res = saveWizardHandoffSync({ bundles, step: 2, intent });
+            if (!res.ok) {
+                console.error('Failed to hand staged bundles to the upload wizard:', res.error);
+                notifyToast(formatWizardHandoffError(res.error, bundles.length), 'error');
+                return;
+            }
+            if (onOpenSubmitDialog) {
+                onOpenSubmitDialog(intent);
             }
             return;
         }
+        return handleActionClick(async () => {
+            try {
+                const res = await saveWizardHandoff({ bundles, step: 2, intent });
+                if (!res.ok) {
+                    console.error('Failed to hand staged bundles to the upload wizard:', res.error);
+                    notifyToast(formatWizardHandoffError(res.error, bundles.length), 'error');
+                    return;
+                }
+                if (onOpenSubmitDialog) {
+                    onOpenSubmitDialog(intent);
+                }
+            } catch (e) {
+                console.error('Unexpected error preparing wizard handoff:', e);
+                notifyToast(formatWizardHandoffError(e, bundles.length), 'error');
+            }
+        });
+    }, [handleActionClick, notifyToast, onOpenSubmitDialog]);
 
-        try {
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', intent);
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog(intent);
-    }, [addToast, dashboardAddToast, onOpenSubmitDialog]);
-
-    const handlePublishSelected = () => {
+    const handlePublishSelected = React.useCallback(() => {
         if (selectedStagedRuns.length === 0) return;
-
         const bundles = selectedStagedRuns.map(buildBundleForRun);
-
-        openWizardWithBundles(bundles, 'submit-review');
-    };
+        return openWizardWithBundles(bundles, 'submit-review');
+    }, [selectedStagedRuns, openWizardWithBundles]);
 
     const handleEditStagedRun = React.useCallback((run, runId) => {
         if (!run) {
             console.warn('No staged run found for runId', runId);
-            setToastMessage('Could not open this benchmark for editing.');
-            setShowToast(true);
+            notifyToast('Could not open this benchmark for editing.', 'error');
             return;
         }
-
         const bundle = buildBundleForRun(run);
-
-        openWizardWithBundles([bundle], 'stage-locally');
-    }, [openWizardWithBundles]);
+        return openWizardWithBundles([bundle], 'stage-locally');
+    }, [notifyToast, openWizardWithBundles]);
 
     const handleEditSelected = React.useCallback(() => {
         if (selectedStagedRuns.length === 0) return;
-
         const bundles = selectedStagedRuns.map(buildBundleForRun);
-
-        openWizardWithBundles(bundles, 'stage-locally');
+        return openWizardWithBundles(bundles, 'stage-locally');
     }, [selectedStagedRuns, openWizardWithBundles]);
 
     const handleSubmitStagedRunForReview = React.useCallback((run, runId) => {
         if (!run) {
             console.warn('No staged run found for runId', runId);
-            setToastMessage('Could not submit this benchmark for review.');
-            setShowToast(true);
+            notifyToast('Could not submit this benchmark for review.', 'error');
             return;
         }
-
         const bundle = buildBundleForRun(run);
-
-        openWizardWithBundles([bundle], 'submit-review');
-    }, [openWizardWithBundles]);
+        return openWizardWithBundles([bundle], 'submit-review');
+    }, [notifyToast, openWizardWithBundles]);
 
     const [showPostForkModal, setShowPostForkModal] = useState(false);
     const [lastForkedCount, setLastForkedCount] = useState(1);
@@ -961,7 +970,7 @@ export const UnifiedDataTable = (props) => {
         return count;
     }, [selectedBenchmarks, modelStats, isDeletableStagedRun]);
 
-    const hasLocalSelected = localSelectedCount > 0;
+    const _hasLocalSelected = localSelectedCount > 0;
 
     const hasAnyLocalRuns = React.useMemo(() => {
         return modelStats.some(isDeletableStagedRun);
@@ -1225,7 +1234,7 @@ export const UnifiedDataTable = (props) => {
 
     const showSelectedOnly = hideShowSelectedOnly ? false : propShowSelectedOnly;
 
-    const toggleBaseline = (key) => {
+    const _toggleBaseline = (key) => {
         if (!setBaselineBenchmarkKey) return;
         setBaselineBenchmarkKey(prev => (prev === key ? null : key));
     };
@@ -1517,7 +1526,7 @@ export const UnifiedDataTable = (props) => {
         });
     }, [filteredStats, sortByField, sortDirection, brv02CustomLabels]);
 
-    const needsExpansion = sortedStats.length > 4;
+    const _needsExpansion = sortedStats.length > 4;
 
     const activeGroupBy = React.useMemo(() => {
         if (!groupBy) return [];
