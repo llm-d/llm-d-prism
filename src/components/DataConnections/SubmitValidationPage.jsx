@@ -7,6 +7,7 @@ import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 import { isValidUuid } from '../../utils/shareLinkEncoder';
+import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
 
 import IntelligentRoutingChart from '../IntelligentRoutingChart';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
@@ -2277,28 +2278,39 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
             return b;
         });
-        localStorage.setItem('prism_active_staged_bundles', JSON.stringify(validBundles));
-        await onCommit(validBundles);
-        
-        // Find which dashboards are targeted
-        const allTargets = new Set();
-        validBundles.forEach(b => {
-            if (b.targetDashboards) {
-                b.targetDashboards.forEach(t => allTargets.add(t));
+        // An uncaught throw here used to leave the button doing nothing at all.
+        try {
+            // Staging itself works from memory; this copy is only read back when
+            // the wizard is resumed, so failing to store it must not abort staging.
+            const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', validBundles);
+            if (!persisted.ok) {
+                console.warn('Staged bundles are too large to keep in localStorage:', persisted.error);
             }
-        });
+            await onCommit(validBundles);
 
-        if (addToast) {
-            addToast(`Successfully staged ${validBundles.length} runs locally.`, "success");
-        }
-        
-        resetWizard();
-        localStorage.setItem('prism_activate_staged_filter', 'true');
-        if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
-            localStorage.setItem('prism_show_post_upload_dialog', 'staged');
-        }
-        if (onNavigate) {
-            onNavigate('results-store');
+            // Find which dashboards are targeted
+            const allTargets = new Set();
+            validBundles.forEach(b => {
+                if (b.targetDashboards) {
+                    b.targetDashboards.forEach(t => allTargets.add(t));
+                }
+            });
+
+            if (addToast) {
+                addToast(`Successfully staged ${validBundles.length} runs locally.`, "success");
+            }
+
+            resetWizard();
+            localStorage.setItem('prism_activate_staged_filter', 'true');
+            if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
+                localStorage.setItem('prism_show_post_upload_dialog', 'staged');
+            }
+            if (onNavigate) {
+                onNavigate('results-store');
+            }
+        } catch (e) {
+            console.error('Failed to stage runs locally:', e);
+            if (addToast) addToast(`Failed to stage runs locally: ${e.message}`, "error");
         }
     };
 
