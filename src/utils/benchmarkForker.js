@@ -139,6 +139,7 @@ export function forkBenchmarkPayload(runPayloadOrStat, benchmarkData = [], optio
     // Reset review / submission lifecycle metadata
     delete payload.submitted_at;
     delete payload.review;
+    delete payload.requested_reviewers;
     delete payload.feedback;
     delete payload.github_author;
     payload.submission_state = 'staged';

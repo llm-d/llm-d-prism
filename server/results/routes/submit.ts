@@ -19,7 +19,7 @@ import { isPlaygroundMode } from '../../iam.ts';
 import { writeResult, deleteResult } from '../gcs.ts';
 import { processSubmission } from '../processing.ts';
 import { PrismSubmissionState, PrismResultPayload } from '../api.ts';
-import { normalizeReportUnits } from '../../../src/utils/benchmarkReportV02Parser.js';
+import { normalizeReportUnits, normalizeReviewers } from '../../../src/utils/benchmarkReportV02Parser.js';
 
 export interface ResultsSubmitResponse {
     success: boolean;
@@ -40,8 +40,8 @@ export interface ResultsSubmitResponse {
  * - **Response Format:** A JSON object confirming the submission status. All internal IDs (including top-level `runId` and nested entry `run_id`s) are regenerated on the server to prevent ID collisions. The response includes the new server-generated `runId`, the client-supplied `oldRunId` (if one was sent), the final promoted state (`submitted_pending_review`), and a success message.
  */
 export async function submitResultsHandler(
-    req: Request<{}, ResultsSubmitResponse | { error: string; details?: any; warnings?: any; state?: PrismSubmissionState }, PrismResultPayload>,
-    res: Response<ResultsSubmitResponse | { error: string; details?: any; warnings?: any; state?: PrismSubmissionState }>
+    req: Request<Record<string, never>, ResultsSubmitResponse | { error: string; details?: unknown; warnings?: unknown; state?: PrismSubmissionState }, PrismResultPayload>,
+    res: Response<ResultsSubmitResponse | { error: string; details?: unknown; warnings?: unknown; state?: PrismSubmissionState }>
 ) {
     const uploadData = req.body;
     if (!uploadData) {
@@ -67,8 +67,8 @@ export async function submitResultsHandler(
             const authResult = await validateGitHubToken(token);
             username = authResult.username;
             permission = authResult.permission;
-        } catch (e: any) {
-            return res.status(401).json({ error: 'Invalid or expired session token.', details: e.message });
+        } catch (e: unknown) {
+            return res.status(401).json({ error: 'Invalid or expired session token.', details: e instanceof Error ? e.message : String(e) });
         }
 
         // 2. Authorization check
@@ -95,7 +95,7 @@ export async function submitResultsHandler(
 
     // 4. Enrich payload with author & time metadata
     // Determine target visibility state ('unlisted' vs default 'submitted_pending_review')
-    const rawTargetState = (req.query.targetState as string) || (uploadData as any).targetState;
+    const rawTargetState = (req.query.targetState as string) || (uploadData as PrismResultPayload & { targetState?: string }).targetState;
     const targetState: PrismSubmissionState = rawTargetState === 'unlisted' ? 'unlisted' : 'submitted_pending_review';
 
     if (isPlaygroundMode()) {
@@ -109,6 +109,17 @@ export async function submitResultsHandler(
         uploadData.github_author = { username };
     }
     uploadData.submitted_at = new Date().toISOString();
+
+    if (Array.isArray(uploadData.requested_reviewers) && uploadData.requested_reviewers.every((r) => typeof r === 'string')) {
+        const sanitizedReviewers = normalizeReviewers(uploadData.requested_reviewers);
+        if (sanitizedReviewers.length > 0) {
+            uploadData.requested_reviewers = sanitizedReviewers;
+        } else {
+            delete uploadData.requested_reviewers;
+        }
+    } else if (uploadData.requested_reviewers === null) {
+        delete uploadData.requested_reviewers;
+    }
 
     try {
         // Use GCS storage service layer to stage the initial submission
@@ -138,13 +149,13 @@ export async function submitResultsHandler(
             message: successMessage
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Results Submit API Error]', error);
         if (serverRunId) {
             await deleteResult(serverRunId).catch((cleanupErr) => {
                 console.error('[Results Submit API Cleanup Error]', cleanupErr);
             });
         }
-        res.status(502).json({ error: 'Failed to submit or process result in storage backend', details: error.message });
+        res.status(502).json({ error: 'Failed to submit or process result in storage backend', details: error instanceof Error ? error.message : String(error) });
     }
 }

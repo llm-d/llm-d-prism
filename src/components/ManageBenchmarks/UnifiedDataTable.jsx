@@ -204,6 +204,13 @@ export const buildBundleForRun = (run) => {
         || run.stages?.[0]?.payload?.github_author 
         || null;
 
+    const requestedReviewersVal = run.requested_reviewers
+        || run.payload?.requested_reviewers
+        || run.bundle?.payload?.requested_reviewers
+        || run.stages?.[0]?.requested_reviewers
+        || run.stages?.[0]?.payload?.requested_reviewers
+        || null;
+
     const inferenceToolVal = run.inference_tool 
         || run.payload?.inference_tool 
         || run.stages?.[0]?.inference_tool 
@@ -314,6 +321,7 @@ export const buildBundleForRun = (run) => {
         well_lit_path: run.wellLitPath || run.well_lit_path || null,
         ...(forkedFromVal ? { forked_from: forkedFromVal } : {}),
         ...(githubAuthorVal ? { github_author: githubAuthorVal } : {}),
+        ...(Array.isArray(requestedReviewersVal) && requestedReviewersVal.length > 0 ? { requested_reviewers: requestedReviewersVal } : {}),
         ...(inferenceToolVal ? { inference_tool: inferenceToolVal } : {}),
         ...(inferenceToolVersionVal ? { inference_tool_version: inferenceToolVersionVal } : {}),
         ...(benchmarkHarnessVal ? { benchmark_harness: benchmarkHarnessVal } : {}),
@@ -2588,6 +2596,14 @@ export const UnifiedDataTable = (props) => {
                         const mAuthorUsername = typeof mAuthorObj === 'object' ? mAuthorObj?.username : (typeof mAuthorObj === 'string' ? mAuthorObj : null);
                         const mAuthorName = typeof mAuthorObj === 'object' ? mAuthorObj?.name : null;
 
+                        const rawModalReviewers = mSub?.requested_reviewers
+                            || mPayload?.requested_reviewers
+                            || mStat.payload?.requested_reviewers
+                            || mFirst.requested_reviewers
+                            || mFirst.payload?.requested_reviewers
+                            || [];
+                        const mRequestedReviewers = Array.isArray(rawModalReviewers) ? rawModalReviewers.filter(Boolean) : [];
+
                         const mForkedFrom = mPayload?.forked_from || mStat.payload?.forked_from || mStat.forked_from || mFirst.payload?.forked_from || mFirst.forked_from || mSub?.forked_from;
                         const mForkList = mForkedFrom ? (Array.isArray(mForkedFrom) ? mForkedFrom : [mForkedFrom]) : [];
 
@@ -2681,6 +2697,18 @@ export const UnifiedDataTable = (props) => {
                                                     <span className="text-slate-400 italic">Unknown</span>
                                                 )}
                                             </div>
+                                            {mRequestedReviewers.length > 0 && (
+                                                <div className="flex items-start justify-between gap-2 text-slate-400 pt-1 border-t border-slate-800/60">
+                                                    <span className="shrink-0">Requested Reviewers:</span>
+                                                    <span className="flex flex-wrap justify-end gap-1" data-testid="modal-requested-reviewers">
+                                                        {mRequestedReviewers.map(rev => (
+                                                            <Badge key={rev} size="xs" tone="brand" className="normal-case">
+                                                                @{rev}
+                                                            </Badge>
+                                                        ))}
+                                                    </span>
+                                                </div>
+                                            )}
                                             {(mStatus === 'public' || mStatus === 'promoted' || mApprovedAt) && (
                                                 <div className="flex items-center justify-between text-slate-400 pt-1 border-t border-slate-800/60">
                                                     <span>Approved At:</span>
@@ -3854,14 +3882,37 @@ const BenchmarkRow = React.memo(({
                                                                                     }
                                                                                     
                                                                                     const tooltipText = getStatusTooltipText(status, sub);
+                                                                                    const rawRowReviewers = sub?.requested_reviewers
+                                                                                        || benchmarkData[0]?.requested_reviewers
+                                                                                        || benchmarkData[0]?.payload?.requested_reviewers
+                                                                                        || stat.payload?.requested_reviewers
+                                                                                        || [];
+                                                                                    const rowReviewers = Array.isArray(rawRowReviewers) ? rawRowReviewers.filter(Boolean) : [];
+                                                                                    const showReviewersChip = chipStatus === 'in_review' && rowReviewers.length > 0;
+                                                                                    const reviewersSummary = rowReviewers.length <= 2
+                                                                                        ? rowReviewers.map(r => `@${r}`).join(', ')
+                                                                                        : `@${rowReviewers[0]} +${rowReviewers.length - 1}`;
                                                                                     
                                                                                     return (
-                                                                                        <div className="relative group/status-tooltip inline-flex items-center">
-                                                                                            <StatusChip status={chipStatus} label={chipLabel} className="cursor-help" />
-                                                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
-                                                                                                {tooltipText}
+                                                                                        <>
+                                                                                            <div className="relative group/status-tooltip inline-flex items-center">
+                                                                                                <StatusChip status={chipStatus} label={chipLabel} className="cursor-help" />
+                                                                                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                    {tooltipText}
+                                                                                                </div>
                                                                                             </div>
-                                                                                        </div>
+                                                                                            {showReviewersChip && (
+                                                                                                <Badge
+                                                                                                    tone="neutral"
+                                                                                                    size="xs"
+                                                                                                    className="normal-case cursor-help"
+                                                                                                    data-testid="row-requested-reviewers"
+                                                                                                    title={`Requested reviewers: ${rowReviewers.map(r => `@${r}`).join(', ')}`}
+                                                                                                >
+                                                                                                    Reviewers: {reviewersSummary}
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                        </>
                                                                                     );
                                                                                 } else {
                                                                                     return (

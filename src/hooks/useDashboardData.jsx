@@ -1067,7 +1067,6 @@ export const useDashboardData = (initialState, dashboardState) => {
     const fetchLocalData = async () => {
         try {
             const results = [];
-            let _hasDataJson = false;
 
             // 1. Fetch data.json (Standard Local Sample)
             try {
@@ -1078,7 +1077,6 @@ export const useDashboardData = (initialState, dashboardState) => {
                         const json = await res.json();
                         if (Array.isArray(json)) {
                             results.push(...json);
-                            _hasDataJson = true;
                         }
                     }
                 }
@@ -2464,7 +2462,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                 status: mapStateToStatus(item.state),
                 feedback: item.feedback || "",
                 forked_from: item.forked_from || null,
-                github_author: item.github_author || null
+                github_author: item.github_author || null,
+                requested_reviewers: Array.isArray(item.requested_reviewers) ? item.requested_reviewers : []
             }));
 
             const mergedList = [...serverSubmissions];
@@ -2489,7 +2488,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                             status: "staged",
                             feedback: "",
                             forked_from: run.forked_from || run.payload?.forked_from || null,
-                            github_author: run.github_author || run.payload?.github_author || null
+                            github_author: run.github_author || run.payload?.github_author || null,
+                            requested_reviewers: run.requested_reviewers || run.payload?.requested_reviewers || []
                         });
                     }
                 });

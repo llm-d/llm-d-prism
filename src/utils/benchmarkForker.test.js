@@ -59,6 +59,7 @@ describe('benchmarkForker', () => {
                             username: "octocat",
                             name: "Mona Lisa Octocat"
                         },
+                        requested_reviewers: ["alice", "bob"],
                         entries: [
                             {
                                 run_id: originalEntryRunId,
@@ -100,6 +101,7 @@ describe('benchmarkForker', () => {
         expect(forkedPayload.github_author).toBeUndefined();
         expect(forkedPayload.review).toBeUndefined();
         expect(forkedPayload.feedback).toBeUndefined();
+        expect(forkedPayload.requested_reviewers).toBeUndefined();
 
         // Provenance metadata populated
         expect(forkedPayload.forked_from).toBeDefined();

@@ -1013,6 +1013,28 @@ export function normalizeTags(raw) {
 }
 
 /**
+ * Parse and sanitize reviewer handles from a comma/whitespace-delimited string or string array.
+ * Strips leading '@', trims, drops empty entries, and deduplicates case-insensitively while preserving casing.
+ */
+export function normalizeReviewers(raw) {
+    if (raw === null || raw === undefined) return [];
+    const tokens = Array.isArray(raw)
+        ? raw.flatMap(item => (typeof item === 'string' ? item.split(/[,;\s]+/) : []))
+        : (typeof raw === 'string' ? raw.split(/[,;\s]+/) : []);
+    const seen = new Set();
+    const out = [];
+    for (const token of tokens) {
+        const cleaned = token.trim().replace(/^@+/, '').trim();
+        if (!cleaned) continue;
+        const key = cleaned.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(cleaned);
+    }
+    return out;
+}
+
+/**
  * Merge an array of stage records into grouped runs.
  */
 export const canonicalStringify = (obj) => {
@@ -1038,6 +1060,9 @@ export function forwardBundleMetadata(stage, payload) {
         }
     }
     if (payload.github_author) stage.github_author = payload.github_author;
+    if (Array.isArray(payload.requested_reviewers) && payload.requested_reviewers.length > 0) {
+        stage.requested_reviewers = normalizeReviewers(payload.requested_reviewers);
+    }
     if (payload.forked_from) stage.forked_from = payload.forked_from;
     if (payload.well_lit_path !== undefined) {
         stage.well_lit_path = payload.well_lit_path;
@@ -1253,6 +1278,7 @@ export function groupStagesIntoRuns(stageRecords) {
                 bundle: record.bundle || null,
                 forked_from: record.forked_from || record.payload?.forked_from || null,
                 github_author: record.github_author || record.payload?.github_author || null,
+                requested_reviewers: record.requested_reviewers || record.payload?.requested_reviewers || null,
                 targetDashboards: record.targetDashboards || [],
                 origin: record.origin || null
             };
@@ -1287,6 +1313,9 @@ export function groupStagesIntoRuns(stageRecords) {
         if (!targetRun.bundle && record.bundle) targetRun.bundle = record.bundle;
         if (!targetRun.forked_from && (record.forked_from || record.payload?.forked_from)) targetRun.forked_from = record.forked_from || record.payload?.forked_from;
         if (!targetRun.github_author && (record.github_author || record.payload?.github_author)) targetRun.github_author = record.github_author || record.payload?.github_author;
+        if (!targetRun.requested_reviewers && (record.requested_reviewers || record.payload?.requested_reviewers)) {
+            targetRun.requested_reviewers = record.requested_reviewers || record.payload?.requested_reviewers;
+        }
         if (!targetRun.targetDashboards && record.targetDashboards) targetRun.targetDashboards = record.targetDashboards;
         if (!targetRun.origin && record.origin) targetRun.origin = record.origin;
     }
@@ -1325,6 +1354,7 @@ export function groupStagesIntoRuns(stageRecords) {
             if (!stage.run_metadata && run.run_metadata) stage.run_metadata = run.run_metadata;
             if (!stage.forked_from && run.forked_from) stage.forked_from = run.forked_from;
             if (!stage.github_author && run.github_author) stage.github_author = run.github_author;
+            if (!stage.requested_reviewers && run.requested_reviewers) stage.requested_reviewers = run.requested_reviewers;
             if (run.metadata) {
                 stage.metadata = { ...(stage.metadata || {}), ...run.metadata };
             }
@@ -1502,6 +1532,7 @@ export function stageToEntry(stage) {
         run_id: stage.runId,
         runLabel: stage.runLabel || '',
         github_author: stage.github_author || stage.payload?.github_author || null,
+        requested_reviewers: stage.requested_reviewers || stage.payload?.requested_reviewers || null,
         model: modelName,
         model_name: modelName,
         hardware: hardware,

@@ -3,7 +3,7 @@ import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, 
 import { v4 as uuidv4 } from 'uuid';
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure, coalesceValidationMessages } from '../../utils/benchmarkValidator';
-import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags } from '../../utils/benchmarkReportV02Parser';
+import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags, normalizeReviewers } from '../../utils/benchmarkReportV02Parser';
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 import { isValidUuid } from '../../utils/shareLinkEncoder';
@@ -189,6 +189,23 @@ const sanitizeStagedBundles = (bundles) => {
     });
 };
 
+const resolveInitialReviewers = (bundles, checkCache = false) => {
+    if (checkCache) {
+        try {
+            const cachedReviewers = typeof localStorage !== 'undefined' ? localStorage.getItem('prism_staged_reviewers_cache') : null;
+            if (cachedReviewers) {
+                return normalizeReviewers(JSON.parse(cachedReviewers));
+            }
+        } catch {
+            /* ignore */
+        }
+    }
+    if (Array.isArray(bundles) && bundles.length > 0) {
+        return normalizeReviewers(bundles.flatMap(b => b?.payload?.requested_reviewers || []));
+    }
+    return [];
+};
+
 export default function UploadValidationPage({ onNavigateBack, onNavigate, dashboardState, dashboardData, initialIntent }) {
     const {
         baselineBenchmarkKey: _baselineBenchmarkKey,
@@ -238,7 +255,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
     const [wizardStep, setWizardStep] = useState(() => startupState.wizardStep);
     const [customAuthorName, setCustomAuthorName] = useState('');
     const [dcoSigned, setDcoSigned] = useState(false);
-    const [selectedReviewers, setSelectedReviewers] = useState([]);
+    const [selectedReviewers, setSelectedReviewers] = useState(() =>
+        resolveInitialReviewers(startupState.syncBundles, startupState.mode === 'oauth-cache')
+    );
+    const [reviewerDraft, setReviewerDraft] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [targetVisibility, setTargetVisibility] = useState('submitted_pending_review');
     const [_comparingBundleId, _setComparingBundleId] = useState(null);
@@ -2108,7 +2128,9 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         const cached = await loadStagedUploadCache();
                         if (cancelled) return;
                         if (Array.isArray(cached) && cached.length > 0) {
-                            setStagedFiles(sanitizeStagedBundles(cached));
+                            const sanitizedBundles = sanitizeStagedBundles(cached);
+                            setStagedFiles(sanitizedBundles);
+                            setSelectedReviewers(resolveInitialReviewers(sanitizedBundles, true));
                             setWizardStep(3);
                             setUploadIntent('submit-review');
                         } else {
@@ -2119,11 +2141,19 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                             }
                         }
                         await clearStagedUploadCache();
+                        try {
+                            localStorage.removeItem('prism_staged_reviewers_cache');
+                        } catch { /* ignore */ }
                     } else if (startupState.mode === 'resume-trigger') {
                         const saved = await loadActiveStagedBundles();
                         if (cancelled) return;
                         if (Array.isArray(saved) && saved.length > 0) {
-                            setStagedFiles(sanitizeStagedBundles(saved));
+                            const sanitizedBundles = sanitizeStagedBundles(saved);
+                            setStagedFiles(sanitizedBundles);
+                            const bundleReviewers = resolveInitialReviewers(sanitizedBundles, false);
+                            if (bundleReviewers.length > 0) {
+                                setSelectedReviewers(bundleReviewers);
+                            }
                             setWizardStep(3);
                             setUploadIntent('submit-review');
                         } else {
@@ -2135,7 +2165,12 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         const saved = await loadActiveStagedBundles();
                         if (cancelled) return;
                         if (Array.isArray(saved) && saved.length > 0) {
-                            setStagedFiles(sanitizeStagedBundles(saved));
+                            const sanitizedBundles = sanitizeStagedBundles(saved);
+                            setStagedFiles(sanitizedBundles);
+                            const bundleReviewers = resolveInitialReviewers(sanitizedBundles, false);
+                            if (bundleReviewers.length > 0) {
+                                setSelectedReviewers(bundleReviewers);
+                            }
                         } else if (startupState.wizardStep > 1) {
                             setWizardStep(1);
                             if (addToast) {
@@ -2168,6 +2203,9 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         const timer = setTimeout(() => {
             if (startupState.mode === 'oauth-cache') {
                 clearStagedUploadCache();
+                try {
+                    localStorage.removeItem('prism_staged_reviewers_cache');
+                } catch { /* ignore */ }
             } else if (startupState.mode === 'resume-trigger' || startupState.mode === 'wizard-step') {
                 if (
                     startupState.mode === 'wizard-step' &&
@@ -2355,11 +2393,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         
         setIsSubmitting(true);
         try {
+            const normalizedReviewers = normalizeReviewers(reviewerDraft !== null ? reviewerDraft : selectedReviewers);
+            const bundlesToCommit = normalizedReviewers.length > 0
+                ? validBundles.map(b => ({
+                    ...b,
+                    payload: {
+                        ...b.payload,
+                        requested_reviewers: normalizedReviewers
+                    }
+                }))
+                : validBundles;
+
             // Stage files locally for immediate browser viewing
-            await onCommit(validBundles);
+            await onCommit(bundlesToCommit);
             
             // Post each run package to the production Results Store API `/api/results`
-            for (const bundle of validBundles) {
+            for (const bundle of bundlesToCommit) {
                 const effectiveAuthor = isPlaygroundMode
                     ? { username: customAuthorName.trim() || 'anonymous', playground: true }
                     : (user?.username ? { username: user.username } : undefined);
@@ -2370,6 +2419,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     runLabel: bundle.name || bundle.payload?.runLabel || 'Unnamed Run',
                     model_name: bundle.payload?.model_name || "Custom Model",
                     ...(effectiveAuthor ? { github_author: effectiveAuthor } : {}),
+                    ...(normalizedReviewers.length > 0 ? { requested_reviewers: normalizedReviewers } : {}),
                     hardware: {
                         hardware_name: bundle.payload?.hardware?.hardware_name || "Unknown Hardware",
                         accelerator_count: bundle.payload?.hardware?.accelerator_count
@@ -2496,7 +2546,9 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         setCustomAuthorName('');
         setDcoSigned(false);
         setSelectedReviewers([]);
+        setReviewerDraft(null);
         try {
+            localStorage.removeItem('prism_staged_reviewers_cache');
             const params = new URLSearchParams(window.location.search);
             params.delete('intent');
             window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`);
@@ -2505,6 +2557,16 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
     const handleGithubLoginRedirect = async () => {
         try {
+            const currentReviewers = normalizeReviewers(reviewerDraft !== null ? reviewerDraft : selectedReviewers);
+            try {
+                if (currentReviewers.length > 0) {
+                    localStorage.setItem('prism_staged_reviewers_cache', JSON.stringify(currentReviewers));
+                } else {
+                    localStorage.removeItem('prism_staged_reviewers_cache');
+                }
+            } catch {
+                /* ignore non-critical reviewer cache error */
+            }
             const res = await saveStagedUploadCache(stagedFiles);
             if (!res.ok) {
                 console.error("Failed to cache staged runs before GitHub login:", res.error);
@@ -2655,15 +2717,42 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                     {/* Reviewers Selection */}
                     <div>
-                        <Label className="uppercase tracking-wider mb-1 select-none">Assign Reviewers</Label>
+                        <Label htmlFor="assign-reviewers-input" className="uppercase tracking-wider mb-1 select-none">Assign Reviewers</Label>
                         <Input
+                            id="assign-reviewers-input"
                             type="text"
-                            value={selectedReviewers.join(', ')}
+                            value={reviewerDraft ?? selectedReviewers.join(', ')}
                             disabled={!isPlaygroundMode && !isAuthenticated}
-                            onChange={(e) => setSelectedReviewers(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                            onChange={(e) => {
+                                const rawVal = e.target.value;
+                                setReviewerDraft(rawVal);
+                                setSelectedReviewers(normalizeReviewers(rawVal));
+                            }}
+                            onBlur={() => setReviewerDraft(null)}
                             placeholder="username1, username2 (comma separated)"
                             className="text-xs font-semibold"
                         />
+                        {selectedReviewers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2" data-testid="assigned-reviewer-pills">
+                                {selectedReviewers.map(reviewer => (
+                                    <Badge key={reviewer} size="xs" tone="brand" className="normal-case flex items-center gap-1 pr-1">
+                                        <span>@{reviewer}</span>
+                                        <button
+                                            type="button"
+                                            aria-label={`Remove reviewer ${reviewer}`}
+                                            onClick={() => {
+                                                const next = selectedReviewers.filter(r => r !== reviewer);
+                                                setSelectedReviewers(next);
+                                                setReviewerDraft(null);
+                                            }}
+                                            className="hover:text-white text-emerald-300/80 transition-colors cursor-pointer rounded-full p-0.5 leading-none"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2725,6 +2814,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                             `@${user?.username || 'Not specified'}`
                                         )}
                                     </span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="text-slate-550 block mb-1 select-none">Assigned Reviewers</span>
+                                    {selectedReviewers.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5" data-testid="step4-assigned-reviewers">
+                                            {selectedReviewers.map(reviewer => (
+                                                <Badge key={reviewer} size="xs" tone="brand" className="normal-case">
+                                                    @{reviewer}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-500 italic text-[11px]" data-testid="step4-assigned-reviewers">
+                                            None (any maintainer)
+                                        </span>
+                                    )}
                                 </div>
                                 {!isPlaygroundMode && (
                                     <div className="col-span-2">
@@ -4742,7 +4847,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                         </span>
                                     )}
                                     <button 
-                                        onClick={() => setWizardStep(4)}
+                                        onClick={() => {
+                                            setReviewerDraft(null);
+                                            setWizardStep(4);
+                                        }}
                                         disabled={!canProceedStep3}
                                         className={cn(
                                             'px-5 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer',
