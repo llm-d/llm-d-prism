@@ -13,10 +13,10 @@
 // limitations under the License.
 
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, LineChart, CartesianGrid, Tooltip, Line, BarChart, Bar, LabelList } from 'recharts';
+import { LineChart, CartesianGrid, Tooltip, Line, BarChart, Bar, LabelList } from 'recharts';
 import { RotateCcw, Maximize, Minimize, ChevronUp, ChevronDown } from 'lucide-react';
 import { CustomLabel, CustomChartTooltip } from '../common';
-import { Button, ChartContainer, ChartXAxis, ChartYAxis, Input, Select, gridProps } from '../ui';
+import { Button, ChartContainer, ChartXAxis, ChartYAxis, Input, SafeResponsiveContainer, Select, gridProps } from '../ui';
 import { cn } from '../../utils/cn';
 import { getBucket, getEffectiveTp, getAcceleratorCount } from '../../utils/dashboardHelpers';
 import { stripModelPrefix, stripExperimentIdSuffix } from '../../utils/runLabel';
@@ -1207,7 +1207,7 @@ export const ThroughputCostChart = (props) => {
                                  >
 
                                     {isBarMode ? (
-                                        <ResponsiveContainer width="100%" height="100%">
+                                        <SafeResponsiveContainer width="100%" height="100%">
                                             <BarChart
                                                 data={barChartData}
                                                 layout={isVerticalLayout ? 'vertical' : 'horizontal'}
@@ -1309,9 +1309,9 @@ export const ThroughputCostChart = (props) => {
                                                     );
                                                 })}
                                             </BarChart>
-                                        </ResponsiveContainer>
+                                        </SafeResponsiveContainer>
                                     ) : (
-                                        <ResponsiveContainer width="100%" height="100%">
+                                        <SafeResponsiveContainer width="100%" height="100%">
                                             <LineChart margin={{ top: 25, right: 20, left: 35, bottom: 25 }} onMouseLeave={() => setHoveredPointCoord(null)}>
                                                 <CartesianGrid {...gridProps()} opacity={0.35} />
                                                 <ChartXAxis
@@ -1441,7 +1441,7 @@ export const ThroughputCostChart = (props) => {
                                                     />
                                                 )}
                                             </LineChart>
-                                        </ResponsiveContainer>
+                                        </SafeResponsiveContainer>
                                     )}
                                 </div>
 
@@ -1581,7 +1581,7 @@ export const ThroughputCostChart = (props) => {
                       )}
                       
                       {isBarMode ? (
-                        <ResponsiveContainer width="100%" height="100%">
+                        <SafeResponsiveContainer width="100%" height="100%">
                             <BarChart
                                 data={barChartData}
                                 layout={isVerticalLayout ? 'vertical' : 'horizontal'}
@@ -1684,9 +1684,9 @@ export const ThroughputCostChart = (props) => {
                                     );
                                 })}
                             </BarChart>
-                        </ResponsiveContainer>
+                        </SafeResponsiveContainer>
                       ) : (
-                        <ResponsiveContainer width="100%" height="100%">
+                        <SafeResponsiveContainer width="100%" height="100%">
                             <LineChart margin={{ top: 45, right: 30, left: 60, bottom: 45 }} onMouseLeave={() => setHoveredPointCoord(null)}>
                               <CartesianGrid {...gridProps()} opacity={0.5} />
                               <ChartXAxis
@@ -1836,7 +1836,7 @@ export const ThroughputCostChart = (props) => {
                                    />
                               )}
                             </LineChart>
-                        </ResponsiveContainer>
+                        </SafeResponsiveContainer>
                       )}
                   </div>
                   

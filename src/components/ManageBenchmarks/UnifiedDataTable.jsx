@@ -2811,54 +2811,56 @@ export const UnifiedDataTable = (props) => {
                         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 pr-1 custom-scrollbar">
                             
                             {/* Section 1: Chart Container */}
-                            <div className="min-h-[450px] w-full flex flex-col">
-                                <ThroughputCostChart
-                                    tputType={drawerTputType}
-                                    setTputType={setDrawerTputType}
-                                    yQualityMode={drawerYQualityMode}
-                                    setYQualityMode={setDrawerYQualityMode}
-                                    chartMode={drawerChartMode}
-                                    setChartMode={setDrawerChartMode}
-                                    xQualityMode={drawerXQualityMode}
-                                    setXQualityMode={setDrawerXQualityMode}
-                                    costMode={drawerCostMode}
-                                    setCostMode={setDrawerCostMode}
-                                    showPerChip={drawerShowPerChip}
-                                    setShowPerChip={setDrawerShowPerChip}
-                                    showLabels={drawerShowLabels}
-                                    setShowLabels={setDrawerShowLabels}
-                                    showDataLabels={drawerShowDataLabels}
-                                    setShowDataLabels={setDrawerShowDataLabels}
-                                    showPareto={drawerShowPareto}
-                                    setShowPareto={setDrawerShowPareto}
-                                    qualityMetrics={qualityMetrics}
-                                    allModels={modelStats.map(m => m.model)}
-                                    selectedModels={selectedModels}
-                                    filteredData={drawerChartFilteredData}
-                                    getBenchmarkKey={getBenchmarkKey}
-                                    theme="dark"
-                                    isZoomEnabled={drawerIsZoomEnabled}
-                                    setIsZoomEnabled={setDrawerIsZoomEnabled}
-                                    zoomDomain={drawerZoomDomain}
-                                    setZoomDomain={setDrawerZoomDomain}
-                                    chartContainerRef={drawerChartContainerRef}
-                                    isDragging={drawerIsDragging}
-                                    setIsDragging={setDrawerIsDragging}
-                                    lastMouseRef={drawerLastMouseRef}
-                                    chartColorMode={drawerChartColorMode}
-                                    setChartColorMode={setDrawerChartColorMode}
-                                    metricAvailability={drawerMetricAvailability}
-                                    filteredBySource={drawerChartFilteredData}
-                                    xAxisMax={drawerXAxisMax}
-                                    setXAxisMax={setDrawerXAxisMax}
-                                    isLogScaleX={drawerIsLogScaleX}
-                                    setIsLogScaleX={setDrawerIsLogScaleX}
-                                    setLatType={setDrawerLatType}
-                                    selectedBenchmarks={selectedBenchmarks}
-                                    baselineBenchmarkKey={baselineBenchmarkKey}
-                                    lineConnectMode={drawerLineConnectMode}
-                                    setLineConnectMode={setDrawerLineConnectMode}
-                                />
+                            <div className="min-h-[450px] w-full min-w-0 flex flex-col">
+                                {showComparisonDrawer && (
+                                    <ThroughputCostChart
+                                        tputType={drawerTputType}
+                                        setTputType={setDrawerTputType}
+                                        yQualityMode={drawerYQualityMode}
+                                        setYQualityMode={setDrawerYQualityMode}
+                                        chartMode={drawerChartMode}
+                                        setChartMode={setDrawerChartMode}
+                                        xQualityMode={drawerXQualityMode}
+                                        setXQualityMode={setDrawerXQualityMode}
+                                        costMode={drawerCostMode}
+                                        setCostMode={setDrawerCostMode}
+                                        showPerChip={drawerShowPerChip}
+                                        setShowPerChip={setDrawerShowPerChip}
+                                        showLabels={drawerShowLabels}
+                                        setShowLabels={setDrawerShowLabels}
+                                        showDataLabels={drawerShowDataLabels}
+                                        setShowDataLabels={setDrawerShowDataLabels}
+                                        showPareto={drawerShowPareto}
+                                        setShowPareto={setDrawerShowPareto}
+                                        qualityMetrics={qualityMetrics}
+                                        allModels={modelStats.map(m => m.model)}
+                                        selectedModels={selectedModels}
+                                        filteredData={drawerChartFilteredData}
+                                        getBenchmarkKey={getBenchmarkKey}
+                                        theme="dark"
+                                        isZoomEnabled={drawerIsZoomEnabled}
+                                        setIsZoomEnabled={setDrawerIsZoomEnabled}
+                                        zoomDomain={drawerZoomDomain}
+                                        setZoomDomain={setDrawerZoomDomain}
+                                        chartContainerRef={drawerChartContainerRef}
+                                        isDragging={drawerIsDragging}
+                                        setIsDragging={setDrawerIsDragging}
+                                        lastMouseRef={drawerLastMouseRef}
+                                        chartColorMode={drawerChartColorMode}
+                                        setChartColorMode={setDrawerChartColorMode}
+                                        metricAvailability={drawerMetricAvailability}
+                                        filteredBySource={drawerChartFilteredData}
+                                        xAxisMax={drawerXAxisMax}
+                                        setXAxisMax={setDrawerXAxisMax}
+                                        isLogScaleX={drawerIsLogScaleX}
+                                        setIsLogScaleX={setDrawerIsLogScaleX}
+                                        setLatType={setDrawerLatType}
+                                        selectedBenchmarks={selectedBenchmarks}
+                                        baselineBenchmarkKey={baselineBenchmarkKey}
+                                        lineConnectMode={drawerLineConnectMode}
+                                        setLineConnectMode={setDrawerLineConnectMode}
+                                    />
+                                )}
                             </div>
 
                             <div className="space-y-4 pt-2 pb-6">

@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    ScatterChart, Scatter, CartesianGrid, Tooltip, ResponsiveContainer,
+    ScatterChart, Scatter, CartesianGrid, Tooltip,
 } from 'recharts';
 import {
     ExternalLink, ChevronDown, ChevronUp, Check, Code,
 } from 'lucide-react';
-import { WellLitHeader, Button, Badge, Modal, Panel, ToggleGroup, Spinner, ChartTooltip, ChartXAxis, ChartYAxis, seriesColor, gridProps, getChartTheme, getAxisConfig } from './ui';
+import { WellLitHeader, Button, Badge, Modal, Panel, ToggleGroup, Spinner, ChartTooltip, ChartXAxis, ChartYAxis, SafeResponsiveContainer, seriesColor, gridProps, getChartTheme, getAxisConfig } from './ui';
 import { cn } from '../utils/cn';
 import { scanAgenticWorkloads } from '../utils/gcsScanner';
 import { getLocalDashboardRuns } from '../utils/dashboardHelpers';
@@ -520,9 +520,9 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                 </div>
             )}
 
-            <div className="bg-slate-950/30 rounded-xl p-4 border border-slate-800/40 m-4 flex flex-col flex-1 select-none">
+            <div className="bg-slate-950/30 rounded-xl p-4 border border-slate-800/40 m-4 flex flex-col flex-1 min-w-0 select-none">
                 <div className="relative w-full h-[380px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <SafeResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 15, right: 30, left: 70, bottom: 45 }}>
                             <CartesianGrid {...gridProps()} opacity={0.4} />
                             <ChartXAxis dataKey="x" type="number" name={zoomXAxis.toUpperCase()} label={xAxisLabel} domain={chartAxesConfig.x.domain} ticks={chartAxesConfig.x.ticks} scale={zoomLogScale ? 'log' : 'auto'} allowDataOverflow />
@@ -543,7 +543,7 @@ export default function AgenticWorkloadsDashboard({ onNavigateBack, onNavigate, 
                                 />
                             ))}
                         </ScatterChart>
-                    </ResponsiveContainer>
+                    </SafeResponsiveContainer>
                 </div>
 
                 <div className="mt-4 border-t border-slate-700/50 pt-3 px-2">

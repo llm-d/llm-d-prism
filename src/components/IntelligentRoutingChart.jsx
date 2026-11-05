@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, CartesianGrid, Tooltip } from 'recharts';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import {
     Button, ToggleGroup, ChartXAxis, ChartYAxis, ChartTooltip, ChartTooltipRow,
-    CHART_SERIES, seriesColor, gridProps, getChartTheme,
+    CHART_SERIES, SafeResponsiveContainer, seriesColor, gridProps, getChartTheme,
 } from './ui';
 import { cn } from '../utils/cn';
 
@@ -407,11 +407,11 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                 </div>
                 )}
 
-                <div className="flex-1 min-h-[550px] relative bg-slate-950/30 rounded-xl p-2 border border-slate-800/40 m-4 overflow-visible flex flex-col">
+                <div className="flex-1 min-w-0 min-h-[550px] relative bg-slate-950/30 rounded-xl p-2 border border-slate-800/40 m-4 overflow-visible flex flex-col">
 
 
                     <div className="relative w-full h-[500px] select-none">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <SafeResponsiveContainer width="100%" height="100%">
                             <LineChart margin={{ top: 20, right: 30, left: 60, bottom: 45 }}>
                                 <CartesianGrid {...gridProps()} opacity={0.5} />
                                 <ChartXAxis
@@ -482,7 +482,7 @@ const IntelligentRoutingChart = ({ data, initialXAxis, initialYAxis, initialLogS
                                     });
                                 })()}
                             </LineChart>
-                        </ResponsiveContainer>
+                        </SafeResponsiveContainer>
                     </div>
 
                     <div className="mt-2 border-t border-slate-700/50 pt-2 px-2">

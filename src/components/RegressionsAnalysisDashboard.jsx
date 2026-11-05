@@ -116,11 +116,11 @@ import {
     ExternalLink, FileCode, GitCommit, Clock, Cpu, Server, Info, ChevronDown, ChevronUp, Download, Layers
 } from 'lucide-react';
 import {
-    ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
+    LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts';
 import {
     Badge, Button, ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
-    Panel, ShareLinkButton, ToggleGroup, CHART_STATUS, gridProps, seriesColor,
+    Panel, SafeResponsiveContainer, ShareLinkButton, ToggleGroup, CHART_STATUS, gridProps, seriesColor,
 } from './ui';
 import { cn } from '../utils/cn';
 import { scanRegressions } from '../utils/gcsScanner';
@@ -760,10 +760,11 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                             </div>
                         )}
 
-                        <div className="p-6 flex flex-col space-y-6 flex-1 overflow-visible">
+                        <div className="p-6 flex flex-col space-y-6 flex-1 min-w-0 overflow-visible">
                             {/* Interactive Chart Container */}
-                            <div className="w-full h-[460px] bg-slate-950/50 border border-slate-800/60 rounded-xl p-4 select-none relative overflow-visible flex flex-col">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="w-full min-h-[460px] bg-slate-950/50 border border-slate-800/60 rounded-xl p-4 select-none relative overflow-visible flex flex-col min-w-0">
+                                <div className="relative w-full h-[380px] min-w-0">
+                                <SafeResponsiveContainer width="100%" height="100%">
                                 <LineChart margin={{ top: 25, right: 25, left: 60, bottom: 45 }}>
                                     <CartesianGrid {...gridProps()} opacity={0.5} />
                                     <ChartXAxis
@@ -895,7 +896,8 @@ export default function RegressionsAnalysisDashboard({ onNavigateBack, onToggleM
                                         );
                                     })}
                                 </LineChart>
-                            </ResponsiveContainer>
+                                </SafeResponsiveContainer>
+                                </div>
 
                             {/* Custom Legend */}
                             <div className="mt-4 border-t border-slate-700/50 pt-4 px-2">

@@ -14,22 +14,28 @@
 
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TimeSeriesLineChart } from './TimeSeriesLineChart.jsx';
 
 describe('TimeSeriesLineChart', () => {
     it.each([false, true])('renders large series with clampPercent=%s', (clampPercent) => {
-        const series = [{
-            id: 'gpu-0',
-            label: 'GPU 0',
-            color: '#000000',
-            points: Array.from({ length: 200000 }, (_, i) => ({ tSec: i, value: i % 100 })),
-        }];
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const series = [{
+                id: 'gpu-0',
+                label: 'GPU 0',
+                color: '#000000',
+                points: Array.from({ length: 200000 }, (_, i) => ({ tSec: i, value: i % 100 })),
+            }];
 
-        const html = renderToStaticMarkup(
-            <TimeSeriesLineChart series={series} clampPercent={clampPercent} yLabel="GPU utilization" />,
-        );
+            const html = renderToStaticMarkup(
+                <TimeSeriesLineChart series={series} clampPercent={clampPercent} yLabel="GPU utilization" />,
+            );
 
-        expect(html).toContain('GPU utilization over elapsed time, 1 series');
+            expect(html).toContain('GPU utilization over elapsed time, 1 series');
+            expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 });

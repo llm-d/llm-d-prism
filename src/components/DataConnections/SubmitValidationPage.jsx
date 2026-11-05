@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, FileText, ChevronLeft, ChevronRight, ChevronDown, Trash2, Upload, ShieldAlert, Check, ArrowRight, ArrowLeft, GitCompare, Zap, Cpu, Pencil, Layers, Split, GripVertical, Sparkles, Info, RotateCcw, GitFork } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure, coalesceValidationMessages } from '../../utils/benchmarkValidator';
 import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags } from '../../utils/benchmarkReportV02Parser';
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
@@ -2888,9 +2888,9 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 </div>
 
                 {/* Chart and Grid Split - Stacked Vertically */}
-                <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-1">
+                <div className="flex-1 min-w-0 flex flex-col gap-6 overflow-y-auto pr-1">
                     {/* Reused Intelligent Routing Chart Component */}
-                    <div className="w-full relative overflow-visible">
+                    <div className="w-full min-w-0 relative overflow-visible">
                         <IntelligentRoutingChart 
                             data={chartFormattedData} 
                             initialXAxis="ttft" 
