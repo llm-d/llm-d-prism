@@ -77,6 +77,11 @@ Starting October 1, this quarter focuses on the llm-d 1.0 marketing launch, fine
     *   **Description**: Dynamically list and query verified community-submitted benchmarks.
     *   **Status**: Product Spec
 
+7.  **Agent-Native Results Store Tooling & Multi-Arm Campaign Ingestion**
+    *   **Description**: Full-lifecycle CLI (`prism-results`) and standalone Agent Skill (`skills/prism-results/SKILL.md`) supporting declarative multi-arm experiments (`experiment.yaml`), 3-tier metadata inference, automatic PII/secret scrubbing, mandatory user DCO sign-off, single-pass direct publishing, and GitHub issue failure reporting.
+    *   **Status**: Engineering Design -> Implementation
+    *   **Spec/Ref**: [agent-native-results-store-tooling-spec.md](../changes/agent-native-results-store-tooling-spec.md)
+
 ---
 
 ### 🟣 2027-H1 (Future Ideas & Explorations)

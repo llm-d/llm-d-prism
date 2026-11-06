@@ -1,0 +1,65 @@
+# Copyright 2026 Google LLC
+# SPDX-License-Identifier: Apache-2.0
+#
+# Example declarative multi-arm benchmark campaign manifest for prism-results CLI.
+# Usage:
+#   node skills/prism-results/scripts/prism.mjs validate -f skills/prism-results/examples/experiment.yaml --json
+#   node skills/prism-results/scripts/prism.mjs submit -f skills/prism-results/examples/experiment.yaml --dco-signoff "Jane Doe <jane@example.com>" --yes-user-approved --json
+
+version: "1.0"
+experiment:
+  id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+  label: "Llama-3.1-70B Prefix Cache & PD Disaggregation Sweep"
+  target_state: "submitted_pending_review"
+  requested_reviewers:
+    - "jkramberger"
+  dco_signoff: "Jane Doe <jane@example.com>"
+  agent_provenance:
+    agent_name: "uBench-runner"
+    tool_version: "prism-cli/0.1.0"
+    harness: "inference-perf"
+    harness_version: "v0.5.0"
+    commit_sha: "7eca871"
+
+defaults:
+  model_name: "meta-llama/Llama-3.1-70B-Instruct"
+  hardware:
+    hardware_name: "H100"
+    accelerator_count: 8
+  inference_tool: "vLLM"
+  inference_tool_version: "v0.6.3"
+  benchmark_harness: "inference-perf"
+  benchmark_harness_version: "v0.5.0"
+  well_lit_path: "Prefix Cache Offloading"
+  tags:
+    - "campaign:pd-disagg-q4"
+    - "kv-cache"
+
+arms:
+  - key: "arm-01-baseline"
+    run_label: "vLLM Baseline (TP=8, No Offload)"
+    path: "./arms/arm_01_baseline"
+    is_baseline: true
+    tags:
+      - "baseline"
+      - "campaign:pd-disagg-q4"
+
+  - key: "arm-02-cpu-offload-32g"
+    run_label: "vLLM CPU KV-Offload (32GB)"
+    path: "./arms/arm_02_cpu_offload_32g"
+    tags:
+      - "cpu-offload"
+      - "campaign:pd-disagg-q4"
+    metadata:
+      kv_offload_gb: 32
+
+  - key: "arm-03-pd-disagg-1p1d"
+    run_label: "vLLM PD Disaggregation (1P1D)"
+    path: "./arms/arm_03_pd_disagg_1p1d"
+    well_lit_path: "Prefill/Decode Disaggregation"
+    tags:
+      - "pd-disagg"
+      - "campaign:pd-disagg-q4"
+    metadata:
+      prefill_workers: 1
+      decode_workers: 1

@@ -4,10 +4,15 @@
   "version": "0.0.0",
   "license": "Apache-2.0",
   "type": "module",
+  "bin": {
+    "prism-results": "./skills/prism-results/scripts/prism.mjs"
+  },
   "scripts": {
     "dev": "concurrently \"tsx watch server/server.js\" \"vite --host\"",
     "build": "vite build",
     "start": "tsx server/server.js",
+    "prism": "tsx cli/prism.ts",
+    "build:cli": "esbuild cli/prism.ts --bundle --platform=node --target=node20 --format=esm --legal-comments=none --outfile=skills/prism-results/scripts/prism.mjs --banner:js=\"#!/usr/bin/env node\n// Copyright 2026 Google LLC\n// SPDX-License-Identifier: Apache-2.0\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
