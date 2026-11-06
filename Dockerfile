@@ -20,7 +20,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+RUN npm run build && npm run build:cli
 
 # Stage 3: Production server (default final stage for Cloud Run)
 FROM base AS production
@@ -32,6 +32,7 @@ RUN npm install --omit=dev
 # Copy server and built assets
 COPY server ./server
 COPY src/utils ./src/utils
+COPY --from=build /app/skills/prism-results ./skills/prism-results
 COPY --from=build /app/dist ./dist
 
 ENV PORT=8080

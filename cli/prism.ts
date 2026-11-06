@@ -38,6 +38,8 @@ import { validatePrismUploadStructure } from '../src/utils/benchmarkValidator.js
 import { parseReportV02, stageToEntry } from '../src/utils/benchmarkReportV02Parser.js';
 
 export const PRISM_CLI_VERSION = 'prism-cli/0.1.0';
+export const DEFAULT_API_URL = 'https://prism.llm-d.ai';
+export const DEFAULT_UI_URL = 'https://prism.llm-d.ai';
 const GITHUB_ISSUES_NEW_URL = 'https://github.com/llm-d/llm-d-prism/issues/new';
 const DCO_REGEX = /^[^<>]+\s+<[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+>$/;
 
@@ -411,7 +413,8 @@ function safeEncodeShareLink(runIds: string[]): string {
     if (!Array.isArray(runIds) || runIds.length === 0) return '';
     try {
         if (runIds.every((id) => isValidUuid(id))) {
-            return encodeShareLink(runIds);
+            const encoded = encodeShareLink(runIds);
+            if (encoded) return encoded;
         }
     } catch {
         // Fallback for non-UUID test IDs
@@ -420,17 +423,9 @@ function safeEncodeShareLink(runIds: string[]): string {
 }
 
 function buildShareUrl(uiUrl: string, runIds: string[], experimentId?: string | null): string {
-    const base = (uiUrl || 'https://prism.llm-d.ai').replace(/\/+$/, '');
+    const base = (uiUrl || DEFAULT_UI_URL).replace(/\/+$/, '');
     const encoded = safeEncodeShareLink(runIds);
-    const params = new URLSearchParams();
-    if (encoded) {
-        params.set('share', encoded);
-    }
-    if (experimentId) {
-        params.set('experimentId', experimentId);
-    }
-    const qs = params.toString();
-    return qs ? `${base}/?${qs}` : `${base}/`;
+    return `${base}/?view=results-store&benchmarks=${encodeURIComponent(encoded)}${experimentId ? `&experimentId=${encodeURIComponent(experimentId)}` : ''}`;
 }
 
 export function createForkedBundle(
@@ -832,13 +827,13 @@ function formatPctDelta(current: number | null, baseline: number | null): { pct:
 
 export async function runPrismCli(argv: string[], io: PrismCliIo = {}): Promise<PrismCliResult> {
     const stdout = io.stdout || ((msg: string) => console.log(msg));
-    const stderr = io.stderr || ((msg: string) => console.error(msg));
+    const stderr = io.stderr || io.stdout || ((msg: string) => console.error(msg));
     const fetchFn = io.fetchImpl || globalThis.fetch;
     const env = io.env || process.env;
 
     const { command, positionals, flags } = parseCliArgs(argv);
-    const apiUrl = (flags.apiUrl || env.PRISM_API_URL || 'http://localhost:8080').replace(/\/+$/, '');
-    const uiUrl = (flags.uiUrl || env.PRISM_UI_URL || 'https://prism.llm-d.ai').replace(/\/+$/, '');
+    const apiUrl = (flags.apiUrl || env.PRISM_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
+    const uiUrl = (flags.uiUrl || env.PRISM_UI_URL || DEFAULT_UI_URL).replace(/\/+$/, '');
 
     const emitResult = (exitCode: number, payload: Record<string, unknown>): PrismCliResult => {
         if (exitCode !== 0 && !payload.issueReport) {
@@ -863,6 +858,43 @@ export async function runPrismCli(argv: string[], io: PrismCliIo = {}): Promise<
                 if (exitCode === 0) stdout(payload.summary);
                 else stderr(payload.summary);
             }
+
+            if (payload.preflightSummary && typeof payload.preflightSummary === 'object') {
+                const ps = payload.preflightSummary as Record<string, unknown>;
+                const pii = (payload.piiReport || {}) as Record<string, unknown>;
+                const logFn = exitCode === 0 ? stdout : stderr;
+                logFn(`Experiment: ${ps.experimentLabel || 'N/A'} (${ps.experimentId || 'N/A'})`);
+                logFn(`Target State: ${ps.targetState || 'submitted_pending_review'}`);
+                logFn(`Arms Ready: ${ps.totalArms ?? 0} arm(s), ${ps.totalStages ?? 0} stage(s)`);
+                logFn(`PII Redactions: ${pii.total_redactions ?? pii.totalRedactions ?? 0} item(s) scrubbed`);
+                if (ps.dcoSignoff) {
+                    logFn(`DCO Sign-Off: ${ps.dcoSignoff}`);
+                }
+            }
+
+            if (exitCode === 2 && Array.isArray(payload.arms)) {
+                const invalidArms = (payload.arms as Array<Record<string, unknown>>).filter(
+                    (a) => a && a.isValid === false
+                );
+                for (const arm of invalidArms) {
+                    stderr(`Arm '${arm.armKey}' (${arm.path || '.'}) failed validation:`);
+                    if (Array.isArray(arm.errors)) {
+                        for (const errLine of arm.errors as string[]) {
+                            stderr(`  - ${errLine}`);
+                        }
+                    }
+                    const rem = arm.remediation as Record<string, unknown> | null | undefined;
+                    if (rem && typeof rem === 'object') {
+                        if (typeof rem.hint === 'string' && rem.hint) {
+                            stderr(`  Hint: ${rem.hint}`);
+                        }
+                        if (typeof rem.cliFlags === 'string' && rem.cliFlags) {
+                            stderr(`  Suggested CLI Flags: ${rem.cliFlags}`);
+                        }
+                    }
+                }
+            }
+
             if (typeof payload.shareUrl === 'string' && payload.shareUrl) {
                 stdout(`Share URL: ${payload.shareUrl}`);
             }

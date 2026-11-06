@@ -2463,7 +2463,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                 feedback: item.feedback || "",
                 forked_from: item.forked_from || null,
                 github_author: item.github_author || null,
-                requested_reviewers: Array.isArray(item.requested_reviewers) ? item.requested_reviewers : []
+                requested_reviewers: Array.isArray(item.requested_reviewers) ? item.requested_reviewers : [],
+                experiment_id: item.experiment_id || null,
+                experiment_label: item.experiment_label || null,
+                baseline_run_id: item.baseline_run_id || null,
+                dco_signoff: item.dco_signoff || null,
+                agent_provenance: item.agent_provenance || null,
+                pii_scrub_summary: item.pii_scrub_summary || null
             }));
 
             const mergedList = [...serverSubmissions];
@@ -2489,7 +2495,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                             feedback: "",
                             forked_from: run.forked_from || run.payload?.forked_from || null,
                             github_author: run.github_author || run.payload?.github_author || null,
-                            requested_reviewers: run.requested_reviewers || run.payload?.requested_reviewers || []
+                            requested_reviewers: run.requested_reviewers || run.payload?.requested_reviewers || [],
+                            experiment_id: run.experiment_id || run.payload?.experiment_id || null,
+                            experiment_label: run.experiment_label || run.payload?.experiment_label || null,
+                            baseline_run_id: run.baseline_run_id || run.payload?.baseline_run_id || null,
+                            dco_signoff: run.dco_signoff || run.payload?.dco_signoff || null,
+                            agent_provenance: run.agent_provenance || run.payload?.agent_provenance || null,
+                            pii_scrub_summary: run.pii_scrub_summary || run.payload?.pii_scrub_summary || null
                         });
                     }
                 });

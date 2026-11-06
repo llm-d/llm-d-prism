@@ -25,9 +25,17 @@ vi.mock('../../server/iam.ts', () => ({
 import { validateGitHubToken } from '../../server/oauth.ts';
 import { isPlaygroundMode } from '../../server/iam.ts';
 import * as gcsModule from '../../server/results/gcs.ts';
+import { resultsRouter } from '../../server/results/index.ts';
 import { submitResultsHandler } from '../../server/results/routes/submit.ts';
 import { listResultsHandler } from '../../server/results/routes/list.ts';
 import { getResultsHandler } from '../../server/results/routes/get.ts';
+import {
+    getAgentToolingManifestHandler,
+    getAgentSkillMdHandler,
+    getAgentCliBundleHandler,
+    getAgentExampleManifestHandler,
+    getAgentInstallScriptHandler
+} from '../../server/results/routes/agent.ts';
 import { sanitizeSubmissionPayload } from '../../server/results/service.ts';
 import { combineStagesToRunBundle } from '../utils/benchmarkReportV02Parser.js';
 import { createForkedBundle } from '../utils/benchmarkForker.js';
@@ -107,27 +115,58 @@ function buildValidAgentPayload(overrides = {}) {
     };
 }
 
-function createReqRes({ body = {}, token = 'valid-token', query = {}, params = {} } = {}) {
-    const headers = {};
+function createReqRes({
+    method = 'GET',
+    url = '/api/results',
+    protocol = 'https',
+    host = 'prism.llm-d.ai',
+    body = {},
+    token = 'valid-token',
+    query = {},
+    params = {}
+} = {}) {
+    const headers = {
+        host
+    };
     if (token !== undefined && token !== null) {
         headers['x-prism-github-token'] = token;
     }
 
     const req = {
+        method,
+        url,
+        originalUrl: url,
+        protocol,
         headers,
         query,
         params,
-        body
+        body,
+        get(headerName) {
+            return headers[String(headerName).toLowerCase()];
+        }
     };
 
+    const resHeaders = {};
     const res = {
         statusCode: 200,
+        headers: resHeaders,
         body: null,
+        setHeader(name, value) {
+            resHeaders[String(name).toLowerCase()] = value;
+            return this;
+        },
+        getHeader(name) {
+            return resHeaders[String(name).toLowerCase()];
+        },
         status(code) {
             this.statusCode = code;
             return this;
         },
         json(payload) {
+            this.body = payload;
+            return this;
+        },
+        send(payload) {
             this.body = payload;
             return this;
         }
@@ -362,5 +401,96 @@ describe('Agent-Native Results Store Backend & Schema (#185, #186)', () => {
         expect(forked.experiment_id).toBe('exp-forked-campaign');
         expect(forked.experiment_label).toBe('Forked Campaign');
         expect(forked.forked_from).toBeTruthy();
+    });
+
+    it('serves zero-clone Agent Skill & CLI bundle via /api/results/agent* and /SKILL.md without colliding with /api/results/:runId', () => {
+        // 1. GET /api/results/agent manifest
+        const { req: manReq, res: manRes } = createReqRes({
+            url: '/api/results/agent',
+            host: 'prism.llm-d.ai'
+        });
+        getAgentToolingManifestHandler(manReq, manRes);
+
+        expect(manRes.statusCode).toBe(200);
+        expect(manRes.body.name).toBe('prism-results');
+        expect(manRes.body.baseUrl).toBe('https://prism.llm-d.ai');
+        expect(manRes.body.endpoints).toEqual({
+            skillMd: 'https://prism.llm-d.ai/api/results/agent/SKILL.md',
+            cliBundle: 'https://prism.llm-d.ai/api/results/agent/prism.mjs',
+            exampleManifest: 'https://prism.llm-d.ai/api/results/agent/experiment.yaml',
+            installScript: 'https://prism.llm-d.ai/api/results/agent/install.sh'
+        });
+        expect(manRes.body.sha256.prismMjs).toMatch(/^[a-f0-9]{64}$/);
+        expect(manRes.body.quickStart.zeroCloneCli).toContain('curl -fsSL https://prism.llm-d.ai/api/results/agent/prism.mjs');
+
+        // 2. GET /api/results/agent/SKILL.md injects Zero-Clone Remote Bootstrap callout
+        const { req: skillReq, res: skillRes } = createReqRes({
+            url: '/api/results/agent/SKILL.md',
+            host: 'custom-prism.example.com'
+        });
+        getAgentSkillMdHandler(skillReq, skillRes);
+
+        expect(skillRes.statusCode).toBe(200);
+        expect(skillRes.getHeader('content-type')).toContain('text/markdown');
+        expect(skillRes.body).toContain('Zero-Clone Remote Bootstrap (Served by `https://custom-prism.example.com`)');
+        expect(skillRes.body).toContain('https://custom-prism.example.com/api/results/agent/prism.mjs');
+
+        // 3. GET /api/results/agent/prism.mjs returns standalone CLI bundle with matching SHA-256 header
+        const { req: cliReq, res: cliRes } = createReqRes({
+            url: '/api/results/agent/prism.mjs'
+        });
+        getAgentCliBundleHandler(cliReq, cliRes);
+
+        expect(cliRes.statusCode).toBe(200);
+        expect(cliRes.getHeader('content-type')).toContain('application/javascript');
+        expect(cliRes.getHeader('x-prism-cli-sha256')).toBe(manRes.body.sha256.prismMjs);
+        expect(String(cliRes.body).startsWith('#!/usr/bin/env node')).toBe(true);
+
+        // 4. GET /api/results/agent/experiment.yaml returns YAML manifest template
+        const { req: yamlReq, res: yamlRes } = createReqRes({
+            url: '/api/results/agent/experiment.yaml'
+        });
+        getAgentExampleManifestHandler(yamlReq, yamlRes);
+
+        expect(yamlRes.statusCode).toBe(200);
+        expect(yamlRes.getHeader('content-type')).toContain('text/yaml');
+        expect(yamlRes.body).toContain('experiment:');
+        expect(yamlRes.body).toContain('arms:');
+
+        // 5. GET /api/results/agent/install.sh returns bash installer with embedded SHA-256 verification
+        const { req: shReq, res: shRes } = createReqRes({
+            url: '/api/results/agent/install.sh',
+            host: 'prism.llm-d.ai'
+        });
+        getAgentInstallScriptHandler(shReq, shRes);
+
+        expect(shRes.statusCode).toBe(200);
+        expect(shRes.getHeader('content-type')).toContain('text/x-shellscript');
+        expect(shRes.body).toContain('#!/usr/bin/env bash');
+        expect(shRes.body).toContain(`EXPECTED_SHA256="${manRes.body.sha256.prismMjs}"`);
+        expect(shRes.body).toContain('/api/results/agent/prism.mjs');
+
+        // 6. Verify Express resultsRouter registers /api/results/agent* and /SKILL.md BEFORE /api/results/:runId
+        const routePaths = resultsRouter.stack
+            .filter((layer) => layer.route)
+            .map((layer) => layer.route.path);
+
+        const agentIdx = routePaths.indexOf('/api/results/agent');
+        const rootSkillIdx = routePaths.indexOf('/SKILL.md');
+        const runIdIdx = routePaths.indexOf('/api/results/:runId');
+
+        expect(agentIdx).toBeGreaterThanOrEqual(0);
+        expect(rootSkillIdx).toBeGreaterThanOrEqual(0);
+        expect(runIdIdx).toBeGreaterThan(agentIdx);
+
+        // Dispatch GET /api/results/agent through resultsRouter directly to confirm it does not hit getResultsHandler (which would return 400 Invalid UUID)
+        const { req: routerReq, res: routerRes } = createReqRes({
+            method: 'GET',
+            url: '/api/results/agent',
+            host: 'prism.llm-d.ai'
+        });
+        resultsRouter.handle(routerReq, routerRes, () => {});
+        expect(routerRes.statusCode).toBe(200);
+        expect(routerRes.body.name).toBe('prism-results');
     });
 });
