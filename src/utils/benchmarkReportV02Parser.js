@@ -1080,6 +1080,12 @@ export function forwardBundleMetadata(stage, payload) {
     if (payload.manifests) stage.manifests = payload.manifests;
     if (payload.evidence) stage.evidence = payload.evidence;
     if (payload.run_metadata) stage.run_metadata = payload.run_metadata;
+    if (payload.experiment_id !== undefined) stage.experiment_id = payload.experiment_id;
+    if (payload.experiment_label !== undefined) stage.experiment_label = payload.experiment_label;
+    if (payload.baseline_run_id !== undefined) stage.baseline_run_id = payload.baseline_run_id;
+    if (payload.dco_signoff !== undefined) stage.dco_signoff = payload.dco_signoff;
+    if (payload.agent_provenance !== undefined) stage.agent_provenance = payload.agent_provenance;
+    if (payload.pii_scrub_summary !== undefined) stage.pii_scrub_summary = payload.pii_scrub_summary;
     if (payload.metadata) {
         stage.metadata = {
             ...(stage.metadata || {}),
@@ -1279,6 +1285,12 @@ export function groupStagesIntoRuns(stageRecords) {
                 forked_from: record.forked_from || record.payload?.forked_from || null,
                 github_author: record.github_author || record.payload?.github_author || null,
                 requested_reviewers: record.requested_reviewers || record.payload?.requested_reviewers || null,
+                experiment_id: record.experiment_id || record.payload?.experiment_id || null,
+                experiment_label: record.experiment_label || record.payload?.experiment_label || null,
+                baseline_run_id: record.baseline_run_id || record.payload?.baseline_run_id || null,
+                dco_signoff: record.dco_signoff || record.payload?.dco_signoff || null,
+                agent_provenance: record.agent_provenance || record.payload?.agent_provenance || null,
+                pii_scrub_summary: record.pii_scrub_summary || record.payload?.pii_scrub_summary || null,
                 targetDashboards: record.targetDashboards || [],
                 origin: record.origin || null
             };
@@ -1315,6 +1327,24 @@ export function groupStagesIntoRuns(stageRecords) {
         if (!targetRun.github_author && (record.github_author || record.payload?.github_author)) targetRun.github_author = record.github_author || record.payload?.github_author;
         if (!targetRun.requested_reviewers && (record.requested_reviewers || record.payload?.requested_reviewers)) {
             targetRun.requested_reviewers = record.requested_reviewers || record.payload?.requested_reviewers;
+        }
+        if (!targetRun.experiment_id && (record.experiment_id || record.payload?.experiment_id)) {
+            targetRun.experiment_id = record.experiment_id || record.payload?.experiment_id;
+        }
+        if (!targetRun.experiment_label && (record.experiment_label || record.payload?.experiment_label)) {
+            targetRun.experiment_label = record.experiment_label || record.payload?.experiment_label;
+        }
+        if (!targetRun.baseline_run_id && (record.baseline_run_id || record.payload?.baseline_run_id)) {
+            targetRun.baseline_run_id = record.baseline_run_id || record.payload?.baseline_run_id;
+        }
+        if (!targetRun.dco_signoff && (record.dco_signoff || record.payload?.dco_signoff)) {
+            targetRun.dco_signoff = record.dco_signoff || record.payload?.dco_signoff;
+        }
+        if (!targetRun.agent_provenance && (record.agent_provenance || record.payload?.agent_provenance)) {
+            targetRun.agent_provenance = record.agent_provenance || record.payload?.agent_provenance;
+        }
+        if (!targetRun.pii_scrub_summary && (record.pii_scrub_summary || record.payload?.pii_scrub_summary)) {
+            targetRun.pii_scrub_summary = record.pii_scrub_summary || record.payload?.pii_scrub_summary;
         }
         if (!targetRun.targetDashboards && record.targetDashboards) targetRun.targetDashboards = record.targetDashboards;
         if (!targetRun.origin && record.origin) targetRun.origin = record.origin;
@@ -1355,6 +1385,12 @@ export function groupStagesIntoRuns(stageRecords) {
             if (!stage.forked_from && run.forked_from) stage.forked_from = run.forked_from;
             if (!stage.github_author && run.github_author) stage.github_author = run.github_author;
             if (!stage.requested_reviewers && run.requested_reviewers) stage.requested_reviewers = run.requested_reviewers;
+            if (!stage.experiment_id && run.experiment_id) stage.experiment_id = run.experiment_id;
+            if (!stage.experiment_label && run.experiment_label) stage.experiment_label = run.experiment_label;
+            if (!stage.baseline_run_id && run.baseline_run_id) stage.baseline_run_id = run.baseline_run_id;
+            if (!stage.dco_signoff && run.dco_signoff) stage.dco_signoff = run.dco_signoff;
+            if (!stage.agent_provenance && run.agent_provenance) stage.agent_provenance = run.agent_provenance;
+            if (!stage.pii_scrub_summary && run.pii_scrub_summary) stage.pii_scrub_summary = run.pii_scrub_summary;
             if (run.metadata) {
                 stage.metadata = { ...(stage.metadata || {}), ...run.metadata };
             }
@@ -1557,6 +1593,12 @@ export function stageToEntry(stage) {
         manifests: stage.manifests || stage.payload?.manifests || null,
         evidence: stage.evidence || stage.payload?.evidence || null,
         run_metadata: stage.run_metadata || stage.payload?.run_metadata || null,
+        experiment_id: stage.experiment_id || stage.payload?.experiment_id || null,
+        experiment_label: stage.experiment_label || stage.payload?.experiment_label || null,
+        baseline_run_id: stage.baseline_run_id || stage.payload?.baseline_run_id || null,
+        dco_signoff: stage.dco_signoff || stage.payload?.dco_signoff || null,
+        agent_provenance: stage.agent_provenance || stage.payload?.agent_provenance || null,
+        pii_scrub_summary: stage.pii_scrub_summary || stage.payload?.pii_scrub_summary || null,
 
         // Hoist key metrics to root for Chart compatibility
         time_per_output_token: performance.tpotMean ?? null,
@@ -1777,3 +1819,64 @@ export function mutateRawReportMetadata(rawReport, {
 
     return newReport;
 }
+
+/**
+ * Combines parsed stage items into a canonical PrismResultPayload bundle while preserving
+ * campaign grouping (#185), DCO sign-off, agent provenance, and PII scrub summary metadata.
+ */
+export function combineStagesToRunBundle(stages = [], existingBundle = {}) {
+    const firstStage = stages[0] || {};
+    const runId = existingBundle.runId || firstStage.runId || uuidv4();
+    const runLabel = existingBundle.runLabel || firstStage.runLabel || 'Benchmark Run';
+    const modelName = existingBundle.model_name || firstStage.model_name || firstStage.scenario?.model || 'Unknown';
+    const hardwareName = existingBundle.hardware?.hardware_name
+        || (typeof existingBundle.hardware === 'string' ? existingBundle.hardware : null)
+        || firstStage.hardware?.hardware_name
+        || (typeof firstStage.hardware === 'string' ? firstStage.hardware : null)
+        || firstStage.scenario?.hardware
+        || 'Unknown';
+    const acceleratorCount = existingBundle.hardware?.accelerator_count
+        ?? existingBundle.accelerator_count
+        ?? firstStage.accelerator_count
+        ?? firstStage.scenario?.acceleratorCount
+        ?? 1;
+
+    const entries = stages.map((stage, idx) => ({
+        run_id: stage.run_id || stage.runId || uuidv4(),
+        run_description: runLabel,
+        filename: stage.filename || `benchmark_report_v0.2,_stage_${stage.prism_stage_index ?? stage.stageIndex ?? idx}_lifecycle_metrics.json.yaml`,
+        prism_stage_index: stage.prism_stage_index ?? stage.stageIndex ?? idx,
+        raw_report: stage.raw_report || stage.rawReport || stage
+    }));
+
+    return {
+        runId,
+        runLabel,
+        model_name: modelName,
+        hardware: {
+            hardware_name: hardwareName,
+            accelerator_count: Number(acceleratorCount) || 1
+        },
+        format: 'brv02',
+        well_lit_path: existingBundle.well_lit_path ?? firstStage.well_lit_path ?? null,
+        tags: existingBundle.tags ? normalizeTags(existingBundle.tags) : (firstStage.tags ? normalizeTags(firstStage.tags) : []),
+        inference_tool: existingBundle.inference_tool ?? firstStage.inference_tool ?? null,
+        inference_tool_version: existingBundle.inference_tool_version ?? firstStage.inference_tool_version ?? null,
+        benchmark_harness: existingBundle.benchmark_harness ?? firstStage.benchmark_harness ?? null,
+        benchmark_harness_version: existingBundle.benchmark_harness_version ?? firstStage.benchmark_harness_version ?? null,
+        other_tools: existingBundle.other_tools ?? firstStage.other_tools ?? null,
+        manifests: existingBundle.manifests ?? firstStage.manifests ?? null,
+        evidence: existingBundle.evidence ?? firstStage.evidence ?? null,
+        run_metadata: existingBundle.run_metadata ?? firstStage.run_metadata ?? null,
+        metadata: existingBundle.metadata ?? firstStage.metadata ?? null,
+        requested_reviewers: existingBundle.requested_reviewers ?? firstStage.requested_reviewers ?? null,
+        experiment_id: existingBundle.experiment_id ?? firstStage.experiment_id ?? null,
+        experiment_label: existingBundle.experiment_label ?? firstStage.experiment_label ?? null,
+        baseline_run_id: existingBundle.baseline_run_id ?? firstStage.baseline_run_id ?? null,
+        dco_signoff: existingBundle.dco_signoff ?? firstStage.dco_signoff ?? null,
+        agent_provenance: existingBundle.agent_provenance ?? firstStage.agent_provenance ?? null,
+        pii_scrub_summary: existingBundle.pii_scrub_summary ?? firstStage.pii_scrub_summary ?? null,
+        entries
+    };
+}
+

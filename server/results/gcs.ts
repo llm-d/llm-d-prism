@@ -57,6 +57,12 @@ export function getPrismResultsPrefix(): string {
 export type ResultsListItem = Omit<PrismResultPayload, 'entries' | 'forked_from'> & {
     state: PrismSubmissionState;
     forked_from?: PrismResultPayload['forked_from'] | boolean;
+    experiment_id?: string | null;
+    experiment_label?: string | null;
+    baseline_run_id?: string | null;
+    dco_signoff?: PrismResultPayload['dco_signoff'];
+    agent_provenance?: PrismResultPayload['agent_provenance'];
+    pii_scrub_summary?: PrismResultPayload['pii_scrub_summary'];
 };
 
 export interface ListResultsOptions {
@@ -64,6 +70,7 @@ export interface ListResultsOptions {
     pageToken?: string;
     statusFilter?: PrismSubmissionState | null;
     ownFilter?: boolean;
+    experimentId?: string | null;
     username?: string | null;
     permission?: string;
 }
@@ -87,10 +94,11 @@ function decodePageToken(tokenStr: string): { gcsToken: string; skipCount: numbe
 
 /**
  * Lists benchmark results from Google Cloud Storage, applying status, user ownership filters,
- * and user permission authorization checks.
+ * experimentId campaign filter, and user permission authorization checks.
  */
 export async function listResults(options: ListResultsOptions): Promise<ListResultsResult> {
-    const { limit, pageToken, statusFilter, ownFilter, username, permission } = options;
+    const { limit, pageToken, statusFilter, ownFilter, experimentId, username, permission } = options;
+    const normalizedExperimentId = experimentId && experimentId.trim() ? experimentId.trim() : null;
     const { gcsToken, skipCount } = pageToken ? decodePageToken(pageToken) : { gcsToken: '', skipCount: 0 };
 
     const bucket = getPrismResultsBucket();
@@ -110,8 +118,8 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
         });
     }
 
-    // 2. Default Grid Filtering (general list queries without status or own filter exclude unlisted)
-    if (!statusFilter && !ownFilter) {
+    // 2. Default Grid Filtering (general list queries without status, own, or experimentId filter exclude unlisted)
+    if (!statusFilter && !ownFilter && !normalizedExperimentId) {
         filters.push((state) => state !== 'unlisted');
     }
 
@@ -134,6 +142,8 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
     let gcsFilter: string | undefined;
     if (ownFilter && username) {
         gcsFilter = `contexts."github_user"="${username}"`;
+    } else if (normalizedExperimentId) {
+        gcsFilter = `contexts."experiment_id"="${encodeContextValue(normalizedExperimentId)}"`;
     } else if (statusFilter) {
         gcsFilter = `contexts."submission_state"="${statusFilter}"`;
     }
@@ -170,6 +180,14 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
                 continue;
             }
 
+            const itemExperimentId = decodeContextValue(String(customContexts.experiment_id?.value || ''));
+            if (normalizedExperimentId && itemExperimentId !== normalizedExperimentId) {
+                continue;
+            }
+
+            const itemExperimentLabel = decodeContextValue(String(customContexts.experiment_label?.value || ''));
+            const itemBaselineRunId = decodeContextValue(String(customContexts.baseline_run_id?.value || ''));
+
             const relativePath = file.name.slice(resultsPrefix.length);
             const runIdMatch = relativePath.match(/^([^/]+)\.v1\.json$/);
             const runId = runIdMatch ? runIdMatch[1] : String(customContexts.run_id?.value || '');
@@ -205,7 +223,10 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
                 requested_reviewers: requestedReviewers.length > 0 ? requestedReviewers : undefined,
                 well_lit_path: well_lit_path || undefined,
                 forked: isForked || undefined,
-                forked_from: isForked ? true : undefined
+                forked_from: isForked ? true : undefined,
+                experiment_id: itemExperimentId || undefined,
+                experiment_label: itemExperimentLabel || undefined,
+                baseline_run_id: itemBaselineRunId || undefined
             });
         }
 
@@ -312,6 +333,18 @@ export async function writeResult(
 
     if (payload.forked_from || payload.forked) {
         contextsCustom.forked = { value: 'true' };
+    }
+
+    if (payload.experiment_id) {
+        contextsCustom.experiment_id = { value: encodeContextValue(payload.experiment_id) };
+    }
+
+    if (payload.experiment_label) {
+        contextsCustom.experiment_label = { value: encodeContextValue(payload.experiment_label) };
+    }
+
+    if (payload.baseline_run_id) {
+        contextsCustom.baseline_run_id = { value: payload.baseline_run_id };
     }
 
     if (isPlaygroundMode() || payload.github_author?.playground) {

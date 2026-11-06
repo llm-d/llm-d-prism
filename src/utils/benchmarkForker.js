@@ -136,13 +136,34 @@ export function forkBenchmarkPayload(runPayloadOrStat, benchmarkData = [], optio
         }));
     }
 
-    // Reset review / submission lifecycle metadata
+    // Reset review / submission lifecycle & sign-off metadata (a fork requires fresh sign-off)
     delete payload.submitted_at;
     delete payload.review;
     delete payload.requested_reviewers;
     delete payload.feedback;
     delete payload.github_author;
+    payload.dco_signoff = null;
+    payload.agent_provenance = null;
     payload.submission_state = 'staged';
+
+    if (options.runLabel !== undefined) {
+        payload.runLabel = options.runLabel;
+        if (Array.isArray(payload.entries)) {
+            payload.entries = payload.entries.map(e => ({ ...e, run_description: options.runLabel }));
+        }
+    }
+    if (options.experiment_id !== undefined) {
+        payload.experiment_id = options.experiment_id;
+    }
+    if (options.experiment_label !== undefined) {
+        payload.experiment_label = options.experiment_label;
+    }
+    if (options.baseline_run_id !== undefined) {
+        payload.baseline_run_id = options.baseline_run_id;
+    }
+    if (options.tags !== undefined) {
+        payload.tags = options.tags;
+    }
 
     return {
         payload,
@@ -233,3 +254,18 @@ export function forkBenchmark(runPayloadOrStat, benchmarkData = [], options = {}
         forkDetail
     };
 }
+
+/**
+ * Creates a forked payload/bundle from an existing bundle or payload while resetting
+ * DCO sign-off and agent provenance (`dco_signoff: null`, `agent_provenance: null`)
+ * and applying optional campaign/label overrides.
+ *
+ * @param {Object} sourceBundleOrPayload - Source bundle or PrismResultPayload to fork.
+ * @param {Object} [overrides={}] - Optional overrides (experiment_id, experiment_label, runLabel, tags, etc.).
+ * @returns {Object} Forked PrismResultPayload with fresh runId, forked_from lineage, and reset sign-off fields.
+ */
+export function createForkedBundle(sourceBundleOrPayload, overrides = {}) {
+    const { payload } = forkBenchmarkPayload(sourceBundleOrPayload, [], overrides);
+    return payload;
+}
+

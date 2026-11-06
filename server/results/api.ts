@@ -72,6 +72,50 @@ export const ForkDetailSchema = z.object({
 }).passthrough();
 
 /**
+ * Provenance metadata describing the autonomous agent or CLI harness that packaged and submitted the benchmark.
+ */
+export const AgentProvenanceSchema = z.object({
+    /** Identifier of the autonomous agent or CLI tool that packaged the submission. Example: "uBench-agent" */
+    agent_name: z.string().optional(),
+    /** CLI or skill version used to submit. Example: "prism-cli/0.1.0" */
+    tool_version: z.string().optional(),
+    /** Benchmark harness name if reported by agent. Example: "inference-perf" */
+    harness: z.string().optional(),
+    /** Benchmark harness version if reported by agent. Example: "v0.5.0" */
+    harness_version: z.string().optional(),
+    /** Git commit SHA of the benchmark harness or workload repo, if known. */
+    commit_sha: z.string().optional(),
+    /** CI / cluster job URL or capsule identifier. */
+    job_url: z.string().optional(),
+}).passthrough();
+
+/**
+ * Developer Certificate of Origin (DCO 1.1) sign-off record.
+ */
+export const DcoSignoffSchema = z.object({
+    /** Full "Name <email@domain>" DCO 1.1 sign-off line. */
+    signed_off_by: z.string().min(3),
+    /** ISO 8601 timestamp when sign-off was asserted. */
+    signed_at: z.string(),
+    /** Source of sign-off ("cli-flag" | "experiment-manifest" | "web-wizard"). */
+    source: z.enum(['cli-flag', 'experiment-manifest', 'web-wizard']).optional(),
+});
+
+/**
+ * Audit summary of pre-upload PII and sensitive data scrubbing.
+ */
+export const PiiScrubSummarySchema = z.object({
+    /** Whether automated PII scrubbing was executed on the bundle before upload. */
+    scrubbed: z.boolean(),
+    /** ISO 8601 timestamp when PII scrubbing ran. */
+    scrubbed_at: z.string(),
+    /** Total number of redactions applied across stages, manifests, and metadata. */
+    total_redactions: z.number().int().nonnegative(),
+    /** Count of redactions broken down by category (e.g., secret, home_path, email, internal_host, private_ip). */
+    categories: z.record(z.string(), z.number()).optional(),
+});
+
+/**
  * Root container representing the JSON payload content stored inside a result file inside the bucket.
  * Verified by validatePrismUploadStructure.
  */
@@ -145,14 +189,28 @@ export const PrismResultPayloadSchema = z.object({
     feedback: z.string().nullable().optional(),
     /** Optional list of GitHub usernames requested by the contributor to review this submission. */
     requested_reviewers: z.array(z.string()).nullable().optional(),
+    /** Shared logical campaign/experiment identifier grouping multi-arm runs (#185). */
+    experiment_id: z.string().min(1).max(128).nullable().optional(),
+    /** Human-readable campaign/experiment label (#185). */
+    experiment_label: z.string().min(1).max(256).nullable().optional(),
+    /** UUID of the designated baseline run within a multi-arm campaign (#185). */
+    baseline_run_id: z.string().uuid().nullable().optional(),
+    /** Developer Certificate of Origin (DCO 1.1) sign-off metadata. */
+    dco_signoff: DcoSignoffSchema.nullable().optional(),
+    /** Structured provenance metadata when packaged/submitted by an agent or CLI harness. */
+    agent_provenance: AgentProvenanceSchema.nullable().optional(),
+    /** Summary of automated PII/sensitive data scrubbing executed prior to submission. */
+    pii_scrub_summary: PiiScrubSummarySchema.nullable().optional(),
     /** Optional review metadata including reviewer and review status change history. */
     review: z.object({
         reviewer: z.string().optional(),
         reviewedAt: z.string().datetime().optional(),
+        feedback: z.string().nullable().optional(),
         history: z.array(z.object({
             status: z.string(),
             changedAt: z.string().datetime(),
             by: z.string(),
+            feedback: z.string().nullable().optional(),
         })).optional(),
     }).nullable().optional(),
     /** Collection of stage-level benchmark metric documents. Rejects empty lists. */
@@ -177,10 +235,16 @@ export const PrismResultContextSchema = z.object({
     well_lit_path: ContextValueSchema.optional(),
     playground_submitted: ContextValueSchema.optional(),
     forked: ContextValueSchema.optional(),
+    experiment_id: ContextValueSchema.optional(),
+    experiment_label: ContextValueSchema.optional(),
+    baseline_run_id: ContextValueSchema.optional(),
 });
 
 // TypeScript type inference definitions
 export type ForkDetail = z.infer<typeof ForkDetailSchema>;
+export type AgentProvenance = z.infer<typeof AgentProvenanceSchema>;
+export type DcoSignoff = z.infer<typeof DcoSignoffSchema>;
+export type PiiScrubSummary = z.infer<typeof PiiScrubSummarySchema>;
 export type PrismStageEntry = z.infer<typeof PrismStageEntrySchema>;
 export type PrismSubmissionState = z.infer<typeof PrismSubmissionStateSchema>;
 export type PrismResultPayload = z.infer<typeof PrismResultPayloadSchema>;

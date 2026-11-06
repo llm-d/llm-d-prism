@@ -23,6 +23,7 @@ export interface ResultsListQuery {
     pageToken?: string;
     status?: PrismSubmissionState;
     own?: string;
+    experimentId?: string;
 }
 
 /**
@@ -36,6 +37,7 @@ export interface ResultsListQuery {
  *     - `pageToken`: (Optional) Pagination token retrieved from the nextPageToken of a prior list response.
  *     - `status`: (Optional) Filter by submission status (staged | submitted_pending_processing | submitted_pending_review | public | promoted).
  *     - `own`: (Optional) Filter to retrieve only the logged-in user's submissions (true | false).
+ *     - `experimentId`: (Optional) Filter by multi-arm campaign/experiment ID.
  * - **Authorization Rules:**
  *     - **Playground Mode:** Default admin permissions for all callers.
  *     - **Admin:** Can list all benchmarks in all statuses.
@@ -45,7 +47,7 @@ export interface ResultsListQuery {
  *         - Benchmarks in pending or rejected states belonging to other users are filtered out.
  */
 export async function listResultsHandler(
-    req: Request<{}, ResultsListResponse | { error: string; details?: string }, {}, ResultsListQuery>,
+    req: Request<Record<string, never>, ResultsListResponse | { error: string; details?: string }, Record<string, never>, ResultsListQuery>,
     res: Response<ResultsListResponse | { error: string; details?: string }>
 ) {
     // 1. Authenticate user
@@ -58,8 +60,9 @@ export async function listResultsHandler(
             const authResult = await validateGitHubToken(token);
             username = authResult.username;
             permission = authResult.permission;
-        } catch (e: any) {
-            console.warn('[Results API] Invalid session token:', e.message);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.warn('[Results API] Invalid session token:', msg);
         }
     }
 
@@ -72,6 +75,7 @@ export async function listResultsHandler(
     const pageTokenParam = req.query.pageToken || '';
     const statusFilter = req.query.status || null;
     const ownFilter = req.query.own === 'true';
+    const experimentIdParam = req.query.experimentId ? String(req.query.experimentId).trim() : null;
 
     try {
         const results = await listResults({
@@ -79,12 +83,14 @@ export async function listResultsHandler(
             pageToken: pageTokenParam,
             statusFilter,
             ownFilter,
+            experimentId: experimentIdParam,
             username,
             permission
         });
         res.json(results);
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
         console.error('[Results List API Error]', error);
-        res.status(500).json({ error: 'Failed to list results', details: error.message });
+        res.status(500).json({ error: 'Failed to list results', details: msg });
     }
 }

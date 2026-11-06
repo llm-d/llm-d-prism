@@ -94,10 +94,27 @@ export async function submitResultsHandler(
     }
 
     // 4. Enrich payload with author & time metadata
-    // Determine target visibility state ('unlisted' vs default 'submitted_pending_review')
+    // Determine target visibility state ('unlisted' | 'submitted_pending_review' | 'public' | 'promoted')
     const rawTargetState = (req.query.targetState as string) || (uploadData as PrismResultPayload & { targetState?: string }).targetState;
-    const targetState: PrismSubmissionState = rawTargetState === 'unlisted' ? 'unlisted' : 'submitted_pending_review';
+    if ('targetState' in uploadData) {
+        delete (uploadData as Record<string, unknown>).targetState;
+    }
 
+    if (rawTargetState === 'public' || rawTargetState === 'promoted') {
+        if (!isPlaygroundMode() && permission !== 'admin') {
+            return res.status(403).json({
+                error: "Direct publishing to 'public' or 'promoted' requires admin privileges. Use targetState='submitted_pending_review' or 'unlisted'."
+            });
+        }
+    }
+
+    const targetState: PrismSubmissionState = (
+        rawTargetState === 'unlisted' ||
+        rawTargetState === 'public' ||
+        rawTargetState === 'promoted'
+    ) ? rawTargetState : 'submitted_pending_review';
+
+    const nowIso = new Date().toISOString();
     if (isPlaygroundMode()) {
         uploadData.github_author = {
             username: (uploadData.github_author?.username && uploadData.github_author.username.trim())
@@ -108,7 +125,24 @@ export async function submitResultsHandler(
     } else {
         uploadData.github_author = { username };
     }
-    uploadData.submitted_at = new Date().toISOString();
+    uploadData.submitted_at = nowIso;
+
+    if (targetState === 'public' || targetState === 'promoted') {
+        uploadData.review = {
+            reviewer: username,
+            reviewedAt: nowIso,
+            feedback: 'Direct publish on submission',
+            history: [
+                ...(uploadData.review?.history || []),
+                {
+                    status: targetState,
+                    changedAt: nowIso,
+                    by: username,
+                    feedback: 'Direct publish on submission'
+                }
+            ]
+        };
+    }
 
     if (Array.isArray(uploadData.requested_reviewers) && uploadData.requested_reviewers.every((r) => typeof r === 'string')) {
         const sanitizedReviewers = normalizeReviewers(uploadData.requested_reviewers);
@@ -139,7 +173,9 @@ export async function submitResultsHandler(
 
         const successMessage = processingResult.state === 'unlisted'
             ? 'Benchmark result successfully processed and saved as unlisted.'
-            : 'Benchmark result successfully submitted and promoted to review.';
+            : (processingResult.state === 'public' || processingResult.state === 'promoted')
+                ? `Benchmark result successfully submitted and published directly as ${processingResult.state}.`
+                : 'Benchmark result successfully submitted and promoted to review.';
 
         res.status(201).json({
             success: true,
