@@ -16,7 +16,7 @@
 /* eslint-disable no-unused-vars, react-hooks/exhaustive-deps, no-empty */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     BarChart, Bar, ReferenceDot, Label
 } from 'recharts';
 

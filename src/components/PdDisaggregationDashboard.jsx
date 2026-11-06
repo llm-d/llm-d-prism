@@ -20,13 +20,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    BarChart, Bar, Cell, CartesianGrid, Tooltip, ResponsiveContainer
+    BarChart, Bar, Cell, CartesianGrid, Tooltip
 } from 'recharts';
 import { Split, ChevronDown, ChevronUp } from 'lucide-react';
 import {
     WellLitHeader, Badge, Button, Panel, SectionLabel, ToggleGroup, StatPills,
     FactCell, LoadingState, EmptyState, ChartContainer, ChartTooltip,
-    ChartTooltipRow, ChartXAxis, ChartYAxis, gridProps, tooltipProps, seriesColor
+    ChartTooltipRow, ChartXAxis, ChartYAxis, SafeResponsiveContainer, gridProps, tooltipProps, seriesColor
 } from './ui';
 import { cn } from '../utils/cn';
 
@@ -389,7 +389,7 @@ export default function PdDisaggregationDashboard({ onNavigateBack, onToggleMobi
                             }
                         >
                             <div className="relative w-full h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <SafeResponsiveContainer width="100%" height="100%">
                                     <BarChart data={throughputChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
                                         <CartesianGrid {...gridProps()} vertical={false} />
                                         <ChartXAxis dataKey="ratio" tickLine={false} interval={0} />
@@ -400,7 +400,7 @@ export default function PdDisaggregationDashboard({ onNavigateBack, onToggleMobi
                                         />
                                         <Bar dataKey="value" fill={seriesColor(0)} radius={[6, 6, 0, 0]} maxBarSize={80} isAnimationActive={false} />
                                     </BarChart>
-                                </ResponsiveContainer>
+                                </SafeResponsiveContainer>
                             </div>
                             <p className="text-[10px] text-slate-500 mt-2">{THROUGHPUT_LABELS[thruMetric]}, by prefill:decode replica ratio (8 replicas total).</p>
                         </ChartContainer>
@@ -443,7 +443,7 @@ export default function PdDisaggregationDashboard({ onNavigateBack, onToggleMobi
                                 </div>
                             )}
                             <div className="relative w-full h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <SafeResponsiveContainer width="100%" height="100%">
                                     <BarChart data={latencyChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
                                         <CartesianGrid {...gridProps()} vertical={false} />
                                         <ChartXAxis dataKey="ratio" tickLine={false} interval={0} />
@@ -463,7 +463,7 @@ export default function PdDisaggregationDashboard({ onNavigateBack, onToggleMobi
                                             ))}
                                         </Bar>
                                     </BarChart>
-                                </ResponsiveContainer>
+                                </SafeResponsiveContainer>
                             </div>
                             <p className="text-[10px] text-slate-500 mt-2">
                                 {LATENCY_LABELS[latMetric]}{latMetric === 'itl' ? ', mean' : ' — Mean (solid), P90 (translucent)'}, by prefill:decode replica ratio (8 replicas total).

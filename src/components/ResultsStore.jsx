@@ -97,14 +97,14 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         setBrv02CustomLabels,
         removeBrv02Run,
         scannedFilenames,
-        promoteStagedRunId,
+        promoteStagedRunId: _promoteStagedRunId,
         expandedModels,
         setExpandedModels,
-        handleValidatedUpload,
+        handleValidatedUpload: _handleValidatedUpload,
         qualityMetrics,
-        submissions,
+        submissions: _submissions,
         isLoadingSubmissions,
-        loadSubmissions,
+        loadSubmissions: _loadSubmissions,
         updateSubmissionStatus,
         bulkUpdateSubmissionStatus,
         deleteSubmission,
@@ -126,7 +126,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         if (postUploadType) {
             try {
                 localStorage.removeItem('prism_show_post_upload_dialog');
-            } catch {}
+            } catch { /* ignore */ }
         }
     }, [postUploadType]);
 
@@ -136,18 +136,12 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         if (dontShowAgain && postUploadType === 'staged') {
             try {
                 localStorage.setItem('prism_hide_post_staged_dialog', 'true');
-            } catch {}
+            } catch { /* ignore */ }
         }
         setPostUploadType(null);
     };
 
-    const [stagedBundles, setStagedBundles] = React.useState(() => {
-        try {
-            const saved = localStorage.getItem('prism_active_staged_bundles');
-            return saved ? JSON.parse(saved) : [];
-        } catch { return []; }
-    });
-    const [activeTab, setActiveTab] = React.useState('all'); // 'all' or 'submissions'
+    const [_activeTab, _setActiveTab] = React.useState('all'); // 'all' or 'submissions'
     const [searchTerm, setSearchTerm] = React.useState(() => {
         try {
             const params = new URLSearchParams(window.location.search);
@@ -156,7 +150,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
             const saved = localStorage.getItem('prism_search_term');
             if (saved) return saved;
-        } catch {}
+        } catch { /* ignore */ }
         return '';
     });
 
@@ -221,7 +215,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             if (triggerMySubs === 'true') {
                 return 'my-submissions';
             }
-        } catch {}
+        } catch { /* ignore */ }
         return null;
     });
 

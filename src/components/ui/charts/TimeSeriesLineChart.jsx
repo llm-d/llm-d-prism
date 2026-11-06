@@ -14,9 +14,10 @@
 
 import React from 'react';
 import {
-    LineChart, Line, CartesianGrid, ResponsiveContainer, Tooltip,
+    LineChart, Line, CartesianGrid, Tooltip,
 } from 'recharts';
 import { ChartXAxis, ChartYAxis } from './Axis';
+import { SafeResponsiveContainer } from './SafeResponsiveContainer';
 import { ChartTooltip, ChartTooltipRow } from './ChartTooltip';
 import { ChartLegend } from './ChartLegend';
 import { getAxisConfig } from './utils';
@@ -154,7 +155,7 @@ export function TimeSeriesLineChart({
                 role="img"
                 aria-label={ariaLabel || `${yLabel || 'Metric'} over elapsed time, ${shown.length} series`}
             >
-                <ResponsiveContainer width="100%" height="100%">
+                <SafeResponsiveContainer width="100%" height="100%">
                     <LineChart
                         // Recharts keeps stale <Line> paths on screen when the series set
                         // changes without a key change (e.g. switching metric or run
@@ -196,7 +197,7 @@ export function TimeSeriesLineChart({
                             />
                         ))}
                     </LineChart>
-                </ResponsiveContainer>
+                </SafeResponsiveContainer>
             </div>
         </div>
     );

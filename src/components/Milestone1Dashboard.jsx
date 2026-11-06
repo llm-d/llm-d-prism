@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ScatterChart, Scatter, ComposedChart, ZAxis, Label, ReferenceArea, ReferenceLine
 } from 'recharts';
 import IntelligentRoutingChart from './IntelligentRoutingChart';

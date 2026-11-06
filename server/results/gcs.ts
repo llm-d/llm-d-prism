@@ -20,6 +20,7 @@ import {
     getResultsStoreObjectPath
 } from '../buckets.js';
 import { isPlaygroundMode } from '../iam.ts';
+import { normalizeReviewers } from '../../src/utils/benchmarkReportV02Parser.js';
 
 export function encodeContextValue(val: string): string {
     return 'e' + Buffer.from(val, 'utf8').toString('base64url');
@@ -176,6 +177,8 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
             const model_name = decodeContextValue(String(customContexts.model_name?.value || 'Unknown'));
             const hardware_name = decodeContextValue(String(customContexts.hardware_name?.value || 'Unknown'));
             const feedback = decodeContextValue(String(customContexts.feedback?.value || ''));
+            const rawRequestedReviewers = decodeContextValue(String(customContexts.requested_reviewers?.value || ''));
+            const requestedReviewers = rawRequestedReviewers ? normalizeReviewers(rawRequestedReviewers) : [];
             const well_lit_path = decodeContextValue(String(customContexts.well_lit_path?.value || ''));
 
             const isForked = customContexts.forked?.value === 'true' || customContexts.forked_from?.value !== undefined;
@@ -199,6 +202,7 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
                 },
                 submitted_at: metadata?.timeCreated || metadata?.updated || null,
                 feedback: feedback || undefined,
+                requested_reviewers: requestedReviewers.length > 0 ? requestedReviewers : undefined,
                 well_lit_path: well_lit_path || undefined,
                 forked: isForked || undefined,
                 forked_from: isForked ? true : undefined
@@ -293,6 +297,13 @@ export async function writeResult(
 
     if (payload.feedback) {
         contextsCustom.feedback = { value: encodeContextValue(payload.feedback) };
+    }
+
+    if (Array.isArray(payload.requested_reviewers) && payload.requested_reviewers.length > 0) {
+        const sanitizedReviewers = normalizeReviewers(payload.requested_reviewers);
+        if (sanitizedReviewers.length > 0) {
+            contextsCustom.requested_reviewers = { value: encodeContextValue(sanitizedReviewers.join(',')) };
+        }
     }
 
     if (payload.well_lit_path) {

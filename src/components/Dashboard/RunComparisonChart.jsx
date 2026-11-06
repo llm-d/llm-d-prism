@@ -13,12 +13,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     BarChart, Bar, Cell, CartesianGrid, ReferenceLine,
-    ResponsiveContainer, LabelList, Tooltip,
+    LabelList, Tooltip,
 } from 'recharts';
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import {
     Button, ChartContainer, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis,
-    CHART_SERIES, EmptyState, ToggleGroup, gridProps,
+    CHART_SERIES, EmptyState, SafeResponsiveContainer, ToggleGroup, gridProps,
 } from '../ui';
 import { cn } from '../../utils/cn';
 import { getEntryLabel, getCustomLabelRunId } from '../../utils/runLabel';
@@ -820,7 +820,7 @@ export const RunComparisonChart = ({
             <div className="h-[260px] overflow-x-auto overflow-y-hidden">
                 {hasPlotData ? (
                     <div style={{ minWidth: `${Math.max(680, plotData.length * 48)}px`, height: '100%' }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <SafeResponsiveContainer width="100%" height="100%">
                             <BarChart
                                 // Recharts caches per-bar layout by registration order, so
                                 // toggling a stat on/off after others were registered can leave
@@ -886,7 +886,7 @@ export const RunComparisonChart = ({
                                     </Bar>
                                 ))}
                             </BarChart>
-                        </ResponsiveContainer>
+                        </SafeResponsiveContainer>
                     </div>
                 ) : (
                     <EmptyState

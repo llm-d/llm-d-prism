@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { X, UploadCloud, CheckCircle, AlertCircle, AlertOctagon, AlertTriangle, FileText, ChevronLeft, ChevronRight, ChevronDown, Trash2, Upload, ShieldAlert, Check, ArrowRight, ArrowLeft, GitCompare, Zap, Cpu, Pencil, Layers, Split, GripVertical, Sparkles, Info, RotateCcw, GitFork } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Scatter } from 'recharts';
 import { validateBenchmark, validatePrismUploadStructure, coalesceValidationMessages } from '../../utils/benchmarkValidator';
-import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags } from '../../utils/benchmarkReportV02Parser';
+import { parseReportV02, stageToEntry, isValidRunEid, groupStandaloneBRV02Stages, mergeStagedBundlesByRunEid, mutateRawReportMetadata, compareOriginalStageOrder, normalizeReportUnits, normalizeTags, normalizeReviewers } from '../../utils/benchmarkReportV02Parser';
 import { toOptimalDataUri, parseDataUri } from '../../utils/dataParser';
 import yaml from 'js-yaml';
 import { isValidUuid } from '../../utils/shareLinkEncoder';
-import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
 
 import IntelligentRoutingChart from '../IntelligentRoutingChart';
 import { useGitHubAuth } from '../../hooks/useGitHubAuth';
 import { Badge, Button, Checkbox, Input, Label, Modal, Panel, Select, Spinner } from '../ui';
 import { cn } from '../../utils/cn';
 import CoalesceConflictModal from './CoalesceConflictModal';
+import {
+    peekWizardStartupState,
+    loadActiveStagedBundles,
+    saveActiveStagedBundles,
+    clearActiveStagedBundles,
+    clearWizardHandoffFlags,
+    loadStagedUploadCache,
+    saveStagedUploadCache,
+    clearStagedUploadCache,
+    formatStorageError
+} from '../../utils/stagedBundlesStore';
 
 const checkStageMetrics = (entry, format) => {
     let parsedStage = null;
@@ -149,6 +159,53 @@ const checkStageMetrics = (entry, format) => {
     };
 };
 
+const sanitizeStagedBundles = (bundles) => {
+    if (!Array.isArray(bundles)) return [];
+    return bundles.map(bundle => {
+        if (!bundle || !bundle.payload) return bundle;
+        const fallbackDesc = bundle.name || bundle.payload.runLabel || 'Unnamed Run';
+        const rawEntries = Array.isArray(bundle.payload.entries) ? bundle.payload.entries : [];
+        const entries = rawEntries.map((entry, idx) => ({
+            ...entry,
+            run_id: (entry.run_id && isValidUuid(entry.run_id)) ? entry.run_id : uuidv4(),
+            run_description: entry.run_description || fallbackDesc,
+            prism_stage_index: entry.prism_stage_index !== undefined ? entry.prism_stage_index : idx
+        }));
+        const updatedPayload = {
+            ...bundle.payload,
+            entries
+        };
+        const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
+        return {
+            ...bundle,
+            payload: updatedPayload,
+            validation: {
+                ...bundle.validation,
+                errors: uploadValidation.errors || [],
+                warnings: uploadValidation.warnings || [],
+                fieldErrors: uploadValidation.fieldErrors || {}
+            }
+        };
+    });
+};
+
+const resolveInitialReviewers = (bundles, checkCache = false) => {
+    if (checkCache) {
+        try {
+            const cachedReviewers = typeof localStorage !== 'undefined' ? localStorage.getItem('prism_staged_reviewers_cache') : null;
+            if (cachedReviewers) {
+                return normalizeReviewers(JSON.parse(cachedReviewers));
+            }
+        } catch {
+            /* ignore */
+        }
+    }
+    if (Array.isArray(bundles) && bundles.length > 0) {
+        return normalizeReviewers(bundles.flatMap(b => b?.payload?.requested_reviewers || []));
+    }
+    return [];
+};
+
 export default function UploadValidationPage({ onNavigateBack, onNavigate, dashboardState, dashboardData, initialIntent }) {
     const {
         baselineBenchmarkKey: _baselineBenchmarkKey,
@@ -164,25 +221,30 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         handleValidatedUpload: onCommit,
         loadSubmissions,
         loadAllData,
-        clearAllBrv02Runs,
         promoteStagedRunId,
         removeBrv02Run
     } = dashboardData;
 
     const _existingRunIds = React.useMemo(() => brv02Runs.map(r => r.runId), [brv02Runs]);
 
-    const [stagedFiles, setStagedFiles] = useState([]);
+    const [startupState] = useState(() =>
+        peekWizardStartupState({
+            initialIntent,
+            search: typeof window !== 'undefined' ? window.location.search : ''
+        })
+    );
+    const [stagedFiles, setStagedFiles] = useState(() =>
+        Array.isArray(startupState.syncBundles) && startupState.syncBundles.length > 0
+            ? sanitizeStagedBundles(startupState.syncBundles)
+            : []
+    );
+    const [isHydratingStaged, setIsHydratingStaged] = useState(() => startupState.needsAsyncHydration);
     const [tagDrafts, setTagDrafts] = useState({});
     const [manifestUrlInputs, setManifestUrlInputs] = useState({});
     const [evidenceUrlInputs, setEvidenceUrlInputs] = useState({});
-    const hasInitialized = React.useRef(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [uploadIntent, setUploadIntent] = useState(() => {
-        if (initialIntent) return initialIntent;
-        const params = new URLSearchParams(window.location.search);
-        return params.get('intent') || 'submit-review';
-    }); // 'stage-locally' or 'submit-review'
-    const [ingestionSource, setIngestionSource] = useState('local'); // 'local' or 'cloud'
+    const [uploadIntent, setUploadIntent] = useState(() => startupState.uploadIntent); // 'stage-locally' or 'submit-review'
+    const [ingestionSource, setIngestionSource] = useState(() => startupState.ingestionSource); // 'local' or 'cloud'
     const [cloudPath, setCloudPath] = useState('');
     const [cloudProvider, setCloudProvider] = useState('gcs'); // 'gcs' or 's3'
 
@@ -190,10 +252,13 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
     // Wizard navigation & Attribution states
     const { isAuthenticated, isConfigured, isPlaygroundMode, user, login, logout, accessToken } = useGitHubAuth();
-    const [wizardStep, setWizardStep] = useState(1);
+    const [wizardStep, setWizardStep] = useState(() => startupState.wizardStep);
     const [customAuthorName, setCustomAuthorName] = useState('');
     const [dcoSigned, setDcoSigned] = useState(false);
-    const [selectedReviewers, setSelectedReviewers] = useState([]);
+    const [selectedReviewers, setSelectedReviewers] = useState(() =>
+        resolveInitialReviewers(startupState.syncBundles, startupState.mode === 'oauth-cache')
+    );
+    const [reviewerDraft, setReviewerDraft] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [targetVisibility, setTargetVisibility] = useState('submitted_pending_review');
     const [_comparingBundleId, _setComparingBundleId] = useState(null);
@@ -2054,124 +2119,126 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         }
     };
 
-    const sanitizeStagedBundles = (bundles) => {
-        if (!Array.isArray(bundles)) return [];
-        return bundles.map(bundle => {
-            if (!bundle || !bundle.payload) return bundle;
-            const fallbackDesc = bundle.name || bundle.payload.runLabel || 'Unnamed Run';
-            const rawEntries = Array.isArray(bundle.payload.entries) ? bundle.payload.entries : [];
-            const entries = rawEntries.map((entry, idx) => ({
-                ...entry,
-                run_id: (entry.run_id && isValidUuid(entry.run_id)) ? entry.run_id : uuidv4(),
-                run_description: entry.run_description || fallbackDesc,
-                prism_stage_index: entry.prism_stage_index !== undefined ? entry.prism_stage_index : idx
-            }));
-            const updatedPayload = {
-                ...bundle.payload,
-                entries
-            };
-            const uploadValidation = validatePrismUploadStructure(updatedPayload, { isUpload: false });
-            return {
-                ...bundle,
-                payload: updatedPayload,
-                validation: {
-                    ...bundle.validation,
-                    errors: uploadValidation.errors || [],
-                    warnings: uploadValidation.warnings || [],
-                    fieldErrors: uploadValidation.fieldErrors || {}
-                }
-            };
-        });
-    };
-
     React.useEffect(() => {
-        if (hasInitialized.current) return;
-        hasInitialized.current = true;
-
-        // Check if we have a temporary staged redirect cache from GitHub auth flow
-        const cached = localStorage.getItem('prism_staged_upload_cache');
-        const trigger = localStorage.getItem('prism_trigger_resume_upload');
-        const wizardStepSaved = localStorage.getItem('prism_upload_wizard_step');
-
-        if (cached) {
-            try {
-                const parsed = JSON.parse(cached);
-                setStagedFiles(sanitizeStagedBundles(parsed));
-                setWizardStep(3);
-                setUploadIntent('submit-review');
-            } catch (e) {
-                console.warn("Failed to load cached staged files", e);
-                setStagedFiles([]);
-            }
-            localStorage.removeItem('prism_staged_upload_cache');
-        } else if (trigger === 'true') {
-            localStorage.removeItem('prism_trigger_resume_upload');
-            setWizardStep(3);
-            setUploadIntent('submit-review');
-            
-            try {
-                const savedBundles = localStorage.getItem('prism_active_staged_bundles');
-                if (savedBundles) {
-                    setStagedFiles(sanitizeStagedBundles(JSON.parse(savedBundles)));
-                }
-            } catch { /* ignore */ }
-        } else if (wizardStepSaved) {
-            localStorage.removeItem('prism_upload_wizard_step');
-            const stepNum = parseInt(wizardStepSaved, 10);
-            setWizardStep(stepNum);
-            const savedIntent = localStorage.getItem('prism_submit_intent') || 'submit-review';
-            localStorage.removeItem('prism_submit_intent');
-            setUploadIntent(savedIntent);
-            if (savedIntent === 'stage-locally') {
-                setIngestionSource('local');
-            }
-            
-            try {
-                const savedBundles = localStorage.getItem('prism_active_staged_bundles');
-                if (savedBundles) {
-                    setStagedFiles(sanitizeStagedBundles(JSON.parse(savedBundles)));
-                }
-            } catch (err) {
-                console.error("Failed to parse saved staged bundles:", err);
-            }
-        } else if (initialIntent) {
-            setUploadIntent(initialIntent);
-            if (initialIntent === 'stage-locally') {
-                setIngestionSource('local');
-                setStagedFiles([]);
+        if (startupState.needsAsyncHydration) {
+            let cancelled = false;
+            const hydrateFromIndexedDB = async () => {
                 try {
-                    localStorage.removeItem('prism_active_staged_bundles');
+                    if (startupState.mode === 'oauth-cache') {
+                        const cached = await loadStagedUploadCache();
+                        if (cancelled) return;
+                        if (Array.isArray(cached) && cached.length > 0) {
+                            const sanitizedBundles = sanitizeStagedBundles(cached);
+                            setStagedFiles(sanitizedBundles);
+                            setSelectedReviewers(resolveInitialReviewers(sanitizedBundles, true));
+                            setWizardStep(3);
+                            setUploadIntent('submit-review');
+                        } else {
+                            setStagedFiles([]);
+                            setWizardStep(1);
+                            if (addToast) {
+                                addToast('Could not restore cached staged runs after sign-in. Please re-select your runs.', 'error');
+                            }
+                        }
+                        await clearStagedUploadCache();
+                        try {
+                            localStorage.removeItem('prism_staged_reviewers_cache');
+                        } catch { /* ignore */ }
+                    } else if (startupState.mode === 'resume-trigger') {
+                        const saved = await loadActiveStagedBundles();
+                        if (cancelled) return;
+                        if (Array.isArray(saved) && saved.length > 0) {
+                            const sanitizedBundles = sanitizeStagedBundles(saved);
+                            setStagedFiles(sanitizedBundles);
+                            const bundleReviewers = resolveInitialReviewers(sanitizedBundles, false);
+                            if (bundleReviewers.length > 0) {
+                                setSelectedReviewers(bundleReviewers);
+                            }
+                            setWizardStep(3);
+                            setUploadIntent('submit-review');
+                        } else {
+                            setStagedFiles([]);
+                            setWizardStep(1);
+                        }
+                        clearWizardHandoffFlags();
+                    } else if (startupState.mode === 'wizard-step') {
+                        const saved = await loadActiveStagedBundles();
+                        if (cancelled) return;
+                        if (Array.isArray(saved) && saved.length > 0) {
+                            const sanitizedBundles = sanitizeStagedBundles(saved);
+                            setStagedFiles(sanitizedBundles);
+                            const bundleReviewers = resolveInitialReviewers(sanitizedBundles, false);
+                            if (bundleReviewers.length > 0) {
+                                setSelectedReviewers(bundleReviewers);
+                            }
+                        } else if (startupState.wizardStep > 1) {
+                            setWizardStep(1);
+                            if (addToast) {
+                                addToast('Could not restore selected staged runs. Please re-select your runs from the Results Store.', 'error');
+                            }
+                        }
+                        clearWizardHandoffFlags();
+                    }
+                } catch (err) {
+                    console.error('Failed to hydrate staged bundles from IndexedDB:', err);
+                    if (!cancelled) {
+                        setWizardStep(1);
+                        if (addToast) {
+                            addToast(`Failed to restore staged runs: ${formatStorageError(err)}`, 'error');
+                        }
+                    }
+                } finally {
+                    if (!cancelled) {
+                        setIsHydratingStaged(false);
+                    }
+                }
+            };
+            hydrateFromIndexedDB();
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        // StrictMode-safe deferred cleanup of one-shot handoff markers after synchronous hydration.
+        const timer = setTimeout(() => {
+            if (startupState.mode === 'oauth-cache') {
+                clearStagedUploadCache();
+                try {
+                    localStorage.removeItem('prism_staged_reviewers_cache');
+                } catch { /* ignore */ }
+            } else if (startupState.mode === 'resume-trigger' || startupState.mode === 'wizard-step') {
+                if (
+                    startupState.mode === 'wizard-step' &&
+                    startupState.wizardStep > 1 &&
+                    (!Array.isArray(startupState.syncBundles) || startupState.syncBundles.length === 0)
+                ) {
+                    setWizardStep(1);
+                    if (addToast) {
+                        addToast('Could not restore selected staged runs. Please re-select your runs from the Results Store.', 'error');
+                    }
+                }
+                clearWizardHandoffFlags();
+            } else if (startupState.mode === 'intent') {
+                if (startupState.hasSavedSubmitIntentFlag) {
+                    clearWizardHandoffFlags();
+                }
+                if (startupState.shouldClearActiveStaged) {
+                    clearActiveStagedBundles();
+                }
+            } else if (startupState.mode === 'reset') {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.has('intent')) {
+                        params.delete('intent');
+                        const qs = params.toString();
+                        window.history.replaceState({}, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash || ''}`);
+                    }
                 } catch { /* ignore */ }
             }
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlIntent = urlParams.get('intent');
-            const submitIntent = localStorage.getItem('prism_submit_intent');
+        }, 0);
 
-            if (urlIntent) {
-                setUploadIntent(urlIntent);
-                if (urlIntent === 'stage-locally') {
-                    setIngestionSource('local');
-                    setStagedFiles([]);
-                    try {
-                        localStorage.removeItem('prism_active_staged_bundles');
-                    } catch { /* ignore */ }
-                }
-            } else if (submitIntent) {
-                localStorage.removeItem('prism_submit_intent');
-                setUploadIntent(submitIntent);
-                if (submitIntent === 'stage-locally') {
-                    setIngestionSource('local');
-                    setStagedFiles([]);
-                    try {
-                        localStorage.removeItem('prism_active_staged_bundles');
-                    } catch { /* ignore */ }
-                }
-            } else {
-                resetWizard();
-            }
-        }
-    }, [clearAllBrv02Runs, initialIntent]);
+        return () => clearTimeout(timer);
+    }, [startupState, addToast]);
 
     const handleDrop = async (e) => {
         e.preventDefault();
@@ -2280,11 +2347,11 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         });
         // An uncaught throw here used to leave the button doing nothing at all.
         try {
-            // Staging itself works from memory; this copy is only read back when
-            // the wizard is resumed, so failing to store it must not abort staging.
-            const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', validBundles);
-            if (!persisted.ok) {
-                console.warn('Staged bundles are too large to keep in localStorage:', persisted.error);
+            // Staging itself works from memory + brv02Runs; this copy is only read back when
+            // the wizard is resumed, so failing to store it warns rather than aborting staging.
+            const saveRes = await saveActiveStagedBundles(validBundles);
+            if (!saveRes.ok) {
+                console.warn('Staged bundles are too large to persist for wizard resume:', saveRes.error);
             }
             await onCommit(validBundles);
 
@@ -2301,16 +2368,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
 
             resetWizard();
-            localStorage.setItem('prism_activate_staged_filter', 'true');
-            if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
-                localStorage.setItem('prism_show_post_upload_dialog', 'staged');
+            try {
+                localStorage.setItem('prism_activate_staged_filter', 'true');
+                if (localStorage.getItem('prism_hide_post_staged_dialog') !== 'true') {
+                    localStorage.setItem('prism_show_post_upload_dialog', 'staged');
+                }
+            } catch {
+                /* ignore non-critical UI hint quota errors */
             }
             if (onNavigate) {
                 onNavigate('results-store');
             }
-        } catch (e) {
-            console.error('Failed to stage runs locally:', e);
-            if (addToast) addToast(`Failed to stage runs locally: ${e.message}`, "error");
+        } catch (err) {
+            console.error('Failed to stage runs locally:', err);
+            if (addToast) {
+                addToast(`Failed to stage runs locally: ${formatStorageError(err)}`, "error");
+            }
         }
     };
 
@@ -2320,11 +2393,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         
         setIsSubmitting(true);
         try {
+            const normalizedReviewers = normalizeReviewers(reviewerDraft !== null ? reviewerDraft : selectedReviewers);
+            const bundlesToCommit = normalizedReviewers.length > 0
+                ? validBundles.map(b => ({
+                    ...b,
+                    payload: {
+                        ...b.payload,
+                        requested_reviewers: normalizedReviewers
+                    }
+                }))
+                : validBundles;
+
             // Stage files locally for immediate browser viewing
-            await onCommit(validBundles);
+            await onCommit(bundlesToCommit);
             
             // Post each run package to the production Results Store API `/api/results`
-            for (const bundle of validBundles) {
+            for (const bundle of bundlesToCommit) {
                 const effectiveAuthor = isPlaygroundMode
                     ? { username: customAuthorName.trim() || 'anonymous', playground: true }
                     : (user?.username ? { username: user.username } : undefined);
@@ -2335,6 +2419,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     runLabel: bundle.name || bundle.payload?.runLabel || 'Unnamed Run',
                     model_name: bundle.payload?.model_name || "Custom Model",
                     ...(effectiveAuthor ? { github_author: effectiveAuthor } : {}),
+                    ...(normalizedReviewers.length > 0 ? { requested_reviewers: normalizedReviewers } : {}),
                     hardware: {
                         hardware_name: bundle.payload?.hardware?.hardware_name || "Unknown Hardware",
                         accelerator_count: bundle.payload?.hardware?.accelerator_count
@@ -2433,9 +2518,14 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
             }
 
             // Close and reset
+            await clearActiveStagedBundles();
             resetWizard();
-            localStorage.setItem('prism_activate_my_submissions_filter', 'true');
-            localStorage.setItem('prism_show_post_upload_dialog', targetState === 'unlisted' ? 'unlisted' : 'submitted');
+            try {
+                localStorage.setItem('prism_activate_my_submissions_filter', 'true');
+                localStorage.setItem('prism_show_post_upload_dialog', targetState === 'unlisted' ? 'unlisted' : 'submitted');
+            } catch {
+                /* ignore non-critical UI hint quota errors */
+            }
             if (onNavigate) {
                 onNavigate('results-store');
             } else if (onNavigateBack) {
@@ -2456,16 +2546,42 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
         setCustomAuthorName('');
         setDcoSigned(false);
         setSelectedReviewers([]);
+        setReviewerDraft(null);
         try {
+            localStorage.removeItem('prism_staged_reviewers_cache');
             const params = new URLSearchParams(window.location.search);
             params.delete('intent');
             window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`);
         } catch { /* ignore */ }
     };
 
-    const handleGithubLoginRedirect = () => {
-        localStorage.setItem('prism_staged_upload_cache', JSON.stringify(stagedFiles));
-        login({ showSubmitDialog: true });
+    const handleGithubLoginRedirect = async () => {
+        try {
+            const currentReviewers = normalizeReviewers(reviewerDraft !== null ? reviewerDraft : selectedReviewers);
+            try {
+                if (currentReviewers.length > 0) {
+                    localStorage.setItem('prism_staged_reviewers_cache', JSON.stringify(currentReviewers));
+                } else {
+                    localStorage.removeItem('prism_staged_reviewers_cache');
+                }
+            } catch {
+                /* ignore non-critical reviewer cache error */
+            }
+            const res = await saveStagedUploadCache(stagedFiles);
+            if (!res.ok) {
+                console.error("Failed to cache staged runs before GitHub login:", res.error);
+                if (addToast) {
+                    addToast(`Failed to cache staged runs before GitHub sign-in: ${formatStorageError(res.error)}`, "error");
+                }
+                return;
+            }
+            login({ showSubmitDialog: true });
+        } catch (err) {
+            console.error("Failed to cache staged runs before GitHub login:", err);
+            if (addToast) {
+                addToast(`Failed to cache staged runs before GitHub sign-in: ${formatStorageError(err)}`, "error");
+            }
+        }
     };
 
     const handleGithubDisconnect = () => {
@@ -2601,15 +2717,42 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                     {/* Reviewers Selection */}
                     <div>
-                        <Label className="uppercase tracking-wider mb-1 select-none">Assign Reviewers</Label>
+                        <Label htmlFor="assign-reviewers-input" className="uppercase tracking-wider mb-1 select-none">Assign Reviewers</Label>
                         <Input
+                            id="assign-reviewers-input"
                             type="text"
-                            value={selectedReviewers.join(', ')}
+                            value={reviewerDraft ?? selectedReviewers.join(', ')}
                             disabled={!isPlaygroundMode && !isAuthenticated}
-                            onChange={(e) => setSelectedReviewers(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                            onChange={(e) => {
+                                const rawVal = e.target.value;
+                                setReviewerDraft(rawVal);
+                                setSelectedReviewers(normalizeReviewers(rawVal));
+                            }}
+                            onBlur={() => setReviewerDraft(null)}
                             placeholder="username1, username2 (comma separated)"
                             className="text-xs font-semibold"
                         />
+                        {selectedReviewers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2" data-testid="assigned-reviewer-pills">
+                                {selectedReviewers.map(reviewer => (
+                                    <Badge key={reviewer} size="xs" tone="brand" className="normal-case flex items-center gap-1 pr-1">
+                                        <span>@{reviewer}</span>
+                                        <button
+                                            type="button"
+                                            aria-label={`Remove reviewer ${reviewer}`}
+                                            onClick={() => {
+                                                const next = selectedReviewers.filter(r => r !== reviewer);
+                                                setSelectedReviewers(next);
+                                                setReviewerDraft(null);
+                                            }}
+                                            className="hover:text-white text-emerald-300/80 transition-colors cursor-pointer rounded-full p-0.5 leading-none"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2671,6 +2814,22 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                             `@${user?.username || 'Not specified'}`
                                         )}
                                     </span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="text-slate-550 block mb-1 select-none">Assigned Reviewers</span>
+                                    {selectedReviewers.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5" data-testid="step4-assigned-reviewers">
+                                            {selectedReviewers.map(reviewer => (
+                                                <Badge key={reviewer} size="xs" tone="brand" className="normal-case">
+                                                    @{reviewer}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-500 italic text-[11px]" data-testid="step4-assigned-reviewers">
+                                            None (any maintainer)
+                                        </span>
+                                    )}
                                 </div>
                                 {!isPlaygroundMode && (
                                     <div className="col-span-2">
@@ -2888,9 +3047,9 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                 </div>
 
                 {/* Chart and Grid Split - Stacked Vertically */}
-                <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-1">
+                <div className="flex-1 min-w-0 flex flex-col gap-6 overflow-y-auto pr-1">
                     {/* Reused Intelligent Routing Chart Component */}
-                    <div className="w-full relative overflow-visible">
+                    <div className="w-full min-w-0 relative overflow-visible">
                         <IntelligentRoutingChart 
                             data={chartFormattedData} 
                             initialXAxis="ttft" 
@@ -3024,7 +3183,13 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
 
                 {/* Content */}
                 <div className="flex-1 flex overflow-hidden">
-                    
+                    {isHydratingStaged ? (
+                        <div className="w-full flex flex-col items-center justify-center p-8 min-h-[50vh] gap-3 text-slate-400">
+                            <Spinner size="md" />
+                            <span className="text-xs font-semibold tracking-wide">Restoring staged benchmark runs...</span>
+                        </div>
+                    ) : (
+                    <>
                     {/* Left Pane: Ingestion Source Toggle & Input */}
                     {wizardStep === 1 && (
                         <div className={cn(
@@ -4575,6 +4740,8 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                     )}
                     {wizardStep === 3 && renderStep3()}
                     {wizardStep === 4 && renderStep4()}
+                    </>
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -4671,7 +4838,7 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                         )}
 
                         {wizardStep === 3 && (() => {
-                            const canProceedStep3 = isPlaygroundMode ? true : (isAuthenticated && user?.username && dcoSigned);
+                            const canProceedStep3 = !isHydratingStaged && stagedFiles.filter(f => !f.isSkipped).length > 0 && (isPlaygroundMode ? true : (isAuthenticated && user?.username && dcoSigned));
                             return (
                                 <div className="flex items-center gap-3">
                                     {!canProceedStep3 && (
@@ -4680,7 +4847,10 @@ export default function UploadValidationPage({ onNavigateBack, onNavigate, dashb
                                         </span>
                                     )}
                                     <button 
-                                        onClick={() => setWizardStep(4)}
+                                        onClick={() => {
+                                            setReviewerDraft(null);
+                                            setWizardStep(4);
+                                        }}
                                         disabled={!canProceedStep3}
                                         className={cn(
                                             'px-5 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer',

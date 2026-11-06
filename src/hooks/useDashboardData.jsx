@@ -19,7 +19,6 @@ import { normalizeHardware, normalizeModelName } from '../utils/dataParser';
 import { parseJsonEntry, parseLogFile, parseLpgManifest, parseLpgConfig } from '../utils/dataParser';
 import { parseReportV02, groupStagesIntoRuns, stageToEntry, isPristineScannedRun, forwardBundleMetadata, stripDerivedTimeSeries, rehydrateDerivedTimeSeries } from '../utils/benchmarkReportV02Parser';
 import { scanLocalBenchmarks } from '../utils/gcsScanner';
-import { trySetLocalStorageJSON } from '../utils/localStorageJSON';
 import { useGCS } from './useGCS';
 import { useGIQ } from './useGIQ';
 import { useLLMD } from './useLLMD';
@@ -28,6 +27,14 @@ import { useGitHubAuth } from './useGitHubAuth';
 import { v4 as uuidv4 } from 'uuid';
 import { getBenchmarkKey } from '../utils/dashboardHelpers';
 import { getCanonicalBucketName, getBucketAlias, dedupeBucketConfigs, getBucketBaseName, getBucketPrefix } from '../utils/bucketUtils';
+import {
+    hasIndexedDB,
+    getBrv02RunsSync,
+    hasPendingBrv02Hydration,
+    loadBrv02Runs,
+    saveBrv02Runs,
+    saveBrv02RunsSync
+} from '../utils/stagedBundlesStore';
 
 const getPrefixForBucket = (entry) => {
     // A "bucket/path" scoped entry restricts the scan to that subdirectory.
@@ -43,7 +50,7 @@ const getPrefixForBucket = (entry) => {
 };
 
 export const useDashboardData = (initialState, dashboardState) => {
-    const { selectedBenchmarks, setSelectedBenchmarks, xAxisMax, setXAxisMax } = dashboardState;
+    const { setSelectedBenchmarks } = dashboardState;
     const { accessToken, user } = useGitHubAuth();
     const pendingRequests = useRef(new Map());
     const [data, setData] = useState([]);
@@ -92,12 +99,13 @@ export const useDashboardData = (initialState, dashboardState) => {
     const [lpgLoading, setLpgLoading] = useState(false);
     const [lpgError, setLpgError] = useState(null);
     const [lpgPasteText, setLpgPasteText] = useState("");
+    const hasHydratedBrv02Ref = useRef(!hasPendingBrv02Hydration());
     const [brv02Runs, setBrv02Runs] = useState(() => {
         try {
-            const saved = localStorage.getItem('prism_brv02_runs');
+            const saved = getBrv02RunsSync();
             // Time series are stripped before persisting, so rebuild them from
             // the stored rawReport.
-            return saved ? rehydrateDerivedTimeSeries(JSON.parse(saved)) : [];
+            return saved ? rehydrateDerivedTimeSeries(saved) : [];
         } catch { return []; }
     });
     const [brv02Error, setBrv02Error] = useState(null);
@@ -120,6 +128,33 @@ export const useDashboardData = (initialState, dashboardState) => {
             return saved ? JSON.parse(saved) : {};
         } catch { return {}; }
     });
+
+    useEffect(() => {
+        if (hasHydratedBrv02Ref.current) return;
+        let cancelled = false;
+        loadBrv02Runs()
+            .then((saved) => {
+                if (cancelled) return;
+                hasHydratedBrv02Ref.current = true;
+                if (Array.isArray(saved) && saved.length > 0) {
+                    const hydrated = rehydrateDerivedTimeSeries(saved);
+                    setBrv02Runs((prev) => {
+                        if (prev.length === 0) return hydrated;
+                        const existingIds = new Set(prev.map((r) => r.runId));
+                        return [...hydrated.filter((r) => !existingIds.has(r.runId)), ...prev];
+                    });
+                }
+            })
+            .catch((e) => {
+                if (!cancelled) {
+                    hasHydratedBrv02Ref.current = true;
+                    console.error("Failed to hydrate brv02 runs from storage:", e);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         try {
@@ -256,7 +291,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             if (projects.length > 0) {
                 return projects.map(p => ({ projectId: p, token: localStorage.getItem(`giq_token_${p}`) || '' }));
             }
-        } catch { }
+        } catch { /* ignore */ }
         return [];
     });
     const [gcsProfiles, setGcsProfiles] = useState([]);
@@ -324,21 +359,29 @@ export const useDashboardData = (initialState, dashboardState) => {
         setTimeout(() => removeToast(id), 8000); // 8 Seconds
     }, [removeToast]);
 
-    // Declared after addToast so it can warn: staged runs that overflow
-    // localStorage stay usable in memory but are gone after a reload, which the
-    // user otherwise only finds out about then. Warn once per overflow, not on
-    // every later change to the runs.
+    // Declared after addToast so it can warn: staged runs that overflow both
+    // IndexedDB and localStorage stay usable in memory but are gone after a
+    // reload, which the user otherwise only finds out about then. Warn once
+    // per overflow, not on every later change to the runs.
     const brv02PersistWarned = useRef(false);
     useEffect(() => {
-        const persisted = trySetLocalStorageJSON('prism_brv02_runs', stripDerivedTimeSeries(brv02Runs));
-        if (persisted.ok) {
-            brv02PersistWarned.current = false;
-            return;
-        }
-        console.error("Failed to persist brv02 runs to LocalStorage:", persisted.error);
-        if (!brv02PersistWarned.current) {
-            brv02PersistWarned.current = true;
-            addToast('Staged runs are too large for browser storage and will be lost when the page reloads. Stage fewer runs at once to keep them.', 'warning');
+        if (!hasHydratedBrv02Ref.current) return;
+        const handlePersistResult = (res) => {
+            if (res.ok) {
+                brv02PersistWarned.current = false;
+                return;
+            }
+            console.error("Failed to persist brv02 runs:", res.error);
+            if (!brv02PersistWarned.current) {
+                brv02PersistWarned.current = true;
+                addToast('Staged runs are too large for browser storage and will be lost when the page reloads. Stage fewer runs at once to keep them.', 'warning');
+            }
+        };
+        const stripped = stripDerivedTimeSeries(brv02Runs);
+        if (!hasIndexedDB()) {
+            handlePersistResult(saveBrv02RunsSync(stripped));
+        } else {
+            saveBrv02Runs(stripped).then(handlePersistResult);
         }
     }, [brv02Runs, addToast]);
 
@@ -932,7 +975,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         }
     };
 
-    const handleAddGIQProject = async (projectIdOverride = null, tokenOverride = null) => {
+    const _handleAddGIQProject = async (projectIdOverride = null, tokenOverride = null) => {
         const idToUse = projectIdOverride || newProjectId;
         const tokenToUse = tokenOverride || newAuthToken;
         if (!idToUse) return;
@@ -1001,7 +1044,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         setGcsProfiles(prev => prev.filter(p => `aws:${p.bucketName}` !== sourceKey));
     };
 
-    const removeGIQProject = (projectId) => {
+    const _removeGIQProject = (projectId) => {
         const newConfigs = apiConfigs.filter(c => c.projectId !== projectId);
         setApiConfigs(newConfigs);
         localStorage.removeItem(`giq_token_${projectId}`); // Remove persisted token
@@ -1024,7 +1067,6 @@ export const useDashboardData = (initialState, dashboardState) => {
     const fetchLocalData = async () => {
         try {
             const results = [];
-            let hasDataJson = false;
 
             // 1. Fetch data.json (Standard Local Sample)
             try {
@@ -1035,7 +1077,6 @@ export const useDashboardData = (initialState, dashboardState) => {
                         const json = await res.json();
                         if (Array.isArray(json)) {
                             results.push(...json);
-                            hasDataJson = true;
                         }
                     }
                 }
@@ -1050,7 +1091,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                 return [];
             }
 
-            return results.map((d, i) => {
+            return results.map((d) => {
                 const newD = { ...d, _raw: d._raw || d, source: d.source || 'local' };
 
                 // Allow extraction of ISL/OSL from model string if needed
@@ -1170,7 +1211,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             const allBenchmarks = results.flat();
             console.log(`Loaded ${allBenchmarks.length} unified archived benchmarks from ${files.length} files.`);
 
-            return allBenchmarks.map((d, i) => {
+            return allBenchmarks.map((d) => {
                 const newD = { ...d, _raw: d, source: 'llm-d-results:google_drive' };
                 // Extract Sweep ID from run_id (e.g., prefix before -run_ or -vllm-)
                 const runId = d.run_id || 'unknown';
@@ -2067,12 +2108,14 @@ export const useDashboardData = (initialState, dashboardState) => {
     };
 
     const clearAllBrv02Runs = useCallback(() => {
+        hasHydratedBrv02Ref.current = true;
         setBrv02Runs([]);
     }, []);
 
     const handleValidatedUpload = async (validBundles) => {
         if (!validBundles || validBundles.length === 0) return;
         
+        hasHydratedBrv02Ref.current = true;
         setBrv02Loading(true);
         setBrv02Error(null);
 
@@ -2385,7 +2428,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         return state;
     }, []);
 
-    const loadSubmissions = useCallback(async (isManual = false) => {
+    const loadSubmissions = useCallback(async () => {
         setIsLoadingSubmissions(true);
         try {
             const headers = {};
@@ -2419,7 +2462,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                 status: mapStateToStatus(item.state),
                 feedback: item.feedback || "",
                 forked_from: item.forked_from || null,
-                github_author: item.github_author || null
+                github_author: item.github_author || null,
+                requested_reviewers: Array.isArray(item.requested_reviewers) ? item.requested_reviewers : []
             }));
 
             const mergedList = [...serverSubmissions];
@@ -2444,7 +2488,8 @@ export const useDashboardData = (initialState, dashboardState) => {
                             status: "staged",
                             feedback: "",
                             forked_from: run.forked_from || run.payload?.forked_from || null,
-                            github_author: run.github_author || run.payload?.github_author || null
+                            github_author: run.github_author || run.payload?.github_author || null,
+                            requested_reviewers: run.requested_reviewers || run.payload?.requested_reviewers || []
                         });
                     }
                 });

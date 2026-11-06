@@ -37,31 +37,6 @@ function App() {
   const dashboardState = useDashboardState();
   const dashboardData = useDashboardData(dashboardState.initialState, dashboardState);
 
-  const [stagedBundles, setStagedBundles] = useState(() => {
-    try {
-      const active = localStorage.getItem('prism_active_staged_bundles');
-      return active ? JSON.parse(active) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    const checkStaged = () => {
-      try {
-        const active = localStorage.getItem('prism_active_staged_bundles');
-        const parsed = active ? JSON.parse(active) : [];
-        if (JSON.stringify(parsed) !== JSON.stringify(stagedBundles)) {
-          setStagedBundles(parsed);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    const interval = setInterval(checkStaged, 1000);
-    return () => clearInterval(interval);
-  }, [stagedBundles]);
-
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     // Legacy 'benchmark-comparison' deep links land on the Benchmark Browser,

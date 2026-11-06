@@ -32,7 +32,12 @@ import { downloadRunBRV02, downloadSingleStageYaml, getRawPrismCloudPayload } fr
 import { parseDataUri, extractAcceleratorCount } from '../../utils/dataParser';
 import { forkBenchmark } from '../../utils/benchmarkForker';
 import { createGlobMatcher, matchesBenchmarkStat } from '../../utils/globUtils';
-import { trySetLocalStorageJSON } from '../../utils/localStorageJSON';
+import {
+    hasIndexedDB,
+    saveWizardHandoff,
+    saveWizardHandoffSync,
+    formatWizardHandoffError
+} from '../../utils/stagedBundlesStore';
 
 const GROUP_BY_TAGS = {
     Model: 'MODEL',
@@ -199,6 +204,13 @@ export const buildBundleForRun = (run) => {
         || run.stages?.[0]?.payload?.github_author 
         || null;
 
+    const requestedReviewersVal = run.requested_reviewers
+        || run.payload?.requested_reviewers
+        || run.bundle?.payload?.requested_reviewers
+        || run.stages?.[0]?.requested_reviewers
+        || run.stages?.[0]?.payload?.requested_reviewers
+        || null;
+
     const inferenceToolVal = run.inference_tool 
         || run.payload?.inference_tool 
         || run.stages?.[0]?.inference_tool 
@@ -309,6 +321,7 @@ export const buildBundleForRun = (run) => {
         well_lit_path: run.wellLitPath || run.well_lit_path || null,
         ...(forkedFromVal ? { forked_from: forkedFromVal } : {}),
         ...(githubAuthorVal ? { github_author: githubAuthorVal } : {}),
+        ...(Array.isArray(requestedReviewersVal) && requestedReviewersVal.length > 0 ? { requested_reviewers: requestedReviewersVal } : {}),
         ...(inferenceToolVal ? { inference_tool: inferenceToolVal } : {}),
         ...(inferenceToolVersionVal ? { inference_tool_version: inferenceToolVersionVal } : {}),
         ...(benchmarkHarnessVal ? { benchmark_harness: benchmarkHarnessVal } : {}),
@@ -509,7 +522,7 @@ export const UnifiedDataTable = (props) => {
         _toggleBenchmark, toggleModelExpansion,
         baselineBenchmarkKey, setBaselineBenchmarkKey,
         hideShowSelectedOnly = false,
-        renameClearToUnselectAll = false,
+        renameClearToUnselectAll: _renameClearToUnselectAll = false,
         brv02Runs = [], brv02CustomLabels = {}, removeBrv02Run, scannedFilenames = null,
         setShowDataPanel,
         searchTerm = '',
@@ -750,78 +763,82 @@ export const UnifiedDataTable = (props) => {
 
 
 
-    // Bundles reach the upload wizard through localStorage. When they do not
-    // fit, the wizard would open empty, so say why and stay on the table.
-    // Depends on addToast alone, not dashboardData, so the handlers built on it
-    // stay stable for the memoized rows.
+    // Depends on addToast + dashboardAddToast alone, not dashboardData, so the
+    // handlers built on it stay stable for the memoized rows.
     const dashboardAddToast = dashboardData?.addToast;
+    const notifyToast = React.useCallback((message, type = 'error') => {
+        if (addToast) {
+            addToast(message, type);
+        } else if (dashboardAddToast) {
+            dashboardAddToast(message, type);
+        } else {
+            setToastMessage(message);
+            setShowToast(true);
+        }
+    }, [addToast, dashboardAddToast]);
+
     const openWizardWithBundles = React.useCallback((bundles, intent) => {
-        const persisted = trySetLocalStorageJSON('prism_active_staged_bundles', bundles);
-        if (!persisted.ok) {
-            console.error('Failed to hand staged bundles to the upload wizard:', persisted.error);
-            const msg = bundles.length === 1
-                ? 'This run is too large for browser storage, so it cannot be opened in the upload wizard.'
-                : `These ${bundles.length} runs are too large for browser storage to open in the upload wizard together. Select fewer runs at once.`;
-            if (addToast) addToast(msg, 'error');
-            else if (dashboardAddToast) dashboardAddToast(msg, 'error');
-            else {
-                setToastMessage(msg);
-                setShowToast(true);
+        if (!hasIndexedDB()) {
+            const res = saveWizardHandoffSync({ bundles, step: 2, intent });
+            if (!res.ok) {
+                console.error('Failed to hand staged bundles to the upload wizard:', res.error);
+                notifyToast(formatWizardHandoffError(res.error, bundles.length), 'error');
+                return;
+            }
+            if (onOpenSubmitDialog) {
+                onOpenSubmitDialog(intent);
             }
             return;
         }
+        return handleActionClick(async () => {
+            try {
+                const res = await saveWizardHandoff({ bundles, step: 2, intent });
+                if (!res.ok) {
+                    console.error('Failed to hand staged bundles to the upload wizard:', res.error);
+                    notifyToast(formatWizardHandoffError(res.error, bundles.length), 'error');
+                    return;
+                }
+                if (onOpenSubmitDialog) {
+                    onOpenSubmitDialog(intent);
+                }
+            } catch (e) {
+                console.error('Unexpected error preparing wizard handoff:', e);
+                notifyToast(formatWizardHandoffError(e, bundles.length), 'error');
+            }
+        });
+    }, [handleActionClick, notifyToast, onOpenSubmitDialog]);
 
-        try {
-            localStorage.setItem('prism_upload_wizard_step', '2');
-            localStorage.setItem('prism_submit_intent', intent);
-        } catch (e) {
-            console.error('Failed to set wizard state in localStorage:', e);
-        }
-
-        onOpenSubmitDialog && onOpenSubmitDialog(intent);
-    }, [addToast, dashboardAddToast, onOpenSubmitDialog]);
-
-    const handlePublishSelected = () => {
+    const handlePublishSelected = React.useCallback(() => {
         if (selectedStagedRuns.length === 0) return;
-
         const bundles = selectedStagedRuns.map(buildBundleForRun);
-
-        openWizardWithBundles(bundles, 'submit-review');
-    };
+        return openWizardWithBundles(bundles, 'submit-review');
+    }, [selectedStagedRuns, openWizardWithBundles]);
 
     const handleEditStagedRun = React.useCallback((run, runId) => {
         if (!run) {
             console.warn('No staged run found for runId', runId);
-            setToastMessage('Could not open this benchmark for editing.');
-            setShowToast(true);
+            notifyToast('Could not open this benchmark for editing.', 'error');
             return;
         }
-
         const bundle = buildBundleForRun(run);
-
-        openWizardWithBundles([bundle], 'stage-locally');
-    }, [openWizardWithBundles]);
+        return openWizardWithBundles([bundle], 'stage-locally');
+    }, [notifyToast, openWizardWithBundles]);
 
     const handleEditSelected = React.useCallback(() => {
         if (selectedStagedRuns.length === 0) return;
-
         const bundles = selectedStagedRuns.map(buildBundleForRun);
-
-        openWizardWithBundles(bundles, 'stage-locally');
+        return openWizardWithBundles(bundles, 'stage-locally');
     }, [selectedStagedRuns, openWizardWithBundles]);
 
     const handleSubmitStagedRunForReview = React.useCallback((run, runId) => {
         if (!run) {
             console.warn('No staged run found for runId', runId);
-            setToastMessage('Could not submit this benchmark for review.');
-            setShowToast(true);
+            notifyToast('Could not submit this benchmark for review.', 'error');
             return;
         }
-
         const bundle = buildBundleForRun(run);
-
-        openWizardWithBundles([bundle], 'submit-review');
-    }, [openWizardWithBundles]);
+        return openWizardWithBundles([bundle], 'submit-review');
+    }, [notifyToast, openWizardWithBundles]);
 
     const [showPostForkModal, setShowPostForkModal] = useState(false);
     const [lastForkedCount, setLastForkedCount] = useState(1);
@@ -961,7 +978,7 @@ export const UnifiedDataTable = (props) => {
         return count;
     }, [selectedBenchmarks, modelStats, isDeletableStagedRun]);
 
-    const hasLocalSelected = localSelectedCount > 0;
+    const _hasLocalSelected = localSelectedCount > 0;
 
     const hasAnyLocalRuns = React.useMemo(() => {
         return modelStats.some(isDeletableStagedRun);
@@ -1225,7 +1242,7 @@ export const UnifiedDataTable = (props) => {
 
     const showSelectedOnly = hideShowSelectedOnly ? false : propShowSelectedOnly;
 
-    const toggleBaseline = (key) => {
+    const _toggleBaseline = (key) => {
         if (!setBaselineBenchmarkKey) return;
         setBaselineBenchmarkKey(prev => (prev === key ? null : key));
     };
@@ -1517,7 +1534,7 @@ export const UnifiedDataTable = (props) => {
         });
     }, [filteredStats, sortByField, sortDirection, brv02CustomLabels]);
 
-    const needsExpansion = sortedStats.length > 4;
+    const _needsExpansion = sortedStats.length > 4;
 
     const activeGroupBy = React.useMemo(() => {
         if (!groupBy) return [];
@@ -2579,6 +2596,14 @@ export const UnifiedDataTable = (props) => {
                         const mAuthorUsername = typeof mAuthorObj === 'object' ? mAuthorObj?.username : (typeof mAuthorObj === 'string' ? mAuthorObj : null);
                         const mAuthorName = typeof mAuthorObj === 'object' ? mAuthorObj?.name : null;
 
+                        const rawModalReviewers = mSub?.requested_reviewers
+                            || mPayload?.requested_reviewers
+                            || mStat.payload?.requested_reviewers
+                            || mFirst.requested_reviewers
+                            || mFirst.payload?.requested_reviewers
+                            || [];
+                        const mRequestedReviewers = Array.isArray(rawModalReviewers) ? rawModalReviewers.filter(Boolean) : [];
+
                         const mForkedFrom = mPayload?.forked_from || mStat.payload?.forked_from || mStat.forked_from || mFirst.payload?.forked_from || mFirst.forked_from || mSub?.forked_from;
                         const mForkList = mForkedFrom ? (Array.isArray(mForkedFrom) ? mForkedFrom : [mForkedFrom]) : [];
 
@@ -2672,6 +2697,18 @@ export const UnifiedDataTable = (props) => {
                                                     <span className="text-slate-400 italic">Unknown</span>
                                                 )}
                                             </div>
+                                            {mRequestedReviewers.length > 0 && (
+                                                <div className="flex items-start justify-between gap-2 text-slate-400 pt-1 border-t border-slate-800/60">
+                                                    <span className="shrink-0">Requested Reviewers:</span>
+                                                    <span className="flex flex-wrap justify-end gap-1" data-testid="modal-requested-reviewers">
+                                                        {mRequestedReviewers.map(rev => (
+                                                            <Badge key={rev} size="xs" tone="brand" className="normal-case">
+                                                                @{rev}
+                                                            </Badge>
+                                                        ))}
+                                                    </span>
+                                                </div>
+                                            )}
                                             {(mStatus === 'public' || mStatus === 'promoted' || mApprovedAt) && (
                                                 <div className="flex items-center justify-between text-slate-400 pt-1 border-t border-slate-800/60">
                                                     <span>Approved At:</span>
@@ -2811,54 +2848,56 @@ export const UnifiedDataTable = (props) => {
                         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 pr-1 custom-scrollbar">
                             
                             {/* Section 1: Chart Container */}
-                            <div className="min-h-[450px] w-full flex flex-col">
-                                <ThroughputCostChart
-                                    tputType={drawerTputType}
-                                    setTputType={setDrawerTputType}
-                                    yQualityMode={drawerYQualityMode}
-                                    setYQualityMode={setDrawerYQualityMode}
-                                    chartMode={drawerChartMode}
-                                    setChartMode={setDrawerChartMode}
-                                    xQualityMode={drawerXQualityMode}
-                                    setXQualityMode={setDrawerXQualityMode}
-                                    costMode={drawerCostMode}
-                                    setCostMode={setDrawerCostMode}
-                                    showPerChip={drawerShowPerChip}
-                                    setShowPerChip={setDrawerShowPerChip}
-                                    showLabels={drawerShowLabels}
-                                    setShowLabels={setDrawerShowLabels}
-                                    showDataLabels={drawerShowDataLabels}
-                                    setShowDataLabels={setDrawerShowDataLabels}
-                                    showPareto={drawerShowPareto}
-                                    setShowPareto={setDrawerShowPareto}
-                                    qualityMetrics={qualityMetrics}
-                                    allModels={modelStats.map(m => m.model)}
-                                    selectedModels={selectedModels}
-                                    filteredData={drawerChartFilteredData}
-                                    getBenchmarkKey={getBenchmarkKey}
-                                    theme="dark"
-                                    isZoomEnabled={drawerIsZoomEnabled}
-                                    setIsZoomEnabled={setDrawerIsZoomEnabled}
-                                    zoomDomain={drawerZoomDomain}
-                                    setZoomDomain={setDrawerZoomDomain}
-                                    chartContainerRef={drawerChartContainerRef}
-                                    isDragging={drawerIsDragging}
-                                    setIsDragging={setDrawerIsDragging}
-                                    lastMouseRef={drawerLastMouseRef}
-                                    chartColorMode={drawerChartColorMode}
-                                    setChartColorMode={setDrawerChartColorMode}
-                                    metricAvailability={drawerMetricAvailability}
-                                    filteredBySource={drawerChartFilteredData}
-                                    xAxisMax={drawerXAxisMax}
-                                    setXAxisMax={setDrawerXAxisMax}
-                                    isLogScaleX={drawerIsLogScaleX}
-                                    setIsLogScaleX={setDrawerIsLogScaleX}
-                                    setLatType={setDrawerLatType}
-                                    selectedBenchmarks={selectedBenchmarks}
-                                    baselineBenchmarkKey={baselineBenchmarkKey}
-                                    lineConnectMode={drawerLineConnectMode}
-                                    setLineConnectMode={setDrawerLineConnectMode}
-                                />
+                            <div className="min-h-[450px] w-full min-w-0 flex flex-col">
+                                {showComparisonDrawer && (
+                                    <ThroughputCostChart
+                                        tputType={drawerTputType}
+                                        setTputType={setDrawerTputType}
+                                        yQualityMode={drawerYQualityMode}
+                                        setYQualityMode={setDrawerYQualityMode}
+                                        chartMode={drawerChartMode}
+                                        setChartMode={setDrawerChartMode}
+                                        xQualityMode={drawerXQualityMode}
+                                        setXQualityMode={setDrawerXQualityMode}
+                                        costMode={drawerCostMode}
+                                        setCostMode={setDrawerCostMode}
+                                        showPerChip={drawerShowPerChip}
+                                        setShowPerChip={setDrawerShowPerChip}
+                                        showLabels={drawerShowLabels}
+                                        setShowLabels={setDrawerShowLabels}
+                                        showDataLabels={drawerShowDataLabels}
+                                        setShowDataLabels={setDrawerShowDataLabels}
+                                        showPareto={drawerShowPareto}
+                                        setShowPareto={setDrawerShowPareto}
+                                        qualityMetrics={qualityMetrics}
+                                        allModels={modelStats.map(m => m.model)}
+                                        selectedModels={selectedModels}
+                                        filteredData={drawerChartFilteredData}
+                                        getBenchmarkKey={getBenchmarkKey}
+                                        theme="dark"
+                                        isZoomEnabled={drawerIsZoomEnabled}
+                                        setIsZoomEnabled={setDrawerIsZoomEnabled}
+                                        zoomDomain={drawerZoomDomain}
+                                        setZoomDomain={setDrawerZoomDomain}
+                                        chartContainerRef={drawerChartContainerRef}
+                                        isDragging={drawerIsDragging}
+                                        setIsDragging={setDrawerIsDragging}
+                                        lastMouseRef={drawerLastMouseRef}
+                                        chartColorMode={drawerChartColorMode}
+                                        setChartColorMode={setDrawerChartColorMode}
+                                        metricAvailability={drawerMetricAvailability}
+                                        filteredBySource={drawerChartFilteredData}
+                                        xAxisMax={drawerXAxisMax}
+                                        setXAxisMax={setDrawerXAxisMax}
+                                        isLogScaleX={drawerIsLogScaleX}
+                                        setIsLogScaleX={setDrawerIsLogScaleX}
+                                        setLatType={setDrawerLatType}
+                                        selectedBenchmarks={selectedBenchmarks}
+                                        baselineBenchmarkKey={baselineBenchmarkKey}
+                                        lineConnectMode={drawerLineConnectMode}
+                                        setLineConnectMode={setDrawerLineConnectMode}
+                                    />
+                                )}
                             </div>
 
                             <div className="space-y-4 pt-2 pb-6">
@@ -3843,14 +3882,37 @@ const BenchmarkRow = React.memo(({
                                                                                     }
                                                                                     
                                                                                     const tooltipText = getStatusTooltipText(status, sub);
+                                                                                    const rawRowReviewers = sub?.requested_reviewers
+                                                                                        || benchmarkData[0]?.requested_reviewers
+                                                                                        || benchmarkData[0]?.payload?.requested_reviewers
+                                                                                        || stat.payload?.requested_reviewers
+                                                                                        || [];
+                                                                                    const rowReviewers = Array.isArray(rawRowReviewers) ? rawRowReviewers.filter(Boolean) : [];
+                                                                                    const showReviewersChip = chipStatus === 'in_review' && rowReviewers.length > 0;
+                                                                                    const reviewersSummary = rowReviewers.length <= 2
+                                                                                        ? rowReviewers.map(r => `@${r}`).join(', ')
+                                                                                        : `@${rowReviewers[0]} +${rowReviewers.length - 1}`;
                                                                                     
                                                                                     return (
-                                                                                        <div className="relative group/status-tooltip inline-flex items-center">
-                                                                                            <StatusChip status={chipStatus} label={chipLabel} className="cursor-help" />
-                                                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
-                                                                                                {tooltipText}
+                                                                                        <>
+                                                                                            <div className="relative group/status-tooltip inline-flex items-center">
+                                                                                                <StatusChip status={chipStatus} label={chipLabel} className="cursor-help" />
+                                                                                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-[10px] text-slate-300 font-medium rounded-lg opacity-0 invisible group-hover/status-tooltip:opacity-100 group-hover/status-tooltip:visible transition-all duration-150 shadow-2xl z-[9999] w-48 pointer-events-none leading-relaxed text-center normal-case tracking-normal">
+                                                                                                    {tooltipText}
+                                                                                                </div>
                                                                                             </div>
-                                                                                        </div>
+                                                                                            {showReviewersChip && (
+                                                                                                <Badge
+                                                                                                    tone="neutral"
+                                                                                                    size="xs"
+                                                                                                    className="normal-case cursor-help"
+                                                                                                    data-testid="row-requested-reviewers"
+                                                                                                    title={`Requested reviewers: ${rowReviewers.map(r => `@${r}`).join(', ')}`}
+                                                                                                >
+                                                                                                    Reviewers: {reviewersSummary}
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                        </>
                                                                                     );
                                                                                 } else {
                                                                                     return (

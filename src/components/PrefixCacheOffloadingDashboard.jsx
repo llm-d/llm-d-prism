@@ -14,13 +14,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    BarChart, Bar, Cell, CartesianGrid, Tooltip, ResponsiveContainer
+    BarChart, Bar, Cell, CartesianGrid, Tooltip
 } from 'recharts';
 import {
     Download,
     ExternalLink, HardDrive, ChevronDown, ChevronUp, Check
 } from 'lucide-react';
-import { WellLitHeader, Button, Badge, Panel, ToggleGroup, LoadingState, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis, gridProps, seriesColor, CHART_STATUS } from './ui';
+import { WellLitHeader, Button, Badge, Panel, ToggleGroup, LoadingState, ChartTooltip, ChartTooltipRow, ChartXAxis, ChartYAxis, SafeResponsiveContainer, gridProps, seriesColor, CHART_STATUS } from './ui';
 import { cn } from '../utils/cn';
 
 
@@ -842,7 +842,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     {yAxisLabel}
                                 </h4>
                                 <div className="relative w-full h-[280px]">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <SafeResponsiveContainer width="100%" height="100%">
                                         <BarChart data={barChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
                                             <CartesianGrid {...gridProps()} opacity={0.5} vertical={false} />
                                             <ChartXAxis
@@ -866,7 +866,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                 ))}
                                             </Bar>
                                         </BarChart>
-                                    </ResponsiveContainer>
+                                    </SafeResponsiveContainer>
                                 </div>
                             </div>
 
@@ -913,7 +913,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                     {xAxisLabel}
                                 </h4>
                                 <div className="relative w-full h-[250px]">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <SafeResponsiveContainer width="100%" height="100%">
                                         <BarChart data={barChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }} barCategoryGap="25%">
                                             <CartesianGrid {...gridProps()} opacity={0.5} vertical={false} />
                                             <ChartXAxis
@@ -948,7 +948,7 @@ export default function PrefixCacheOffloadingDashboard({ onNavigateBack, onToggl
                                                 ))}
                                             </Bar>
                                         </BarChart>
-                                    </ResponsiveContainer>
+                                    </SafeResponsiveContainer>
                                 </div>
                             </div>
 

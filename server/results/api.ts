@@ -143,6 +143,8 @@ export const PrismResultPayloadSchema = z.object({
     metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     /** Feedback reason for rejection or change requests, if any. */
     feedback: z.string().nullable().optional(),
+    /** Optional list of GitHub usernames requested by the contributor to review this submission. */
+    requested_reviewers: z.array(z.string()).nullable().optional(),
     /** Optional review metadata including reviewer and review status change history. */
     review: z.object({
         reviewer: z.string().optional(),
@@ -171,6 +173,7 @@ export const PrismResultContextSchema = z.object({
     model_name: ContextValueSchema,
     run_label: ContextValueSchema,
     feedback: ContextValueSchema.optional(),
+    requested_reviewers: ContextValueSchema.optional(),
     well_lit_path: ContextValueSchema.optional(),
     playground_submitted: ContextValueSchema.optional(),
     forked: ContextValueSchema.optional(),
