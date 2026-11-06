@@ -20,11 +20,28 @@ import { promoteResultsHandler } from './routes/promote.ts';
 import { reviewResultsHandler } from './routes/review.ts';
 import { deleteResultsHandler } from './routes/delete.ts';
 import { exportResultsHandler, downloadEntryHandler } from './routes/export.ts';
+import {
+    getAgentToolingManifestHandler,
+    getAgentSkillMdHandler,
+    getAgentCliBundleHandler,
+    getAgentExampleManifestHandler,
+    getAgentInstallScriptHandler
+} from './routes/agent.ts';
 
 export const resultsRouter = Router();
 
 resultsRouter.get('/api/results', listResultsHandler);
 resultsRouter.post('/api/results', submitResultsHandler);
+
+// Zero-clone Agent Skill & Standalone CLI distribution routes (MUST precede /api/results/:runId)
+resultsRouter.get('/api/results/agent', getAgentToolingManifestHandler);
+resultsRouter.get('/api/results/agent/SKILL.md', getAgentSkillMdHandler);
+resultsRouter.get('/api/results/agent/skill.md', getAgentSkillMdHandler);
+resultsRouter.get('/SKILL.md', getAgentSkillMdHandler);
+resultsRouter.get('/api/results/agent/prism.mjs', getAgentCliBundleHandler);
+resultsRouter.get('/api/results/agent/experiment.yaml', getAgentExampleManifestHandler);
+resultsRouter.get('/api/results/agent/install.sh', getAgentInstallScriptHandler);
+
 resultsRouter.get('/api/results/:runId/export', exportResultsHandler);
 resultsRouter.get('/api/results/:runId/entries/:entryIndex/download', downloadEntryHandler);
 resultsRouter.get('/api/results/:runId', getResultsHandler);
@@ -39,6 +56,7 @@ export * from './routes/promote.ts';
 export * from './routes/review.ts';
 export * from './routes/delete.ts';
 export * from './routes/export.ts';
+export * from './routes/agent.ts';
 export * from './processing.ts';
 export * from './gcs.ts';
 export * from './api.ts';
