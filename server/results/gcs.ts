@@ -22,12 +22,15 @@ import {
 import { isPlaygroundMode } from '../iam.ts';
 import { normalizeReviewers } from '../../src/utils/benchmarkReportV02Parser.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function encodeContextValue(val: string): string {
     return 'e' + Buffer.from(val, 'utf8').toString('base64url');
 }
 
 export function decodeContextValue(val: string): string {
     if (!val) return '';
+    if (UUID_RE.test(val)) return val;
     if (val.startsWith('e')) {
         return Buffer.from(val.substring(1), 'base64url').toString('utf8');
     }

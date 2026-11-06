@@ -97,6 +97,35 @@ export function isReportV02(contentOrDoc, filename = '') {
 }
 
 /**
+ * Checks if a parsed document or raw JSON/YAML string is an already-assembled Prism Run Bundle
+ * (such as the output of `prism fork <runId> --output forked.json`).
+ *
+ * @param {string|object} contentOrDoc
+ * @returns {boolean}
+ */
+export function isAssembledPrismBundle(contentOrDoc) {
+    if (!contentOrDoc) return false;
+    let doc = contentOrDoc;
+    if (typeof contentOrDoc === 'string') {
+        const trimmed = contentOrDoc.trim();
+        if (!trimmed) return false;
+        try {
+            doc = trimmed.startsWith('{') ? JSON.parse(trimmed) : yaml.load(trimmed);
+        } catch {
+            return false;
+        }
+    }
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false;
+    const target = doc.payload && typeof doc.payload === 'object' && Array.isArray(doc.payload.entries)
+        ? doc.payload
+        : doc;
+    if (!Array.isArray(target.entries) || target.entries.length === 0) return false;
+    return target.entries.some(
+        (e) => e && typeof e === 'object' && (e.raw_report || e.filename || e.run_id)
+    );
+}
+
+/**
  * Encodes UTF-8 text as a `data:<mimeType>;base64,...` URI.
  *
  * @param {string} content
@@ -535,25 +564,31 @@ function assembleSingleArm(
     const cliOverrides = options.overrides || {};
     const dropFailedStages = Boolean(options.dropFailedStages ?? cliOverrides.dropFailedStages);
 
-    const dirEntries = fs.existsSync(armDir) && fs.statSync(armDir).isDirectory()
-        ? fs.readdirSync(armDir, { withFileTypes: true })
-        : [];
+    const isDirectFile = fs.existsSync(armDir) && fs.statSync(armDir).isFile();
+    const effectiveArmDir = isDirectFile ? path.dirname(armDir) : armDir;
+    const dirEntries =
+        !isDirectFile && fs.existsSync(armDir) && fs.statSync(armDir).isDirectory()
+            ? fs.readdirSync(armDir, { withFileTypes: true })
+            : [];
 
     const stageInputs = [];
+    const assembledBundles = [];
     const siblingManifestExtractions = [];
     let runMetadataParsed = null;
     let configParsed = null;
     const attachedManifests = {};
     const attachedEvidence = {};
 
-    // Sort directory entries deterministically
-    const sortedFiles = dirEntries
-        .filter((d) => d.isFile())
-        .map((d) => d.name)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    // Sort directory entries deterministically (or single file if armDir is a file path)
+    const sortedFiles = isDirectFile
+        ? [path.basename(armDir)]
+        : dirEntries
+              .filter((d) => d.isFile())
+              .map((d) => d.name)
+              .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
     for (const fname of sortedFiles) {
-        const fullPath = path.join(armDir, fname);
+        const fullPath = isDirectFile ? armDir : path.join(armDir, fname);
         const classification = classifyFilename(fname);
         if (classification === 'ignore') continue;
 
@@ -570,7 +605,7 @@ function assembleSingleArm(
             continue;
         }
 
-        // Check if it is a valid BR v0.2 stage report first (unless explicitly named run_metadata/config)
+        // Check if it is a valid BR v0.2 stage report or an already-assembled Prism bundle first
         if (classification === 'candidate_yaml_json') {
             const parsedStage = parseReportV02(rawContent, fname);
             if (parsedStage) {
@@ -579,6 +614,40 @@ function assembleSingleArm(
                     content: rawContent,
                     parsedStage,
                 });
+                continue;
+            }
+
+            let candidateDoc = null;
+            try {
+                candidateDoc = fname.toLowerCase().endsWith('.json')
+                    ? JSON.parse(rawContent)
+                    : yaml.load(rawContent);
+            } catch {
+                candidateDoc = null;
+            }
+
+            if (candidateDoc && isAssembledPrismBundle(candidateDoc)) {
+                const unwrappedBundle =
+                    candidateDoc.payload &&
+                    typeof candidateDoc.payload === 'object' &&
+                    Array.isArray(candidateDoc.payload.entries)
+                        ? candidateDoc.payload
+                        : candidateDoc;
+                assembledBundles.push(unwrappedBundle);
+                for (let idx = 0; idx < unwrappedBundle.entries.length; idx++) {
+                    const entry = unwrappedBundle.entries[idx];
+                    if (!entry || typeof entry !== 'object') continue;
+                    const entryFilename = entry.filename || `stage_${idx}.yaml`;
+                    const rawRep = entry.raw_report || entry;
+                    const parsedEntryStage = parseReportV02(rawRep, entryFilename);
+                    if (parsedEntryStage) {
+                        stageInputs.push({
+                            filename: entryFilename,
+                            content: rawRep,
+                            parsedStage: parsedEntryStage,
+                        });
+                    }
+                }
                 continue;
             }
         }
@@ -653,7 +722,7 @@ function assembleSingleArm(
         } else {
             const candidatePath = path.isAbsolute(manifestRef)
                 ? manifestRef
-                : path.resolve(baseDir || armDir, manifestRef);
+                : path.resolve(baseDir || effectiveArmDir, manifestRef);
             if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
                 const content = fs.readFileSync(candidatePath, 'utf-8');
                 const extracted = extractMetadataFromManifest(path.basename(candidatePath), content);
@@ -670,12 +739,89 @@ function assembleSingleArm(
     // Sort sibling manifest extractions: run_metadata (1) > config.yaml (2) > K8s manifests (3)
     siblingManifestExtractions.sort((a, b) => a.priority - b.priority);
 
+    const primaryAssembledBundle = assembledBundles[0] || null;
+
     // Combine stages (Tier 3 native extraction)
     const { bundle: rawBundle, droppedStages, nativeMetadata } = combineStagesToRunBundle(stageInputs, {
         dropFailedStages,
-        runId: armConfig.run_id || armConfig.runId || uuidv4(),
-        runLabel: armConfig.run_label || armConfig.runLabel,
+        runId:
+            cliOverrides.run_id ||
+            cliOverrides.runId ||
+            armConfig.run_id ||
+            armConfig.runId ||
+            primaryAssembledBundle?.runId ||
+            uuidv4(),
+        runLabel: armConfig.run_label || armConfig.runLabel || primaryAssembledBundle?.runLabel,
     });
+
+    // If input was an already-assembled Prism bundle (e.g. `prism fork` output), merge its top-level metadata into nativeMetadata
+    if (primaryAssembledBundle) {
+        nativeMetadata.runLabel = resolveTierValue(primaryAssembledBundle.runLabel, nativeMetadata.runLabel);
+        nativeMetadata.model_name = resolveTierValue(primaryAssembledBundle.model_name, nativeMetadata.model_name);
+        const bundleHw = primaryAssembledBundle.hardware?.hardware_name;
+        nativeMetadata.hardware_name = resolveTierValue(
+            bundleHw ? normalizeManifestHardware(bundleHw) || bundleHw : null,
+            nativeMetadata.hardware_name
+        );
+        nativeMetadata.accelerator_count = resolveTierValue(
+            primaryAssembledBundle.hardware?.accelerator_count,
+            nativeMetadata.accelerator_count
+        );
+        nativeMetadata.inference_tool = resolveTierValue(
+            primaryAssembledBundle.inference_tool,
+            nativeMetadata.inference_tool
+        );
+        nativeMetadata.inference_tool_version = resolveTierValue(
+            primaryAssembledBundle.inference_tool_version,
+            nativeMetadata.inference_tool_version
+        );
+        nativeMetadata.benchmark_harness = resolveTierValue(
+            primaryAssembledBundle.benchmark_harness,
+            nativeMetadata.benchmark_harness
+        );
+        nativeMetadata.benchmark_harness_version = resolveTierValue(
+            primaryAssembledBundle.benchmark_harness_version,
+            nativeMetadata.benchmark_harness_version
+        );
+        nativeMetadata.well_lit_path = resolveTierValue(
+            primaryAssembledBundle.well_lit_path,
+            nativeMetadata.well_lit_path
+        );
+        nativeMetadata.tags = normalizeTags([
+            ...(Array.isArray(primaryAssembledBundle.tags) ? primaryAssembledBundle.tags : []),
+            ...(nativeMetadata.tags || []),
+        ]);
+        if (primaryAssembledBundle.manifests && typeof primaryAssembledBundle.manifests === 'object') {
+            rawBundle.manifests = { ...primaryAssembledBundle.manifests, ...rawBundle.manifests };
+        }
+        if (primaryAssembledBundle.evidence && typeof primaryAssembledBundle.evidence === 'object') {
+            rawBundle.evidence = { ...primaryAssembledBundle.evidence, ...rawBundle.evidence };
+        }
+        if (primaryAssembledBundle.run_metadata && !runMetadataParsed) {
+            rawBundle.run_metadata = primaryAssembledBundle.run_metadata;
+        }
+        if (primaryAssembledBundle.metadata) {
+            rawBundle.metadata = { ...primaryAssembledBundle.metadata, ...(rawBundle.metadata || {}) };
+        }
+        if (primaryAssembledBundle.schema_version) {
+            rawBundle.schema_version = primaryAssembledBundle.schema_version;
+        }
+        if (primaryAssembledBundle.forked_from) {
+            rawBundle.forked_from =
+                typeof primaryAssembledBundle.forked_from === 'string'
+                    ? {
+                          original_run_id: primaryAssembledBundle.forked_from,
+                          original_run_label: primaryAssembledBundle.runLabel || 'Forked Run',
+                          original_author: null,
+                          source_bucket: 'llm-d-benchmarks',
+                          forked_at: new Date().toISOString(),
+                      }
+                    : primaryAssembledBundle.forked_from;
+        }
+        if (primaryAssembledBundle.forked !== undefined) {
+            rawBundle.forked = Boolean(primaryAssembledBundle.forked);
+        }
+    }
 
     // Tier 2 aggregated metadata from sibling files
     const tier2 = {
@@ -689,34 +835,26 @@ function assembleSingleArm(
         well_lit_path: resolveTierValue(...siblingManifestExtractions.map((s) => s.extracted.well_lit_path)),
     };
 
-    // Tier 1 aggregated metadata (CLI overrides > experiment.yaml arm overrides > experiment.yaml defaults)
-    const tier1 = {
+    // Tier 1 explicit overrides (CLI flags > per-arm config in experiment.yaml)
+    const tier1Explicit = {
         runLabel: resolveTierValue(
             cliOverrides.runLabel,
             cliOverrides.run_label,
             armConfig.run_label,
-            armConfig.runLabel,
-            experimentDefaults.run_label,
-            experimentDefaults.runLabel
+            armConfig.runLabel
         ),
         model_name: resolveTierValue(
             cliOverrides.model,
             cliOverrides.model_name,
             armConfig.model_name,
-            armConfig.model,
-            experimentDefaults.model_name,
-            experimentDefaults.model
+            armConfig.model
         ),
         hardware_name: resolveTierValue(
             cliOverrides.hardware,
             cliOverrides.hardware_name,
             cliOverrides.hardware?.hardware_name,
             typeof armConfig.hardware === 'string' ? armConfig.hardware : armConfig.hardware?.hardware_name,
-            armConfig.hardware_name,
-            typeof experimentDefaults.hardware === 'string'
-                ? experimentDefaults.hardware
-                : experimentDefaults.hardware?.hardware_name,
-            experimentDefaults.hardware_name
+            armConfig.hardware_name
         ),
         accelerator_count: resolveTierValue(
             cliOverrides.chips,
@@ -724,75 +862,140 @@ function assembleSingleArm(
             cliOverrides.hardware?.accelerator_count,
             armConfig.hardware?.accelerator_count,
             armConfig.accelerator_count,
-            armConfig.chips,
-            experimentDefaults.hardware?.accelerator_count,
-            experimentDefaults.accelerator_count,
-            experimentDefaults.chips
+            armConfig.chips
         ),
         inference_tool: resolveTierValue(
             cliOverrides.tool,
             cliOverrides.inference_tool,
-            armConfig.inference_tool,
-            experimentDefaults.inference_tool
+            armConfig.inference_tool
         ),
         inference_tool_version: resolveTierValue(
             cliOverrides.toolVersion,
             cliOverrides.inference_tool_version,
-            armConfig.inference_tool_version,
-            experimentDefaults.inference_tool_version
+            armConfig.inference_tool_version
         ),
         benchmark_harness: resolveTierValue(
             cliOverrides.harness,
             cliOverrides.benchmark_harness,
-            armConfig.benchmark_harness,
-            experimentDefaults.benchmark_harness
+            armConfig.benchmark_harness
         ),
         benchmark_harness_version: resolveTierValue(
             cliOverrides.harnessVersion,
             cliOverrides.benchmark_harness_version,
-            armConfig.benchmark_harness_version,
-            experimentDefaults.benchmark_harness_version
+            armConfig.benchmark_harness_version
         ),
         well_lit_path: resolveTierValue(
             cliOverrides.wellLitPath,
             cliOverrides.well_lit_path,
-            armConfig.well_lit_path,
-            experimentDefaults.well_lit_path
+            armConfig.well_lit_path
         ),
     };
 
-    // 3-Tier Resolution: Tier 1 > Tier 2 > Tier 3
-    const resolvedModelName = resolveTierValue(tier1.model_name, tier2.model_name, nativeMetadata.model_name) || '';
-    const rawResolvedHw = resolveTierValue(tier1.hardware_name, tier2.hardware_name, nativeMetadata.hardware_name);
+    // Campaign defaults from experiment.yaml `defaults:` block (fills gaps without clobbering heterogeneous per-arm native metadata)
+    const defaultsTier = {
+        runLabel: resolveTierValue(experimentDefaults.run_label, experimentDefaults.runLabel),
+        model_name: resolveTierValue(experimentDefaults.model_name, experimentDefaults.model),
+        hardware_name: resolveTierValue(
+            typeof experimentDefaults.hardware === 'string'
+                ? experimentDefaults.hardware
+                : experimentDefaults.hardware?.hardware_name,
+            experimentDefaults.hardware_name
+        ),
+        accelerator_count: resolveTierValue(
+            experimentDefaults.hardware?.accelerator_count,
+            experimentDefaults.accelerator_count,
+            experimentDefaults.chips
+        ),
+        inference_tool: resolveTierValue(experimentDefaults.inference_tool),
+        inference_tool_version: resolveTierValue(experimentDefaults.inference_tool_version),
+        benchmark_harness: resolveTierValue(experimentDefaults.benchmark_harness),
+        benchmark_harness_version: resolveTierValue(experimentDefaults.benchmark_harness_version),
+        well_lit_path: resolveTierValue(experimentDefaults.well_lit_path),
+    };
+
+    const tier1 = {
+        runLabel: resolveTierValue(tier1Explicit.runLabel, defaultsTier.runLabel),
+        model_name: resolveTierValue(tier1Explicit.model_name, defaultsTier.model_name),
+        hardware_name: resolveTierValue(tier1Explicit.hardware_name, defaultsTier.hardware_name),
+        accelerator_count: resolveTierValue(tier1Explicit.accelerator_count, defaultsTier.accelerator_count),
+        inference_tool: resolveTierValue(tier1Explicit.inference_tool, defaultsTier.inference_tool),
+        inference_tool_version: resolveTierValue(
+            tier1Explicit.inference_tool_version,
+            defaultsTier.inference_tool_version
+        ),
+        benchmark_harness: resolveTierValue(tier1Explicit.benchmark_harness, defaultsTier.benchmark_harness),
+        benchmark_harness_version: resolveTierValue(
+            tier1Explicit.benchmark_harness_version,
+            defaultsTier.benchmark_harness_version
+        ),
+        well_lit_path: resolveTierValue(tier1Explicit.well_lit_path, defaultsTier.well_lit_path),
+    };
+
+    // 3-Tier Resolution: Tier 1 explicit (CLI/armConfig) > Tier 2 (sibling manifests) > Tier 3 (stage report) > experimentDefaults
+    const resolvedModelName =
+        resolveTierValue(
+            tier1Explicit.model_name,
+            tier2.model_name,
+            nativeMetadata.model_name,
+            defaultsTier.model_name
+        ) || '';
+    const rawResolvedHw = resolveTierValue(
+        tier1Explicit.hardware_name,
+        tier2.hardware_name,
+        nativeMetadata.hardware_name,
+        defaultsTier.hardware_name
+    );
     const resolvedHardwareName = rawResolvedHw
         ? normalizeManifestHardware(rawResolvedHw) || rawResolvedHw
         : 'Unknown';
     const rawResolvedAccCount = resolveTierValue(
-        tier1.accelerator_count,
+        tier1Explicit.accelerator_count,
         tier2.accelerator_count,
-        nativeMetadata.accelerator_count
+        nativeMetadata.accelerator_count,
+        defaultsTier.accelerator_count
     );
     const resolvedAcceleratorCount =
         rawResolvedAccCount !== null && rawResolvedAccCount !== undefined ? Number(rawResolvedAccCount) : null;
 
     const resolvedInferenceTool =
-        resolveTierValue(tier1.inference_tool, tier2.inference_tool, nativeMetadata.inference_tool) || null;
+        resolveTierValue(
+            tier1Explicit.inference_tool,
+            tier2.inference_tool,
+            nativeMetadata.inference_tool,
+            defaultsTier.inference_tool
+        ) || null;
     const resolvedInferenceToolVersion =
         resolveTierValue(
-            tier1.inference_tool_version,
+            tier1Explicit.inference_tool_version,
             tier2.inference_tool_version,
-            nativeMetadata.inference_tool_version
+            nativeMetadata.inference_tool_version,
+            defaultsTier.inference_tool_version
         ) || null;
     const resolvedHarness =
-        resolveTierValue(tier1.benchmark_harness, nativeMetadata.benchmark_harness) || null;
+        resolveTierValue(
+            tier1Explicit.benchmark_harness,
+            nativeMetadata.benchmark_harness,
+            defaultsTier.benchmark_harness
+        ) || null;
     const resolvedHarnessVersion =
-        resolveTierValue(tier1.benchmark_harness_version, nativeMetadata.benchmark_harness_version) || null;
-    const resolvedWellLitPath = resolveTierValue(tier1.well_lit_path, tier2.well_lit_path) || null;
+        resolveTierValue(
+            tier1Explicit.benchmark_harness_version,
+            nativeMetadata.benchmark_harness_version,
+            defaultsTier.benchmark_harness_version
+        ) || null;
+    const resolvedWellLitPath =
+        resolveTierValue(
+            tier1Explicit.well_lit_path,
+            tier2.well_lit_path,
+            nativeMetadata.well_lit_path,
+            defaultsTier.well_lit_path
+        ) || null;
 
     const resolvedRunLabel =
         resolveTierValue(
-            tier1.runLabel,
+            tier1Explicit.runLabel,
             nativeMetadata.runLabel,
+            defaultsTier.runLabel,
             armKey && armKey !== 'default' ? armKey : null,
             path.basename(armDir),
             resolvedModelName
@@ -806,6 +1009,9 @@ function assembleSingleArm(
     ]);
 
     const combinedReviewers = normalizeReviewers([
+        ...(Array.isArray(primaryAssembledBundle?.requested_reviewers)
+            ? primaryAssembledBundle.requested_reviewers
+            : []),
         ...(Array.isArray(experimentMeta.requested_reviewers) ? experimentMeta.requested_reviewers : []),
         ...(Array.isArray(experimentDefaults.requested_reviewers) ? experimentDefaults.requested_reviewers : []),
         ...(Array.isArray(armConfig.requested_reviewers) ? armConfig.requested_reviewers : []),
@@ -814,13 +1020,20 @@ function assembleSingleArm(
 
     const resolvedDcoSignoff =
         normalizeDcoSignoff(cliOverrides.dco_signoff || cliOverrides.dcoSignoff, 'cli-flag') ||
-        normalizeDcoSignoff(armConfig.dco_signoff || experimentMeta.dco_signoff || experimentDefaults.dco_signoff, 'experiment-manifest');
+        normalizeDcoSignoff(
+            armConfig.dco_signoff ||
+                experimentMeta.dco_signoff ||
+                experimentDefaults.dco_signoff ||
+                primaryAssembledBundle?.dco_signoff,
+            'experiment-manifest'
+        );
 
     const resolvedAgentProvenance =
         cliOverrides.agent_provenance ||
         armConfig.agent_provenance ||
         experimentMeta.agent_provenance ||
         experimentDefaults.agent_provenance ||
+        primaryAssembledBundle?.agent_provenance ||
         undefined;
 
     const resolvedExperimentId =
@@ -829,6 +1042,7 @@ function assembleSingleArm(
         armConfig.experiment_id ||
         experimentMeta.id ||
         experimentMeta.experiment_id ||
+        primaryAssembledBundle?.experiment_id ||
         undefined;
 
     const resolvedExperimentLabel =
@@ -837,6 +1051,7 @@ function assembleSingleArm(
         armConfig.experiment_label ||
         experimentMeta.label ||
         experimentMeta.experiment_label ||
+        primaryAssembledBundle?.experiment_label ||
         undefined;
 
     const resolvedBaselineRunId =
@@ -844,6 +1059,7 @@ function assembleSingleArm(
         cliOverrides.baselineRunId ||
         armConfig.baseline_run_id ||
         experimentMeta.baseline_run_id ||
+        primaryAssembledBundle?.baseline_run_id ||
         undefined;
 
     // Update bundle with resolved metadata
@@ -897,9 +1113,17 @@ function assembleSingleArm(
     if (resolvedAgentProvenance) {
         rawBundle.agent_provenance = resolvedAgentProvenance;
     }
-    if (cliOverrides.github_author || armConfig.github_author || experimentMeta.github_author) {
+    if (
+        cliOverrides.github_author ||
+        armConfig.github_author ||
+        experimentMeta.github_author ||
+        primaryAssembledBundle?.github_author
+    ) {
         rawBundle.github_author =
-            cliOverrides.github_author || armConfig.github_author || experimentMeta.github_author;
+            cliOverrides.github_author ||
+            armConfig.github_author ||
+            experimentMeta.github_author ||
+            primaryAssembledBundle?.github_author;
     }
 
     // Propagate resolved root metadata into every stage's raw_report via mutateRawReportMetadata
@@ -996,11 +1220,35 @@ export function discoverAndAssembleArms(targetPath, options = {}) {
     const stat = fs.statSync(resolvedTarget);
     let experimentConfig = null;
     let baseDir = resolvedTarget;
+    let directFileArmDescriptor = null;
 
     if (stat.isFile()) {
         baseDir = path.dirname(resolvedTarget);
-        const rawYaml = fs.readFileSync(resolvedTarget, 'utf-8');
-        experimentConfig = yaml.load(rawYaml) || {};
+        const rawFile = fs.readFileSync(resolvedTarget, 'utf-8');
+        let parsedFile = null;
+        try {
+            parsedFile = resolvedTarget.toLowerCase().endsWith('.json')
+                ? JSON.parse(rawFile)
+                : yaml.load(rawFile);
+        } catch {
+            parsedFile = null;
+        }
+
+        if (
+            isAssembledPrismBundle(parsedFile) ||
+            isReportV02(parsedFile || rawFile, path.basename(resolvedTarget))
+        ) {
+            directFileArmDescriptor = {
+                armKey: path.basename(resolvedTarget, path.extname(resolvedTarget)) || 'default',
+                armDir: resolvedTarget,
+                armConfig: {},
+                experimentDefaults: {},
+                experimentMeta: {},
+                baseDir,
+            };
+        } else {
+            experimentConfig = parsedFile || {};
+        }
     } else if (stat.isDirectory() && !options.ignoreExperimentYaml) {
         const expYamlPath = path.join(resolvedTarget, 'experiment.yaml');
         const expYmlPath = path.join(resolvedTarget, 'experiment.yml');
@@ -1020,7 +1268,9 @@ export function discoverAndAssembleArms(targetPath, options = {}) {
 
     const armDescriptors = [];
 
-    if (experimentConfig && Array.isArray(experimentConfig.arms) && experimentConfig.arms.length > 0) {
+    if (directFileArmDescriptor) {
+        armDescriptors.push(directFileArmDescriptor);
+    } else if (experimentConfig && Array.isArray(experimentConfig.arms) && experimentConfig.arms.length > 0) {
         for (let i = 0; i < experimentConfig.arms.length; i++) {
             const armEntry = experimentConfig.arms[i] || {};
             const relArmPath = armEntry.path || armEntry.dir || '.';
@@ -1036,7 +1286,7 @@ export function discoverAndAssembleArms(targetPath, options = {}) {
             });
         }
     } else {
-        // Auto-discover in directory: check if baseDir itself has BR v0.2 stage reports
+        // Auto-discover in directory: check if baseDir itself has BR v0.2 stage reports or pre-assembled Prism bundles
         const entries = fs.readdirSync(baseDir, { withFileTypes: true });
         const rootHasStageReports = entries
             .filter((d) => d.isFile() && /\.(?:ya?ml|json)$/i.test(d.name))
@@ -1044,7 +1294,7 @@ export function discoverAndAssembleArms(targetPath, options = {}) {
                 if (classifyFilename(d.name) !== 'candidate_yaml_json') return false;
                 try {
                     const content = fs.readFileSync(path.join(baseDir, d.name), 'utf-8');
-                    return isReportV02(content, d.name);
+                    return isReportV02(content, d.name) || isAssembledPrismBundle(content);
                 } catch {
                     return false;
                 }
@@ -1089,7 +1339,7 @@ export function discoverAndAssembleArms(targetPath, options = {}) {
                         if (classifyFilename(f.name) !== 'candidate_yaml_json') return false;
                         try {
                             const content = fs.readFileSync(path.join(candDir, f.name), 'utf-8');
-                            return isReportV02(content, f.name);
+                            return isReportV02(content, f.name) || isAssembledPrismBundle(content);
                         } catch {
                             return false;
                         }
@@ -1218,23 +1468,62 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
     });
 
     const firstBundle = assembly.arms[0]?.bundle || {};
-    const inferredModel = !isGapValue(firstBundle.model_name) ? firstBundle.model_name : 'Unknown';
-    const inferredHw = !isGapValue(firstBundle.hardware?.hardware_name)
-        ? firstBundle.hardware.hardware_name
-        : 'Unknown';
-    const inferredChips = Number(firstBundle.hardware?.accelerator_count) > 0
-        ? Number(firstBundle.hardware.accelerator_count)
-        : 1;
-    const inferredTool = !isGapValue(firstBundle.inference_tool) ? firstBundle.inference_tool : 'vLLM';
-    const inferredToolVer = !isGapValue(firstBundle.inference_tool_version)
-        ? firstBundle.inference_tool_version
-        : undefined;
+    const armBundles = assembly.arms.map((a) => a.bundle || {});
+
+    const resolveSharedDefault = (values, fallbackWhenAllGap = undefined) => {
+        const nonGap = values.filter((v) => !isGapValue(v));
+        if (nonGap.length === 0) return { isShared: true, value: fallbackWhenAllGap };
+        const distinct = Array.from(new Set(nonGap));
+        if (distinct.length === 1) {
+            return { isShared: true, value: distinct[0] };
+        }
+        return { isShared: false, value: undefined };
+    };
+
+    const sharedModel = resolveSharedDefault(
+        armBundles.map((b) => b.model_name),
+        'Unknown'
+    );
+    const sharedHw = resolveSharedDefault(
+        armBundles.map((b) => b.hardware?.hardware_name),
+        'Unknown'
+    );
+    const sharedChips = resolveSharedDefault(
+        armBundles.map((b) => (Number(b.hardware?.accelerator_count) > 0 ? Number(b.hardware.accelerator_count) : null)),
+        1
+    );
+    const sharedTool = resolveSharedDefault(
+        armBundles.map((b) => b.inference_tool),
+        'vLLM'
+    );
+    const sharedToolVer = resolveSharedDefault(
+        armBundles.map((b) => b.inference_tool_version),
+        undefined
+    );
 
     const experimentId = options.experimentId || assembly.experiment.id || uuidv4();
     const experimentLabel =
         options.experimentLabel ||
         assembly.experiment.label ||
         `${path.basename(resolvedDir)} Benchmark Campaign`;
+
+    const defaultsBlock = {
+        ...(sharedModel.isShared && sharedModel.value !== undefined ? { model_name: sharedModel.value } : {}),
+        ...(sharedHw.isShared || sharedChips.isShared
+            ? {
+                  hardware: {
+                      ...(sharedHw.isShared && sharedHw.value !== undefined ? { hardware_name: sharedHw.value } : {}),
+                      ...(sharedChips.isShared && sharedChips.value !== undefined
+                          ? { accelerator_count: sharedChips.value }
+                          : {}),
+                  },
+              }
+            : {}),
+        ...(sharedTool.isShared && sharedTool.value !== undefined ? { inference_tool: sharedTool.value } : {}),
+        ...(sharedToolVer.isShared && sharedToolVer.value ? { inference_tool_version: sharedToolVer.value } : {}),
+        ...(firstBundle.well_lit_path ? { well_lit_path: firstBundle.well_lit_path } : {}),
+        ...(Array.isArray(firstBundle.tags) && firstBundle.tags.length > 0 ? { tags: firstBundle.tags } : {}),
+    };
 
     const rawConfigObject = {
         version: '1.0',
@@ -1247,29 +1536,37 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
                 : {}),
             ...(options.dcoSignoff ? { dco_signoff: options.dcoSignoff } : {}),
         },
-        defaults: {
-            model_name: inferredModel,
-            hardware: {
-                hardware_name: inferredHw,
-                accelerator_count: inferredChips,
-            },
-            inference_tool: inferredTool,
-            ...(inferredToolVer ? { inference_tool_version: inferredToolVer } : {}),
-            ...(firstBundle.well_lit_path ? { well_lit_path: firstBundle.well_lit_path } : {}),
-            ...(Array.isArray(firstBundle.tags) && firstBundle.tags.length > 0 ? { tags: firstBundle.tags } : {}),
-        },
+        defaults: defaultsBlock,
         arms: assembly.arms.map((arm, idx) => {
             const relPath = path.relative(resolvedDir, arm.path) || '.';
             const normalizedRel = relPath === '.' ? '.' : `./${relPath.replace(/\\/g, '/')}`;
             const isBaseline = options.baseline
                 ? arm.armKey === options.baseline || path.basename(arm.path) === options.baseline
                 : Boolean(arm.isBaseline || (idx === 0 && assembly.arms.length > 1 && /baseline/i.test(arm.armKey)));
+            const armBundle = arm.bundle || {};
+            const armHw = {};
+            if (!sharedHw.isShared && !isGapValue(armBundle.hardware?.hardware_name)) {
+                armHw.hardware_name = armBundle.hardware.hardware_name;
+            }
+            if (!sharedChips.isShared && Number(armBundle.hardware?.accelerator_count) > 0) {
+                armHw.accelerator_count = Number(armBundle.hardware.accelerator_count);
+            }
             return {
                 key: arm.armKey,
-                run_label: arm.bundle.runLabel || arm.armKey,
+                run_label: armBundle.runLabel || arm.armKey,
                 path: normalizedRel,
                 ...(isBaseline ? { is_baseline: true } : {}),
-                ...(Array.isArray(arm.bundle.tags) && arm.bundle.tags.length > 0 ? { tags: arm.bundle.tags } : {}),
+                ...(!sharedModel.isShared && !isGapValue(armBundle.model_name)
+                    ? { model_name: armBundle.model_name }
+                    : {}),
+                ...(Object.keys(armHw).length > 0 ? { hardware: armHw } : {}),
+                ...(!sharedTool.isShared && !isGapValue(armBundle.inference_tool)
+                    ? { inference_tool: armBundle.inference_tool }
+                    : {}),
+                ...(!sharedToolVer.isShared && !isGapValue(armBundle.inference_tool_version)
+                    ? { inference_tool_version: armBundle.inference_tool_version }
+                    : {}),
+                ...(Array.isArray(armBundle.tags) && armBundle.tags.length > 0 ? { tags: armBundle.tags } : {}),
             };
         }),
     };

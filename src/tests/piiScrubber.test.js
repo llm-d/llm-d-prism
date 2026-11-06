@@ -131,6 +131,24 @@ describe('piiScrubber', () => {
             expect(allowed.text).toBe(raw);
             expect(allowed.findings.find((f) => f.category === 'email')).toBeUndefined();
         });
+
+        it('redacts HTTP basic-auth URL credentials and sensitive URL query parameters', () => {
+            const raw = [
+                'Registry: https://deployer:my_basic_auth_pw_123@registry.example.com/v2/models',
+                'Webhook: https://api.example.com/callback?token=query_tok_98765&api_key=q_apikey_54321&client_secret=q_sec_111&page=2',
+            ].join('\n');
+
+            const { text, findings } = scrubTextPii(raw);
+            expect(text).toContain('https://deployer:[REDACTED_SECRET]@registry.example.com/v2/models');
+            expect(text).toContain(
+                'https://api.example.com/callback?token=[REDACTED_SECRET]&api_key=[REDACTED_SECRET]&client_secret=[REDACTED_SECRET]&page=2'
+            );
+            expect(text).not.toContain('my_basic_auth_pw_123');
+            expect(text).not.toContain('query_tok_98765');
+            expect(text).not.toContain('q_apikey_54321');
+            expect(text).not.toContain('q_sec_111');
+            expect(findings.find((f) => f.category === 'secret')?.count).toBe(4);
+        });
     });
 
     describe('scrubObjectPii & scrubBundlePii', () => {
@@ -240,6 +258,66 @@ describe('piiScrubber', () => {
             expect(piiReport.categories.email).toBeGreaterThanOrEqual(2);
             expect(piiReport.categories.private_ip).toBeGreaterThanOrEqual(2);
             expect(piiReport.categories.internal_host).toBeGreaterThanOrEqual(1);
+        });
+
+        it('redacts camelCase secret keys without false-positiving token metric/tokenizer keys, and handles circular/Date/RegExp objects', () => {
+            const cyclic = {
+                accessToken: 'camel_access_token_val',
+                refreshToken: 'camel_refresh_token_val',
+                clientSecret: 'camel_client_secret_val',
+                privateKey: 'camel_private_key_val',
+                apiKey: 'camel_api_key_val',
+                hfToken: 'camel_hf_token_val',
+                secretKey: 'camel_secret_key_val',
+                authToken: 'camel_auth_token_val',
+                bearerToken: 'camel_bearer_token_val',
+                awsSecretAccessKey: 'camel_aws_secret_val',
+                openaiApiKey: 'camel_openai_key_val',
+                metrics: {
+                    max_tokens: '4096',
+                    input_tokens: '1024',
+                    output_tokens: '512',
+                    total_tokens: '1536',
+                    prompt_tokens: '1024',
+                    completion_tokens: '512',
+                    tokenizer: 'meta-llama/Llama-3.1-70B-Instruct',
+                },
+                createdAt: new Date('2026-11-06T00:00:00.000Z'),
+                pattern: /^llama-3/i,
+            };
+            cyclic.self = cyclic;
+
+            const { data, piiReport } = scrubObjectPii(cyclic);
+
+            expect(data.accessToken).toBe('[REDACTED_SECRET]');
+            expect(data.refreshToken).toBe('[REDACTED_SECRET]');
+            expect(data.clientSecret).toBe('[REDACTED_SECRET]');
+            expect(data.privateKey).toBe('[REDACTED_SECRET]');
+            expect(data.apiKey).toBe('[REDACTED_SECRET]');
+            expect(data.hfToken).toBe('[REDACTED_SECRET]');
+            expect(data.secretKey).toBe('[REDACTED_SECRET]');
+            expect(data.authToken).toBe('[REDACTED_SECRET]');
+            expect(data.bearerToken).toBe('[REDACTED_SECRET]');
+            expect(data.awsSecretAccessKey).toBe('[REDACTED_SECRET]');
+            expect(data.openaiApiKey).toBe('[REDACTED_SECRET]');
+
+            // Token count/metric & tokenizer fields are preserved untouched
+            expect(data.metrics).toEqual({
+                max_tokens: '4096',
+                input_tokens: '1024',
+                output_tokens: '512',
+                total_tokens: '1536',
+                prompt_tokens: '1024',
+                completion_tokens: '512',
+                tokenizer: 'meta-llama/Llama-3.1-70B-Instruct',
+            });
+
+            expect(data.createdAt).toBeInstanceOf(Date);
+            expect(data.createdAt.toISOString()).toBe('2026-11-06T00:00:00.000Z');
+            expect(data.pattern).toBeInstanceOf(RegExp);
+            expect(data.pattern.source).toBe('^llama-3');
+            expect(data.self).toBe('[Circular]');
+            expect(piiReport.categories.secret).toBe(11);
         });
     });
 });
