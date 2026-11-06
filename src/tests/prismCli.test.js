@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import yaml from 'js-yaml';
-import { runPrismCli } from '../../cli/prism.ts';
+import { runPrismCli, DEFAULT_API_URL } from '../../cli/prism.ts';
 import { decodeShareLink } from '../utils/shareLinkEncoder.js';
 
 function createSampleBrv02Report({
@@ -406,10 +406,13 @@ describe('prism-results CLI (cli/prism.ts)', () => {
         expect(reviewCalls).toHaveLength(2);
         expect(reviewCalls[0].body.status).toBe('public');
 
-        // Verify shareUrl decodes back to the 2 server runIds
+        // Verify shareUrl uses ?view=results-store&benchmarks= and decodes back to the 2 server runIds
+        expect(DEFAULT_API_URL).toBe('https://prism.llm-d.ai');
+        expect(postedPayloads[0].url).toContain('https://prism.llm-d.ai/api/results');
         const parsedShareUrl = new URL(submitRes.payload.shareUrl);
-        const shareParam = parsedShareUrl.searchParams.get('share');
-        expect(decodeShareLink(shareParam)).toEqual(assignedUuids);
+        expect(parsedShareUrl.searchParams.get('view')).toBe('results-store');
+        const benchmarksParam = parsedShareUrl.searchParams.get('benchmarks');
+        expect(decodeShareLink(benchmarksParam)).toEqual(assignedUuids);
         expect(parsedShareUrl.searchParams.get('experimentId')).toBe('9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d');
     });
 
@@ -505,7 +508,52 @@ describe('prism-results CLI (cli/prism.ts)', () => {
 
         expect(compareRes.payload.markdown).toContain('| vLLM Baseline (Baseline) |');
         expect(compareRes.payload.markdown).toContain('+50.0%');
-        expect(compareRes.payload.shareUrl).toContain('https://prism.llm-d.ai/?share=');
+        expect(compareRes.payload.shareUrl).toContain('https://prism.llm-d.ai/?view=results-store&benchmarks=');
+        const parsedCompareShare = new URL(compareRes.payload.shareUrl);
+        expect(decodeShareLink(parsedCompareShare.searchParams.get('benchmarks'))).toEqual([baseId, candId]);
+    });
+
+    it('prints actionable arm errors, remediation hints, and dry-run preflight summary in human mode (without --json)', async () => {
+        const armInvalidDir = path.join(tmpDir, 'arm_human_invalid');
+        fs.mkdirSync(armInvalidDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(armInvalidDir, 'benchmark_report_stage_0.yaml'),
+            createSampleBrv02Report({ hardware: 'Unknown', count: 0 }),
+            'utf8'
+        );
+
+        const stderrLines = [];
+        const stdoutLines = [];
+        const valFailRes = await runPrismCli(['validate', armInvalidDir], {
+            stdout: (m) => stdoutLines.push(m),
+            stderr: (m) => stderrLines.push(m),
+        });
+        expect(valFailRes.exitCode).toBe(2);
+        const combinedErr = stderrLines.join('\n');
+        expect(combinedErr).toContain("Arm 'arm_human_invalid'");
+        expect(combinedErr).toContain('hardware');
+        expect(combinedErr).toContain('Suggested CLI Flags:');
+        expect(combinedErr).toContain('--hardware');
+
+        // Human-mode submit --dry-run on a valid arm
+        const armValidDir = path.join(tmpDir, 'arm_human_valid');
+        fs.mkdirSync(armValidDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(armValidDir, 'benchmark_report_stage_0.yaml'),
+            createSampleBrv02Report({ extraNote: 'HF_TOKEN=hf_1234567890abcdefghijklmnop' }),
+            'utf8'
+        );
+
+        const dryStdout = [];
+        const dryRes = await runPrismCli(['submit', armValidDir, '--dry-run', '--publish'], {
+            stdout: (m) => dryStdout.push(m),
+        });
+        expect(dryRes.exitCode).toBe(0);
+        const combinedDryOut = dryStdout.join('\n');
+        expect(combinedDryOut).toContain('Dry-run validation succeeded');
+        expect(combinedDryOut).toContain('Target State: public');
+        expect(combinedDryOut).toContain('Arms Ready: 1 arm(s), 1 stage(s)');
+        expect(combinedDryOut).toMatch(/PII Redactions:\s+[1-9]\d*\s+item\(s\)\s+scrubbed/);
     });
 
     it('supports list, get, promote, review, and fork commands and scrubs diagnostics on API error', async () => {
