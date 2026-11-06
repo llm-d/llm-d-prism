@@ -70,6 +70,22 @@ oauthRouter.use((req: Request, res: Response, next) => {
     next();
 });
 
+export const GITHUB_OAUTH_SCOPE = 'read:user read:org';
+
+/**
+ * Builds the GitHub OAuth authorization redirect URL.
+ * Requests `read:user read:org` so OAuth Apps can inspect private `llm-d`
+ * organization memberships; GitHub Apps ignore `scope` and rely on their
+ * configured Organization Members (Read-only) permission + org installation.
+ */
+export function buildGitHubAuthUrl(clientId: string, redirectUri: string, state: string): string {
+    return `https://github.com/login/oauth/authorize` +
+        `?client_id=${encodeURIComponent(clientId)}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&state=${encodeURIComponent(state)}` +
+        `&scope=${encodeURIComponent(GITHUB_OAUTH_SCOPE)}`;
+}
+
 /**
  * GET /api/auth/github/login
  * Initiates the GitHub OAuth flow.
@@ -77,11 +93,7 @@ oauthRouter.use((req: Request, res: Response, next) => {
 oauthRouter.get('/api/auth/github/login', (req: Request, res: Response) => {
     const state = (req.query.state as string) || crypto.randomBytes(16).toString('hex');
     const redirectUri = `${getBaseUrl(req)}/api/auth/github/callback`;
-    const githubAuthUrl = `https://github.com/login/oauth/authorize` +
-        `?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&state=${encodeURIComponent(state)}` +
-        `&scope=read:user`;
+    const githubAuthUrl = buildGitHubAuthUrl(GITHUB_CLIENT_ID, redirectUri, state);
 
     res.redirect(githubAuthUrl);
 });
@@ -110,8 +122,9 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
 
     // Resolve organization membership role
     let orgRole: PermissionLevel = 'none';
+    const encodedUsername = encodeURIComponent(username);
     try {
-        const orgResponse = await fetch(`https://api.github.com/orgs/llm-d/memberships/${username}`, {
+        const orgResponse = await fetch(`https://api.github.com/orgs/llm-d/memberships/${encodedUsername}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'User-Agent': 'llm-d-prism'
@@ -125,6 +138,21 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
                 } else if (orgData.role === 'member') {
                     orgRole = 'user';
                 }
+            }
+        } else if (orgResponse.status === 403) {
+            console.warn(
+                `GitHub org membership check returned 403 for ${username}; ` +
+                `ensure token has 'read:org' scope or the GitHub App is installed on 'llm-d' with Members: Read-only. ` +
+                `Falling back to public_members check.`
+            );
+            const publicMemberResponse = await fetch(`https://api.github.com/orgs/llm-d/public_members/${encodedUsername}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'User-Agent': 'llm-d-prism'
+                }
+            });
+            if (publicMemberResponse.status === 204) {
+                orgRole = 'user';
             }
         }
     } catch (e) {

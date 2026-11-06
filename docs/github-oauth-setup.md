@@ -43,6 +43,10 @@ When creating your GitHub App on GitHub:
           additional permissions are required.
 6. Under **Where can this GitHub App be installed?**:
     - Select **Any account**.
+7. **Install the GitHub App on the `llm-d` Organization** _(Required)_:
+    - Open your GitHub App's public page (`https://github.com/apps/<your-app-slug>`) or **Install App** tab in settings, and install it onto the **`llm-d`** organization (requires an `llm-d` organization owner).
+    - _Why?_ GitHub Apps ignore the `scope` parameter on `/login/oauth/authorize` and only grant user access tokens permission to query `GET /orgs/llm-d/memberships/:username` when the GitHub App is both configured with **Organization permissions → Members: Read-only** _and_ installed on `llm-d`. Without installation, GitHub returns `403 Resource not accessible by integration` for private org members.
+    - _(Note: If you use a legacy GitHub OAuth App instead of a GitHub App, Prism automatically requests `scope=read:user read:org` during `/api/auth/github/login`.)_
 
 For details on how the backend uses this authentication to verify user roles,
 permissions, and GCS allowlists, see the [Prism IAM documentation](iam.md).
