@@ -79,11 +79,17 @@ Deliver a **Repo-Native Full-Lifecycle CLI (`cli/prism.ts`)** paired with a **Ze
 - Extracts K8s manifest / `config.yaml` / `run_metadata.yaml` metadata inference into `src/utils/manifestMetadataExtractor.js`.
 - `src/utils/bundleAssembler.js` discovers single-run or multi-arm directories (or parses `experiment.yaml`), applies 3-tier resolution (Tier 1: CLI/`experiment.yaml` overrides $\succ$ Tier 2: sibling `run_metadata.yaml`/`config.yaml`/K8s manifests $\succ$ Tier 3: BR v0.2 stage report fields), runs `scrubBundlePii()`, validates every arm via `validatePrismUploadStructure({ isUpload: true })`, and generates structured exit-code-2 JSON remediation recipes (`remediation.cliFlags`, `remediation.experimentYamlPatch`) plus `issueReport` links on failure.
 
-### 3.4 Standalone CLI (`cli/prism.ts`) & Zero-Install Skill Bundle (`skills/prism-results/`)
+### 3.4 Standalone CLI (`cli/prism.ts`), Zero-Install Skill Bundle (`skills/prism-results/`) & Zero-Clone HTTP API (`server/results/routes/agent.ts`)
 - `cli/prism.ts` implements `init`, `scrub`, `validate`, `submit`, `list`, `get`, `compare`, `promote`, `review`, and `fork`.
 - Bundled via `npm run build:cli` (`esbuild`) into `skills/prism-results/scripts/prism.mjs` targeting Node $\ge 20$.
+- **Zero-Clone HTTP Distribution (`server/results/routes/agent.ts`)**:
+  - `GET /api/results/agent`: Returns JSON discovery metadata (`endpoints`, `sha256.prismMjs`, `quickStart`).
+  - `GET /api/results/agent/SKILL.md` & `GET /SKILL.md`: Serves `skills/prism-results/SKILL.md` with a dynamically injected host-specific zero-clone bootstrap header.
+  - `GET /api/results/agent/prism.mjs`: Serves the standalone `prism.mjs` bundle with `X-Prism-CLI-SHA256` integrity header.
+  - `GET /api/results/agent/experiment.yaml`: Serves `skills/prism-results/examples/experiment.yaml`.
+  - `GET /api/results/agent/install.sh`: Serves a POSIX/bash installer script that downloads `SKILL.md`, `scripts/prism.mjs`, and `examples/experiment.yaml` and verifies SHA-256 integrity without cloning the repository.
 - `skills/prism-results/SKILL.md` defines the mandatory agent protocol:
-  1. Run `init` / `scrub` / `validate` locally.
+  1. Run `init` / `scrub` / `validate` locally (fetching `/api/results/agent/prism.mjs` if not in a repo clone).
   2. Present the human-scannable preflight & PII scrub summary and obtain explicit user sign-off (`--dco-signoff "Name <email>"` + `--yes-user-approved`).
   3. Execute `submit` and `compare`.
   4. Whenever an unhandled or persistent error occurs, provide the scrubbed diagnostic summary and recommend that the user open a GitHub issue at `https://github.com/llm-d/llm-d-prism/issues/new`.

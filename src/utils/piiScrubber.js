@@ -20,7 +20,25 @@
  * across raw text, nested JSON/YAML objects, and base64-encoded Data-URI manifests.
  */
 
-const SENSITIVE_KEY_PATTERN = /(?:^|_|-)(?:token|secret|password|passwd|api_key|apikey|access_key|private_key|credentials|authorization|cookie|hf_token)(?:$|_|-)/i;
+const EXPLICIT_SENSITIVE_KEY_PATTERN =
+    /(?:^|_|-)(?:secret|password|passwd|api_key|apikey|access_key|private_key|credentials|authorization|cookie|hf_token|access_token|refresh_token|client_secret|secret_key|auth_token|bearer_token|aws_secret_access_key|openai_api_key|github_token|gitlab_token|id_token|session_token|oauth_token)(?:$|_|-)/i;
+
+const GENERIC_TOKEN_KEY_PATTERN = /(?:^|_|-)(?:token)(?:$|_|-)/i;
+
+const NON_SECRET_TOKEN_METRIC_PATTERN =
+    /(?:^|_|-)(?:input|output|total|max|min|prompt|completion|per|num|count|izer|rate|mean|p50|p90|p99|time|latency|throughput|first|inter|cached|reasoning)(?:$|_|-)|tokenizer|tokens/i;
+
+function isSensitivePropertyKey(key) {
+    if (!key || typeof key !== 'string') return false;
+    const normalized = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+    if (EXPLICIT_SENSITIVE_KEY_PATTERN.test(normalized)) {
+        return true;
+    }
+    if (GENERIC_TOKEN_KEY_PATTERN.test(normalized) && !NON_SECRET_TOKEN_METRIC_PATTERN.test(normalized)) {
+        return true;
+    }
+    return false;
+}
 
 const DEFAULT_ALLOW_EMAIL_PATHS = [
     'dco_signoff.signed_off_by',
@@ -159,13 +177,37 @@ export function scrubTextPii(text, options = {}) {
 
     // 1i. Inline key-value secret assignments in YAML / env / CLI flags
     current = current.replace(
-        /((?:HF_TOKEN|GITHUB_TOKEN|API_KEY|SECRET_KEY|ACCESS_TOKEN|PASSWORD|PRIVATE_KEY|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\s*[:=]\s*["']?)([^\s"'\n]+)(["']?)/gi,
+        /((?:HF_TOKEN|GITHUB_TOKEN|API_KEY|SECRET_KEY|ACCESS_TOKEN|PASSWORD|PRIVATE_KEY|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\s*[:=]\s*["']?)([^\s"'\n&]+)(["']?)/gi,
         (match, prefix, secretVal, suffix) => {
             if (secretVal === '[REDACTED_SECRET]' || secretVal === '[REDACTED_PRIVATE_KEY]') {
                 return match;
             }
             recordMatch('secret', secretVal);
             return `${prefix}[REDACTED_SECRET]${suffix}`;
+        }
+    );
+
+    // 1j. HTTP basic-auth credentials in URLs (run before email redaction so user:pass@host is caught as a secret)
+    current = current.replace(
+        /(https?:\/\/[^/\s:@]+:)([^@\s/]+)(@)/gi,
+        (match, prefix, secretVal, suffix) => {
+            if (secretVal === '[REDACTED_SECRET]') {
+                return match;
+            }
+            recordMatch('secret', secretVal);
+            return `${prefix}[REDACTED_SECRET]${suffix}`;
+        }
+    );
+
+    // 1k. Sensitive URL query parameters (?token=..., &api_key=..., etc.)
+    current = current.replace(
+        /([?&](?:token|access_token|auth_token|api_key|apikey|secret|key|password|auth|hf_token|client_secret)=)([^&\s"']+)/gi,
+        (match, prefix, secretVal) => {
+            if (secretVal === '[REDACTED_SECRET]' || secretVal === '[REDACTED_PRIVATE_KEY]') {
+                return match;
+            }
+            recordMatch('secret', secretVal);
+            return `${prefix}[REDACTED_SECRET]`;
         }
     );
 
@@ -250,6 +292,7 @@ export function scrubObjectPii(obj, options = {}) {
     const categories = {};
     const findings = [];
     let totalRedactions = 0;
+    const seen = new WeakSet();
 
     const addFinding = (category, pathStr, count, matchPreview) => {
         if (!count || count <= 0) return;
@@ -272,7 +315,7 @@ export function scrubObjectPii(obj, options = {}) {
             // Check if parent property key is a sensitive secret key
             if (
                 parentKey &&
-                SENSITIVE_KEY_PATTERN.test(parentKey) &&
+                isSensitivePropertyKey(parentKey) &&
                 value.trim() !== '' &&
                 value !== '[REDACTED_SECRET]' &&
                 value !== '[REDACTED_PRIVATE_KEY]'
@@ -339,6 +382,10 @@ export function scrubObjectPii(obj, options = {}) {
         }
 
         if (Array.isArray(value)) {
+            if (seen.has(value)) {
+                return '[Circular]';
+            }
+            seen.add(value);
             return value.map((item, idx) => {
                 const itemPath = currentPath ? `${currentPath}[${idx}]` : `[${idx}]`;
                 return traverse(item, itemPath, '');
@@ -349,6 +396,13 @@ export function scrubObjectPii(obj, options = {}) {
             if (value instanceof Date) {
                 return new Date(value.getTime());
             }
+            if (value instanceof RegExp) {
+                return new RegExp(value.source, value.flags);
+            }
+            if (seen.has(value)) {
+                return '[Circular]';
+            }
+            seen.add(value);
             const out = {};
             for (const [k, v] of Object.entries(value)) {
                 if (k === 'pii_scrub_summary') {

@@ -24,7 +24,9 @@ import {
     generateExperimentYamlConfig,
     buildRemediationRecipe,
     buildGithubIssueReport,
+    isAssembledPrismBundle,
 } from '../utils/bundleAssembler.js';
+import { encodeContextValue, decodeContextValue } from '../../server/results/gcs.ts';
 
 function makeBrv02ReportYaml({
     uid = '11111111-2222-3333-4444-555555555555',
@@ -481,6 +483,149 @@ spec:
                 fieldErrors: { model_name: { message: 'Missing model name.', severity: 'error' } },
             });
             expect(recipe.cliFlags).toContain('--model');
+        });
+
+        it('preserves heterogeneous multi-arm metadata during prism init (generateExperimentYamlConfig) and discoverAndAssembleArms', () => {
+            const hetDir = createTempDir('prism-het-init-');
+            const arm1Dir = path.join(hetDir, 'arm_tp4_baseline');
+            const arm2Dir = path.join(hetDir, 'arm_tp8_candidate');
+            fs.mkdirSync(arm1Dir, { recursive: true });
+            fs.mkdirSync(arm2Dir, { recursive: true });
+
+            fs.writeFileSync(
+                path.join(arm1Dir, 'stage_0.yaml'),
+                makeBrv02ReportYaml({
+                    description: 'TP4 Baseline',
+                    model: 'Qwen/Qwen2.5-32B-Instruct',
+                    hardware: 'H100',
+                    acceleratorCount: 4,
+                    tool: 'vLLM',
+                })
+            );
+            fs.writeFileSync(
+                path.join(arm2Dir, 'stage_0.yaml'),
+                makeBrv02ReportYaml({
+                    description: 'TP8 Candidate on H200',
+                    model: 'Qwen/Qwen2.5-72B-Instruct',
+                    hardware: 'H200',
+                    acceleratorCount: 8,
+                    tool: 'SGLang',
+                })
+            );
+
+            const initRes = generateExperimentYamlConfig(hetDir, {
+                experimentLabel: 'Heterogeneous Sweep',
+            });
+
+            // Differing fields must NOT be placed into shared defaults; instead they live on each arm entry
+            expect(initRes.configObject.defaults.model_name).toBeUndefined();
+            expect(initRes.configObject.defaults.hardware).toBeUndefined();
+            expect(initRes.configObject.defaults.inference_tool).toBeUndefined();
+
+            expect(initRes.configObject.arms[0]).toMatchObject({
+                key: 'arm_tp4_baseline',
+                model_name: 'Qwen/Qwen2.5-32B-Instruct',
+                hardware: { hardware_name: 'H100', accelerator_count: 4 },
+                inference_tool: 'vLLM',
+            });
+            expect(initRes.configObject.arms[1]).toMatchObject({
+                key: 'arm_tp8_candidate',
+                model_name: 'Qwen/Qwen2.5-72B-Instruct',
+                hardware: { hardware_name: 'H200', accelerator_count: 8 },
+                inference_tool: 'SGLang',
+            });
+
+            // Write generated experiment.yaml to disk and re-assemble to verify round-trip fidelity
+            fs.writeFileSync(path.join(hetDir, 'experiment.yaml'), initRes.yamlString);
+            const roundTrip = discoverAndAssembleArms(hetDir);
+            expect(roundTrip.ok).toBe(true);
+            expect(roundTrip.arms[0].bundle.model_name).toBe('Qwen/Qwen2.5-32B-Instruct');
+            expect(roundTrip.arms[0].bundle.hardware).toEqual({ hardware_name: 'H100', accelerator_count: 4 });
+            expect(roundTrip.arms[0].bundle.inference_tool).toBe('vLLM');
+            expect(roundTrip.arms[1].bundle.model_name).toBe('Qwen/Qwen2.5-72B-Instruct');
+            expect(roundTrip.arms[1].bundle.hardware).toEqual({ hardware_name: 'H200', accelerator_count: 8 });
+            expect(roundTrip.arms[1].bundle.inference_tool).toBe('SGLang');
+        });
+
+        it('assembles and validates already-assembled Prism bundles (prism fork output) directly', () => {
+            const forkDir = createTempDir('prism-fork-bundle-');
+            const stageObj = yaml.load(
+                makeBrv02ReportYaml({
+                    description: 'Forked Stage from /Users/forkuser/local',
+                    model: 'meta-llama/Llama-3.1-70B-Instruct',
+                    hardware: 'H100',
+                    acceleratorCount: 8,
+                    tool: 'vLLM',
+                })
+            );
+
+            const forkedBundle = {
+                schema_version: '1.0',
+                runId: 'e4b1c2d3-5678-4abc-9def-0123456789ab',
+                runLabel: 'Forked Llama 70B Run',
+                model_name: 'meta-llama/Llama-3.1-70B-Instruct',
+                hardware: {
+                    hardware_name: 'H100',
+                    accelerator_count: 8,
+                },
+                format: 'brv02',
+                inference_tool: 'vLLM',
+                forked_from: {
+                    original_run_id: '11111111-2222-4333-8444-555555555555',
+                    original_run_label: 'Source Llama 70B Run',
+                    original_author: { username: 'octocat' },
+                    source_bucket: 'llm-d-benchmarks',
+                    forked_at: '2026-11-06T12:00:00.000Z',
+                },
+                forked: true,
+                entries: [
+                    {
+                        run_id: '22222222-3333-4444-8555-666666666666',
+                        filename: 'stage_0.yaml',
+                        raw_report: stageObj,
+                    },
+                ],
+            };
+
+            expect(isAssembledPrismBundle(forkedBundle)).toBe(true);
+
+            const forkedFilePath = path.join(forkDir, 'forked.json');
+            fs.writeFileSync(forkedFilePath, JSON.stringify(forkedBundle, null, 2));
+
+            // 1. Direct file target (e.g. `prism validate forked.json`)
+            const directRes = discoverAndAssembleArms(forkedFilePath, {
+                overrides: {
+                    runLabel: 'Updated Forked Label',
+                },
+            });
+            expect(directRes.ok).toBe(true);
+            expect(directRes.exitCode).toBe(0);
+            expect(directRes.arms).toHaveLength(1);
+            expect(directRes.arms[0].bundle.runLabel).toBe('Updated Forked Label');
+            expect(directRes.arms[0].bundle.forked_from.original_run_id).toBe(
+                '11111111-2222-4333-8444-555555555555'
+            );
+            expect(directRes.arms[0].bundle.entries).toHaveLength(1);
+            expect(
+                directRes.arms[0].bundle.entries[0].raw_report.run.description
+            ).toContain('Updated Forked Label');
+
+            // 2. Directory containing forked.json
+            const dirRes = discoverAndAssembleArms(forkDir);
+            expect(dirRes.ok).toBe(true);
+            expect(dirRes.arms).toHaveLength(1);
+            expect(dirRes.arms[0].bundle.model_name).toBe('meta-llama/Llama-3.1-70B-Instruct');
+        });
+
+        it('prevents UUIDv4 strings starting with "e" from being corrupted by GCS decodeContextValue', () => {
+            const uuidStartingWithE = 'e5371af0-5456-4f74-8b91-f8609537d1e5';
+            expect(decodeContextValue(uuidStartingWithE)).toBe(uuidStartingWithE);
+
+            const encodedUuid = encodeContextValue(uuidStartingWithE);
+            expect(decodeContextValue(encodedUuid)).toBe(uuidStartingWithE);
+
+            const encodedText = encodeContextValue('meta-llama/Llama-3.1-70B-Instruct');
+            expect(decodeContextValue(encodedText)).toBe('meta-llama/Llama-3.1-70B-Instruct');
         });
     });
 });

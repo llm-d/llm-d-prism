@@ -7,15 +7,36 @@ description: Package, scrub PII/secrets, preflight-validate, submit/publish, com
 
 Use this skill whenever an agent or contributor needs to package Benchmark Report v0.2 (`brv02`) or `inference-perf` runs, scrub sensitive environment data/PII, validate metadata offline, submit single runs or multi-arm parameter sweeps (`experiment.yaml`) to the Prism Results Store, or compare runs against a baseline.
 
-## 1. Zero-Install CLI Invocation & Exit Code Contract
+## 1. Zero-Install & Zero-Clone CLI Invocation
 
-Run the standalone bundled CLI directly with Node.js ($\ge 20$, zero `npm install` required on remote benchmark clusters):
+### Option A: Zero-Clone via Prism HTTP API (Recommended for Remote Clusters / Capsules)
+You do **not** need a local git clone of `llm-d-prism`. Any Prism server serves the skill instructions, standalone CLI bundle (`prism.mjs`), reference manifest, and one-line installer directly over HTTP:
+
+```bash
+# 1. One-line install into ~/.gemini/skills/prism-results:
+curl -fsSL https://prism.llm-d.ai/api/results/agent/install.sh | bash
+
+# 2. Or download only the standalone single-file CLI (~320 KB, Node >= 20, zero npm install):
+curl -fsSL https://prism.llm-d.ai/api/results/agent/prism.mjs -o /tmp/prism.mjs && chmod +x /tmp/prism.mjs
+node /tmp/prism.mjs <command> [flags]
+```
+
+| Hosted Endpoint | Description |
+| :--- | :--- |
+| `GET /api/results/agent` | JSON discovery manifest (`endpoints`, `sha256.prismMjs`, `quickStart` recipes) |
+| `GET /api/results/agent/SKILL.md` (or `/SKILL.md`) | Live `SKILL.md` with host-specific zero-clone bootstrap header |
+| `GET /api/results/agent/prism.mjs` | Standalone bundled CLI (`X-Prism-CLI-SHA256` integrity header) |
+| `GET /api/results/agent/experiment.yaml` | Reference multi-arm `experiment.yaml` manifest |
+| `GET /api/results/agent/install.sh` | POSIX/bash installer (`PRISM_SKILL_DIR` override supported) |
+
+### Option B: From a Local Checkout of `llm-d-prism`
+Run the standalone bundled CLI directly with Node.js ($\ge 20$, zero `npm install` required):
 
 ```bash
 node skills/prism-results/scripts/prism.mjs <command> [flags]
 ```
 
-Or from a local development checkout of `llm-d-prism`:
+Or via npm scripts during development:
 
 ```bash
 npm run prism -- <command> [flags]
