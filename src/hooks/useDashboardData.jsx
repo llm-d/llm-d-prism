@@ -1635,12 +1635,19 @@ export const useDashboardData = (initialState, dashboardState) => {
             console.log(`[useDashboardData] loadAllData FINISHED. Found ${dataWithIds.length} total benchmarks.`);
 
             setData(prev => {
-                // Keep entries from prev that were NOT fetched by loadAllData to preserve concurrent fetches
+                // Keep entries from prev that were NOT fetched by loadAllData to preserve concurrent fetches,
+                // as well as dynamically injected entries (from Share Links or /api/results hydration) whose
+                // run_id was not returned in the bucket/cache fetch.
                 const loadedSources = new Set(dataWithIds.map(d => d.source));
+                const loadedRunIds = new Set(dataWithIds.map(d => d.run_id).filter(Boolean));
 
-                // For GIQ specifically, we need to be careful as they can fetch the same source.
-                // If this is a fresh loadAllData, we generally want its data to take precedence for the sources it *did* fetch.
-                const retainedPrev = prev.filter(p => !loadedSources.has(p.source));
+                const retainedPrev = prev.filter(p => {
+                    if (!loadedSources.has(p.source)) return true;
+                    if (p._dynamicallyInjected && p.run_id && !loadedRunIds.has(p.run_id)) {
+                        return true;
+                    }
+                    return false;
+                });
 
                 // Merge and recalculate IDs
                 const merged = [...retainedPrev, ...dataWithIds];
@@ -2511,6 +2518,54 @@ export const useDashboardData = (initialState, dashboardState) => {
             mergedList.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
             setSubmissions(mergedList);
 
+            // Hydrate any server submissions (e.g. uploaded via CLI) that are missing from `data`
+            // due to a cached GCS bucket snapshot or unlisted filtering.
+            if (listDataItems.length > 0) {
+                const existingRunIds = new Set(
+                    (dataRef.current || [])
+                        .map(d => d.run_id || (d.source?.startsWith('brv02:') ? d.source.slice(6) : null))
+                        .filter(Boolean)
+                );
+                const missingItems = listDataItems.filter(item => item.runId && !existingRunIds.has(item.runId));
+                if (missingItems.length > 0) {
+                    const hydratedEntries = [];
+                    await Promise.all(missingItems.map(async (item) => {
+                        try {
+                            const res = await fetch(`/api/results/${item.runId}`, { headers });
+                            if (!res || !res.ok) return;
+                            const jsonPayload = await res.json();
+                            if (jsonPayload && Array.isArray(jsonPayload.entries)) {
+                                for (const stageEntry of jsonPayload.entries) {
+                                    if (stageEntry.raw_report) {
+                                        const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
+                                        if (parsedStage) {
+                                            forwardBundleMetadata(parsedStage, jsonPayload);
+                                            const entry = stageToEntry(parsedStage);
+                                            entry.run_id = jsonPayload.runId || item.runId;
+                                            entry.source = 'gcs:llm-d-benchmarks';
+                                            entry.source_info = {
+                                                type: 'benchmark_report_v02',
+                                                origin: 'gcs:llm-d-benchmarks',
+                                                submission_state: item.state || jsonPayload.submission_state || 'unlisted',
+                                                file_identifier: jsonPayload.runId || item.runId
+                                            };
+                                            hydratedEntries.push(entry);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {
+                            // Ignore individual hydration errors
+                        }
+                    }));
+                    if (hydratedEntries.length > 0) {
+                        injectDynamicEntries(hydratedEntries);
+                        setAvailableSources(prev => new Set([...prev, 'gcs:llm-d-benchmarks']));
+                        setSelectedSources(prev => new Set([...prev, 'gcs:llm-d-benchmarks']));
+                    }
+                }
+            }
+
         } catch (error) {
             console.error("Failed to load submissions", error);
             if (addToast) {
@@ -2678,13 +2733,24 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     const injectDynamicEntries = useCallback((newEntries) => {
         if (!newEntries || newEntries.length === 0) return;
+        const getEntryDedupeKey = (d) => [
+            d.run_id || d.source || '',
+            d.prism_stage_index ?? d.stageIndex ?? d.workload?.stage ?? '',
+            d.filename || '',
+            `${d.workload?.input_tokens || d.isl || 0}x${d.workload?.output_tokens || d.osl || 0}`,
+            d.qps ?? d.workload?.target_qps ?? ''
+        ].join(':');
         setData(prev => {
-            const existingKeys = new Set(prev.map(d => `${d.run_id || d.source}:${d.workload?.input_tokens || d.isl || 0}x${d.workload?.output_tokens || d.osl || 0}`));
-            const filteredNew = newEntries.filter(e => {
-                const k = `${e.run_id || e.source}:${e.workload?.input_tokens || e.isl || 0}x${e.workload?.output_tokens || e.osl || 0}`;
-                return !existingKeys.has(k);
-            });
-            return [...prev, ...filteredNew];
+            const existingKeys = new Set(prev.map(getEntryDedupeKey));
+            const filteredNew = [];
+            for (const e of newEntries) {
+                const k = getEntryDedupeKey(e);
+                if (!existingKeys.has(k)) {
+                    existingKeys.add(k);
+                    filteredNew.push({ ...e, _dynamicallyInjected: true });
+                }
+            }
+            return filteredNew.length > 0 ? [...prev, ...filteredNew] : prev;
         });
     }, []);
 
