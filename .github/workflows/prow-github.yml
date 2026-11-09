@@ -6,6 +6,8 @@ on:
 permissions:
   issues: write
   pull-requests: write
+  # /lgtm binds the label to the head commit with a commit status
+  statuses: write
 
 jobs:
   prow:
