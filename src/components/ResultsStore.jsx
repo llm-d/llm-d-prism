@@ -451,12 +451,16 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                                     if (parsedStage) {
                                         forwardBundleMetadata(parsedStage, jsonPayload);
                                         const entry = stageToEntry(parsedStage);
+                                        const resolvedState = submissionsMap?.[jsonPayload.runId]?.status
+                                            || jsonPayload.submission_state
+                                            || jsonPayload.state
+                                            || 'unlisted';
                                         entry.run_id = jsonPayload.runId;
                                         entry.source = 'gcs:llm-d-benchmarks';
                                         entry.source_info = {
                                             type: 'benchmark_report_v02',
                                             origin: 'gcs:llm-d-benchmarks',
-                                            submission_state: jsonPayload.submission_state || 'public',
+                                            submission_state: resolvedState,
                                             file_identifier: jsonPayload.runId
                                         };
                                         parsedEntries.push(entry);

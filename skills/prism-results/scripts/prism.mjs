@@ -19399,9 +19399,14 @@ function parseContainerArgs(rawArgs) {
       continue;
     }
     if (tok === "--model" || tok === "--model-name" || tok === "--served-model-name" || tok === "--model-id" || tok === "--model-path" || tok === "-m") {
+      const prevTok = i > 0 ? String(tokens[i - 1] || "") : "";
+      const isPythonModuleFlag = tok === "-m" && /^python\d*(?:\.\d+)?$/i.test(prevTok);
       const next = cleanVal(tokens[i + 1]);
       if (next && !next.startsWith("-")) {
-        if (!model) model = next;
+        const looksLikeEntrypoint = tok === "-m" && /\b(?:entrypoints|api_server|launch_server)\b/i.test(next);
+        if (!isPythonModuleFlag && !looksLikeEntrypoint && !model) {
+          model = next;
+        }
         i++;
       }
       continue;
@@ -19537,12 +19542,25 @@ function extractFromSingleDoc(doc) {
       if (parsedArgs.model && !model_name) {
         model_name = parsedArgs.model;
       }
+      const envMap = {};
       if (Array.isArray(c.env)) {
         for (const envVar of c.env) {
           if (!envVar || typeof envVar !== "object") continue;
-          const envName = String(envVar.name || "").toUpperCase();
-          if ((envName === "MODEL_ID" || envName === "MODEL_NAME" || envName === "MODEL" || envName === "SERVED_MODEL_NAME" || envName === "HF_MODEL_ID") && envVar.value && !model_name) {
-            model_name = String(envVar.value).trim();
+          const envName = String(envVar.name || "").trim();
+          if (envName && envVar.value !== void 0 && envVar.value !== null) {
+            envMap[envName] = String(envVar.value).trim();
+          }
+        }
+      }
+      if (model_name && /^\$\(?\{?[A-Za-z_][A-Za-z0-9_]*\}?\)?$/.test(model_name)) {
+        const refKey = model_name.replace(/^\$\(?\{?|\}?\)?$/g, "");
+        model_name = envMap[refKey] || null;
+      }
+      if (!model_name) {
+        for (const key of ["MODEL_ID", "MODEL_NAME", "MODEL", "SERVED_MODEL_NAME", "HF_MODEL_ID"]) {
+          if (envMap[key]) {
+            model_name = envMap[key];
+            break;
           }
         }
       }
@@ -19573,7 +19591,7 @@ function extractFromSingleDoc(doc) {
     }
   }
   if (!isK8sWorkload || !model_name || !hardware_name || !accelerator_count || !inference_tool) {
-    const rawConfigModel = doc.model_name || doc.modelName || doc.model_id || doc.modelId || (typeof doc.model === "string" ? doc.model : doc.model?.name || doc.model?.model_name || doc.model?.id) || doc.servingStack?.model?.name || doc.vllm?.model || doc.standalone?.model?.name || doc.prefill?.model?.name || doc.decode?.model?.name;
+    const rawConfigModel = doc.model_name || doc.modelName || doc.model_id || doc.modelId || (typeof doc.model === "string" ? doc.model : doc.model?.name || doc.model?.model_name || doc.model?.id) || doc.server?.model_name || doc.servingStack?.model?.name || doc.vllm?.model || doc.standalone?.model?.name || doc.prefill?.model?.name || doc.decode?.model?.name;
     if (rawConfigModel && typeof rawConfigModel === "string" && !model_name) {
       const trimmedModel = rawConfigModel.trim();
       if (trimmedModel && trimmedModel.toLowerCase() !== "unknown" && trimmedModel.toLowerCase() !== "unknown model") {

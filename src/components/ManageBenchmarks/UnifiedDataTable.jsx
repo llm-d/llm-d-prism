@@ -1288,7 +1288,9 @@ export const UnifiedDataTable = (props) => {
         // Default Public Store view (kpiFilter === null)
         if (kpiFilter === null) {
             if (!includeUnlisted) {
+                const isSearching = Boolean(searchTerm && searchTerm.trim());
                 stats = stats.filter(stat => {
+                    if (selectedBenchmarks.has(stat.benchmarkKey)) return true;
                     const firstEntry = stat.data?.[0];
                     if (!firstEntry) return true;
                     const src = firstEntry.source || '';
@@ -1296,6 +1298,10 @@ export const UnifiedDataTable = (props) => {
                     if (!isBrv02) return true;
                     const runId = src.startsWith('brv02:') ? src.replace('brv02:', '') : firstEntry.run_id;
                     const sub = runId && submissionsMap ? submissionsMap[runId] : null;
+                    const authorUsername = sub?.github_author?.username || firstEntry.github_author?.username;
+                    if (isSearching && user?.username && authorUsername && authorUsername.toLowerCase() === user.username.toLowerCase()) {
+                        return true;
+                    }
                     const status = sub?.status || firstEntry.source_info?.submission_state;
                     return status !== 'unlisted';
                 });
