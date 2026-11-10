@@ -488,7 +488,7 @@ var int = new type("tag:yaml.org,2002:int", {
     decimal: function(obj) {
       return obj.toString(10);
     },
-     
+    /* eslint-disable max-len */
     hexadecimal: function(obj) {
       return obj >= 0 ? "0x" + obj.toString(16).toUpperCase() : "-0x" + obj.toString(16).toUpperCase().slice(1);
     }
@@ -2654,6 +2654,7 @@ function isSensitivePropertyKey(key) {
   return false;
 }
 var DEFAULT_ALLOW_EMAIL_PATHS = [
+  "dco_signoff",
   "dco_signoff.signed_off_by",
   "github_author",
   "requested_reviewers"
@@ -19943,7 +19944,7 @@ function buildRemediationRecipe(validationOrArmResult, armContext = {}) {
   const hasEmptyEntriesError = Boolean(fieldErrors["entries"]) || Array.isArray(bundle.entries) && bundle.entries.length === 0 || errors.some((e) => /at least one.*stage|entries/i.test(e));
   if (hasEmptyEntriesError) {
     hints.push(
-      "Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmdbenchmark.analysis.benchmark_report.cli ... -w inference-perf -b 0.2)"
+      "Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using `llmd-benchmark-report` (`pip install llmd-benchmark-report` or `pip install ./benchmark-report` from llm-d/llm-d-benchmark): benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmd_benchmark_report.cli ... -w inference-perf -b 0.2)"
     );
   }
   const experimentYamlPatch = Object.keys(defaultsPatch).length > 0 ? { defaults: defaultsPatch } : {};
@@ -20760,8 +20761,20 @@ function generateExperimentYamlConfig(dirPath, options = {}) {
     armBundles.map((b) => b.inference_tool_version),
     void 0
   );
+  const sharedHarness = resolveSharedDefault(
+    armBundles.map((b) => b.benchmark_harness),
+    options.harness || options.benchmark_harness || void 0
+  );
+  const sharedHarnessVer = resolveSharedDefault(
+    armBundles.map((b) => b.benchmark_harness_version),
+    options.harnessVersion || options.benchmark_harness_version || void 0
+  );
   const experimentId = options.experimentId || assembly.experiment.id || v4_default();
   const experimentLabel = options.experimentLabel || assembly.experiment.label || `${path.basename(resolvedDir)} Benchmark Campaign`;
+  const explicitTags = Array.isArray(options.tags) ? normalizeTags(options.tags) : typeof options.tags === "string" ? normalizeTags(options.tags.split(",")) : [];
+  const mergedDefaultTags = normalizeTags([...firstBundle.tags || [], ...explicitTags]);
+  const resolvedWellLitPath = options.wellLitPath || options.well_lit_path || firstBundle.well_lit_path || void 0;
+  const resolvedReviewers = options.requestedReviewers || options.reviewers || void 0;
   const defaultsBlock = {
     ...sharedModel.isShared && sharedModel.value !== void 0 ? { model_name: sharedModel.value } : {},
     ...sharedHw.isShared || sharedChips.isShared ? {
@@ -20772,8 +20785,10 @@ function generateExperimentYamlConfig(dirPath, options = {}) {
     } : {},
     ...sharedTool.isShared && sharedTool.value !== void 0 ? { inference_tool: sharedTool.value } : {},
     ...sharedToolVer.isShared && sharedToolVer.value ? { inference_tool_version: sharedToolVer.value } : {},
-    ...firstBundle.well_lit_path ? { well_lit_path: firstBundle.well_lit_path } : {},
-    ...Array.isArray(firstBundle.tags) && firstBundle.tags.length > 0 ? { tags: firstBundle.tags } : {}
+    ...sharedHarness.isShared && sharedHarness.value ? { benchmark_harness: sharedHarness.value } : {},
+    ...sharedHarnessVer.isShared && sharedHarnessVer.value ? { benchmark_harness_version: sharedHarnessVer.value } : {},
+    ...resolvedWellLitPath ? { well_lit_path: resolvedWellLitPath } : {},
+    ...mergedDefaultTags.length > 0 ? { tags: mergedDefaultTags } : {}
   };
   const rawConfigObject = {
     version: "1.0",
@@ -20781,7 +20796,7 @@ function generateExperimentYamlConfig(dirPath, options = {}) {
       id: experimentId,
       label: experimentLabel,
       target_state: options.targetState || "submitted_pending_review",
-      ...options.requestedReviewers ? { requested_reviewers: normalizeReviewers(options.requestedReviewers) } : {},
+      ...resolvedReviewers ? { requested_reviewers: normalizeReviewers(resolvedReviewers) } : {},
       ...options.dcoSignoff ? { dco_signoff: options.dcoSignoff } : {}
     },
     defaults: defaultsBlock,
@@ -20797,16 +20812,18 @@ function generateExperimentYamlConfig(dirPath, options = {}) {
       if (!sharedChips.isShared && Number(armBundle.hardware?.accelerator_count) > 0) {
         armHw.accelerator_count = Number(armBundle.hardware.accelerator_count);
       }
+      const explicitSingleArmLabel = assembly.arms.length === 1 && (options.runLabel || options.label) ? String(options.runLabel || options.label).trim() : "";
+      const armTags = normalizeTags([...armBundle.tags || [], ...explicitTags]);
       return {
         key: arm.armKey,
-        run_label: armBundle.runLabel || arm.armKey,
+        run_label: explicitSingleArmLabel || armBundle.runLabel || arm.armKey,
         path: normalizedRel,
         ...isBaseline ? { is_baseline: true } : {},
         ...!sharedModel.isShared && !isGapValue(armBundle.model_name) ? { model_name: armBundle.model_name } : {},
         ...Object.keys(armHw).length > 0 ? { hardware: armHw } : {},
         ...!sharedTool.isShared && !isGapValue(armBundle.inference_tool) ? { inference_tool: armBundle.inference_tool } : {},
         ...!sharedToolVer.isShared && !isGapValue(armBundle.inference_tool_version) ? { inference_tool_version: armBundle.inference_tool_version } : {},
-        ...Array.isArray(armBundle.tags) && armBundle.tags.length > 0 ? { tags: armBundle.tags } : {}
+        ...armTags.length > 0 ? { tags: armTags } : {}
       };
     })
   };
@@ -21720,6 +21737,258 @@ function formatPctDelta(current, baseline) {
   const sign = pct2 > 0 ? "+" : "";
   return { pct: Number(pct2.toFixed(2)), formatted: `${sign}${pct2.toFixed(1)}%` };
 }
+var SUPPORTED_COMMANDS = [
+  "init",
+  "scrub",
+  "validate",
+  "submit",
+  "list",
+  "get",
+  "compare",
+  "promote",
+  "review",
+  "fork"
+];
+var VALID_TARGET_STATES = /* @__PURE__ */ new Set(["unlisted", "submitted_pending_review", "public", "promoted"]);
+var SUBCOMMAND_HELP = {
+  init: {
+    usage: "prism init [dir] [options]",
+    description: "Scan a benchmark directory, infer metadata, scrub PII, and write experiment.yaml.",
+    options: [
+      "-o, --output <path>              Output path for experiment.yaml (default: <dir>/experiment.yaml)",
+      "--target-state <state>           Visibility state: unlisted | submitted_pending_review | public | promoted (default: submitted_pending_review)",
+      "--publish                        Shorthand for --target-state public",
+      "--experiment-label <label>       Human-readable campaign or experiment label",
+      "--experiment-id <uuid>           Explicit campaign/experiment UUID",
+      "--label <runLabel>               Explicit run_label when initializing a single-arm run",
+      "--baseline <armKeyOrDir>         Designate the baseline arm in a multi-arm directory",
+      '--dco-signoff "Name <email>"     Pre-populate DCO 1.1 attribution in experiment.yaml',
+      "--reviewers <user1,user2>        Comma-separated GitHub handles for review",
+      "--model <org/model>              Override inferred model_name",
+      "--hardware <name>                Override inferred hardware_name (e.g., H100, TPU v6e)",
+      "--chips <count>                  Override inferred accelerator_count",
+      "--tool <vLLM|SGLang|...>         Override inferred serving engine",
+      "--tool-version <ver>             Override inferred serving engine version",
+      "--harness <inference-perf|...>   Override benchmark harness name",
+      "--harness-version <ver>          Override benchmark harness version",
+      "--well-lit-path <name>           Set llm-d Well-Lit Path classification",
+      "--tags <t1,t2>                   Comma-separated tags to attach",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      'prism init ./results --target-state unlisted --label "Gemma-4 QPS Sweep" --json',
+      'prism init ./sweep --experiment-label "Llama-3.1 PD Disagg" --baseline arm_01_baseline --json'
+    ]
+  },
+  scrub: {
+    usage: "prism scrub [dirOrFile] [options]",
+    description: "Scan YAML, JSON, and log files for secrets, private IPs, internal hosts, home paths, and emails.",
+    options: [
+      "-f, --file <path>                Target file or directory to scan",
+      "--in-place                       Overwrite scanned files in place with redacted content",
+      "--strict                         Exit with code 2 if any PII/secrets were detected",
+      "--json                           Emit structured JSON piiReport"
+    ],
+    examples: [
+      "prism scrub ./results --json",
+      "prism scrub ./results --in-place --strict --json"
+    ]
+  },
+  validate: {
+    usage: "prism validate [dir] [options]",
+    description: "Run offline 3-tier metadata resolution, PII scrubbing, and schema validation with zero network writes.",
+    options: [
+      "-f, --file <experiment.yaml>     Validate an explicit experiment.yaml manifest",
+      "--drop-failed-stages             Exclude saturation stages with 100% failed requests",
+      "--model <org/model>              Override model_name during validation",
+      "--hardware <name>                Override hardware_name during validation",
+      "--chips <count>                  Override accelerator_count during validation",
+      "--tool <vLLM|SGLang|...>         Override inference_tool during validation",
+      "--tool-version <ver>             Override inference_tool_version during validation",
+      "--json                           Emit structured JSON output with remediation recipes"
+    ],
+    examples: [
+      "prism validate -f ./results/experiment.yaml --json",
+      "prism validate ./results --drop-failed-stages --json"
+    ]
+  },
+  submit: {
+    usage: "prism submit [dir] [options]",
+    description: "Validate, enforce mandatory human DCO sign-off gate, upload benchmark arms, and emit a Prism share URL.",
+    options: [
+      "-f, --file <experiment.yaml>     Submit from an experiment.yaml manifest",
+      "--target-state <state>           Visibility: unlisted | submitted_pending_review | public | promoted",
+      "--publish                        Shorthand for --target-state public (admin direct publish)",
+      '--dco-signoff "Name <email>"     Mandatory DCO 1.1 sign-off identity',
+      "--yes-user-approved              Confirm explicit human user approval for upload (mandatory)",
+      "--dry-run                        Run full preflight + sign-off preview with zero network calls",
+      "--drop-failed-stages             Exclude stages with 100% failed requests",
+      "--reviewers <user1,user2>        Comma-separated GitHub handles to request review from",
+      "--concurrency <n>                Max parallel arm uploads after baseline (default: 4)",
+      "--api-url <url>                  Prism API base URL (default: PRISM_API_URL or https://prism.llm-d.ai)",
+      "--ui-url <url>                   Prism UI base URL for share links",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      'prism submit -f ./results/experiment.yaml --target-state unlisted --dco-signoff "Jane Doe <jane@example.com>" --yes-user-approved --json',
+      "prism submit ./results --dry-run --json"
+    ]
+  },
+  list: {
+    usage: "prism list [options]",
+    description: "Query benchmark runs from GET /api/results with server and client filters.",
+    options: [
+      "--experiment-id <uuid>           Filter runs belonging to a campaign/experiment",
+      "--status <state>                 Filter by status (public, promoted, unlisted, submitted_pending_review)",
+      "--own                            List runs owned by the authenticated GitHub user (includes unlisted)",
+      "--model <substr>                 Case-insensitive model substring filter",
+      "--hardware <substr>              Case-insensitive hardware substring filter",
+      "--limit <n>                      Maximum number of runs to return",
+      "--api-url <url>                  Prism API base URL",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      "prism list --own --json",
+      "prism list --experiment-id <uuid> --status public --json"
+    ]
+  },
+  get: {
+    usage: "prism get <runId> [options]",
+    description: "Fetch a full .v1.json run bundle (and optionally export stage reports to disk).",
+    options: [
+      "--export-dir <dir>               Write <runId>.v1.json and raw stage YAML files to <dir>",
+      "--api-url <url>                  Prism API base URL",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      "prism get <runId> --json",
+      "prism get <runId> --export-dir ./exported_run --json"
+    ]
+  },
+  compare: {
+    usage: "prism compare [runIds...] [options]",
+    description: "Compute Throughput, TTFT, and TPOT deltas vs. baseline, evaluate SLOs, and generate a Markdown table + share link.",
+    options: [
+      "--experiment-id <uuid>           Compare all runs in an experiment campaign",
+      "--baseline <runIdOrLabel>        Explicit baseline runId or runLabel",
+      "--slo-ttft-ms <ms>               Mean TTFT SLO threshold in milliseconds",
+      "--slo-tpot-ms <ms>               Mean TPOT SLO threshold in milliseconds",
+      "--markdown                       Print Markdown comparison table",
+      "--api-url <url>                  Prism API base URL",
+      "--ui-url <url>                   Prism UI base URL for share links",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      "prism compare <runId1> <runId2> --baseline <runId1> --markdown --json",
+      "prism compare --experiment-id <uuid> --slo-ttft-ms 200 --slo-tpot-ms 50 --json"
+    ]
+  },
+  promote: {
+    usage: "prism promote [runId...] [options]",
+    description: "Promote owner unlisted/draft run(s) to submitted_pending_review.",
+    options: [
+      "--experiment-id <uuid>           Promote all runs in an experiment campaign",
+      "--status <state>                 Target promotion state (default: submitted_pending_review)",
+      "--api-url <url>                  Prism API base URL",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      "prism promote <runId> --json",
+      "prism promote --experiment-id <uuid> --json"
+    ]
+  },
+  review: {
+    usage: "prism review [runId...] [options]",
+    description: "Submit an admin review decision (public, promoted, changes_requested, rejected).",
+    options: [
+      "--experiment-id <uuid>           Review all runs in an experiment campaign",
+      "--status <decision>              Decision: public | promoted | changes_requested | rejected (default: public)",
+      "--feedback <text>                Reviewer note or feedback message",
+      "--api-url <url>                  Prism API base URL",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      'prism review <runId> --status public --feedback "LGTM" --json'
+    ]
+  },
+  fork: {
+    usage: "prism fork <runId> [options]",
+    description: "Clone an existing run bundle with forked_from lineage metadata.",
+    options: [
+      "--label <runLabel>               New runLabel for the forked bundle",
+      "--tags <t1,t2>                   Comma-separated tags to add to the forked bundle",
+      "-o, --output <file.json>         Write forked payload JSON to disk",
+      "--api-url <url>                  Prism API base URL",
+      "--json                           Emit structured JSON output"
+    ],
+    examples: [
+      'prism fork <runId> --label "Forked Baseline" -o forked.json --json'
+    ]
+  }
+};
+function buildHelpPayload(subcommand) {
+  const normalizedSub = subcommand && SUBCOMMAND_HELP[subcommand] ? subcommand : null;
+  if (normalizedSub) {
+    const spec = SUBCOMMAND_HELP[normalizedSub];
+    const lines = [
+      `Usage: ${spec.usage}`,
+      "",
+      spec.description,
+      "",
+      "Options:",
+      ...spec.options.map((opt) => `  ${opt}`),
+      "",
+      "Examples:",
+      ...spec.examples.map((ex) => `  ${ex}`)
+    ];
+    return {
+      ok: true,
+      exitCode: 0,
+      command: "help",
+      subcommand: normalizedSub,
+      version: PRISM_CLI_VERSION,
+      commands: [...SUPPORTED_COMMANDS],
+      usage: spec.usage,
+      description: spec.description,
+      options: spec.options,
+      examples: spec.examples,
+      message: lines.join("\n")
+    };
+  }
+  const topLines = [
+    "Usage: prism <init|scrub|validate|submit|list|get|compare|promote|review|fork> [options]",
+    "",
+    `Prism Results Store CLI (${PRISM_CLI_VERSION})`,
+    "",
+    "Commands:",
+    "  init [dir]          Discover BR v0.2 stages, infer metadata, scrub PII, and write experiment.yaml",
+    "  scrub [path]        Redact secrets, private IPs, internal hosts, paths, and emails",
+    "  validate [dir]      Offline 3-tier metadata resolution, PII check, and schema validation",
+    "  submit [dir]        Validate, enforce human DCO sign-off gate, upload arms, and emit share URL",
+    "  list                Query runs from GET /api/results (--own, --experiment-id, --status)",
+    "  get <runId>         Fetch full .v1.json run bundle (--export-dir to extract stage files)",
+    "  compare [runIds...] Compute Throughput/TTFT/TPOT deltas, SLO checks, and Markdown table",
+    "  promote [runId]     Promote unlisted run(s) to submitted_pending_review",
+    "  review [runId]      Admin review decision (public, promoted, changes_requested, rejected)",
+    "  fork <runId>        Clone an existing run with forked_from lineage metadata",
+    "",
+    "Global Options:",
+    "  --json              Emit deterministic machine-readable JSON output",
+    "  --api-url <url>     Prism API URL (default: $PRISM_API_URL or https://prism.llm-d.ai)",
+    "  -h, --help          Show help (run `prism <command> --help` for subcommand flags)",
+    "",
+    "Exit Codes: 0 = success, 1 = runtime/API/auth error, 2 = preflight/sign-off failed (0 network writes), 3 = partial batch failure"
+  ];
+  return {
+    ok: true,
+    exitCode: 0,
+    command: "help",
+    subcommand: null,
+    version: PRISM_CLI_VERSION,
+    commands: [...SUPPORTED_COMMANDS],
+    message: topLines.join("\n")
+  };
+}
 async function runPrismCli(argv, io = {}) {
   const stdout = io.stdout || ((msg) => console.log(msg));
   const stderr = io.stderr || io.stdout || ((msg) => console.error(msg));
@@ -21796,14 +22065,8 @@ async function runPrismCli(argv, io = {}) {
   };
   try {
     if (command === "help" || flags.help) {
-      return emitResult(0, {
-        ok: true,
-        exitCode: 0,
-        command: "help",
-        version: PRISM_CLI_VERSION,
-        commands: ["init", "scrub", "validate", "submit", "list", "get", "compare", "promote", "review", "fork"],
-        message: "Usage: prism <init|scrub|validate|submit|list|get|compare|promote|review|fork> [options]"
-      });
+      const helpSubcommand = command === "help" ? positionals[0] || null : command;
+      return emitResult(0, buildHelpPayload(helpSubcommand));
     }
     if (command === "init") {
       const targetDir = positionals[0] || ".";
@@ -21817,22 +22080,41 @@ async function runPrismCli(argv, io = {}) {
           message: `Target directory does not exist: ${targetDir}`
         });
       }
+      const resolvedInitTargetState = flags.publish ? "public" : flags.targetState;
+      if (resolvedInitTargetState && !VALID_TARGET_STATES.has(resolvedInitTargetState)) {
+        return emitResult(2, {
+          ok: false,
+          exitCode: 2,
+          command: "init",
+          error: "INVALID_TARGET_STATE",
+          message: `Invalid --target-state '${resolvedInitTargetState}'. Expected one of: unlisted, submitted_pending_review, public, promoted.`
+        });
+      }
+      const parsedReviewers = flags.reviewers ? flags.reviewers.split(",").map((s) => s.trim()).filter(Boolean) : void 0;
       const initOptions = {
         experimentId: flags.experimentId,
         experiment_id: flags.experimentId,
         experimentLabel: flags.experimentLabel,
         experiment_label: flags.experimentLabel,
         baseline: flags.baseline,
-        targetState: flags.publish ? "public" : flags.targetState,
-        target_state: flags.publish ? "public" : flags.targetState,
+        targetState: resolvedInitTargetState,
+        target_state: resolvedInitTargetState,
         dcoSignoff: flags.dcoSignoff,
         dco_signoff: flags.dcoSignoff,
+        requestedReviewers: parsedReviewers,
+        reviewers: parsedReviewers,
+        runLabel: flags.label,
+        label: flags.label,
+        tags: flags.tags,
         outputPath: flags.output,
         model: flags.model,
         hardware: flags.hardware,
         chips: flags.chips,
         tool: flags.tool,
-        toolVersion: flags.toolVersion
+        toolVersion: flags.toolVersion,
+        harness: flags.harness,
+        harnessVersion: flags.harnessVersion,
+        wellLitPath: flags.wellLitPath
       };
       const initRes = await generateExperimentYamlConfig(resolvedDir, initOptions);
       const configObject = initRes.configObject || initRes.config || {};
@@ -21856,7 +22138,7 @@ async function runPrismCli(argv, io = {}) {
         const relRawFiles = rawLifecycleFiles.map(
           (f) => path2.relative(resolvedDir, f) || path2.basename(f)
         );
-        const converterHint = "Convert raw harness outputs to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: `benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2` (or `python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2`).";
+        const converterHint = "Convert raw harness outputs to Benchmark Report v0.2 first using the standalone `llmd-benchmark-report` package (Python >= 3.11; install via `pip install llmd-benchmark-report` or `pip install ./benchmark-report` from `llm-d/llm-d-benchmark`): `benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2` (or `python -m llmd_benchmark_report.cli <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2`).";
         const message = relRawFiles.length > 0 ? `No Benchmark Report v0.2 stage reports found in ${targetDir}, but detected ${relRawFiles.length} raw inference-perf lifecycle metrics file(s) (${relRawFiles.slice(0, 3).join(", ")}). ${converterHint}` : `No Benchmark Report v0.2 stage reports found in ${targetDir}. ${converterHint}`;
         return emitResult(2, {
           ok: false,
@@ -21866,8 +22148,9 @@ async function runPrismCli(argv, io = {}) {
           message,
           remediation: {
             hint: converterHint,
+            installCommand: "pip install llmd-benchmark-report",
             converterCommand: "benchmark-report <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2",
-            pythonModuleCommand: "python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2",
+            pythonModuleCommand: "python -m llmd_benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2",
             detectedRawFiles: relRawFiles
           },
           discoveredArms: [],
@@ -22064,6 +22347,16 @@ async function runPrismCli(argv, io = {}) {
         });
       }
       const targetState = flags.publish ? "public" : String(flags.targetState || experimentConfig.target_state || "submitted_pending_review");
+      if (!VALID_TARGET_STATES.has(targetState)) {
+        return emitResult(2, {
+          ok: false,
+          exitCode: 2,
+          command: "submit",
+          error: "INVALID_TARGET_STATE",
+          message: `Invalid target state '${targetState}'. Expected one of: unlisted, submitted_pending_review, public, promoted.`,
+          piiReport
+        });
+      }
       const rawDco = flags.dcoSignoff || (typeof experimentConfig.dco_signoff === "string" ? experimentConfig.dco_signoff : void 0) || experimentConfig.dco_signoff?.signed_off_by || arms[0].bundle.dco_signoff?.signed_off_by || (typeof arms[0].bundle.dco_signoff === "string" ? arms[0].bundle.dco_signoff : void 0);
       const hasValidDco = Boolean(rawDco && DCO_REGEX.test(rawDco.trim()));
       const preflightSummary = {

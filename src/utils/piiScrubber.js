@@ -41,6 +41,7 @@ function isSensitivePropertyKey(key) {
 }
 
 const DEFAULT_ALLOW_EMAIL_PATHS = [
+    'dco_signoff',
     'dco_signoff.signed_off_by',
     'github_author',
     'requested_reviewers',
