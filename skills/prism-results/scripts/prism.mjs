@@ -19940,6 +19940,12 @@ function buildRemediationRecipe(validationOrArmResult, armContext = {}) {
     cliFlagParts.push("--drop-failed-stages");
     hints.push("Pass --drop-failed-stages to automatically exclude 100%-failed saturation stages");
   }
+  const hasEmptyEntriesError = Boolean(fieldErrors["entries"]) || Array.isArray(bundle.entries) && bundle.entries.length === 0 || errors.some((e) => /at least one.*stage|entries/i.test(e));
+  if (hasEmptyEntriesError) {
+    hints.push(
+      "Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmdbenchmark.analysis.benchmark_report.cli ... -w inference-perf -b 0.2)"
+    );
+  }
   const experimentYamlPatch = Object.keys(defaultsPatch).length > 0 ? { defaults: defaultsPatch } : {};
   const cliFlags = cliFlagParts.join(" ");
   const hint = hints.length > 0 ? `${hints.join(" and ")}.` : "Inspect fieldErrors and provide missing metadata via CLI flags or experiment.yaml.";
@@ -21832,10 +21838,44 @@ async function runPrismCli(argv, io = {}) {
       const configObject = initRes.configObject || initRes.config || {};
       const yamlString = typeof initRes.yamlString === "string" ? initRes.yamlString : typeof initRes.yaml === "string" ? initRes.yaml : jsYaml.dump(configObject);
       const outputPath = flags.output ? path2.resolve(flags.output) : path2.join(resolvedDir, "experiment.yaml");
-      fs2.mkdirSync(path2.dirname(outputPath), { recursive: true });
-      fs2.writeFileSync(outputPath, yamlString, "utf8");
       const piiReport = normalizePiiReport(initRes.piiReport);
       const discoveredArms = Array.isArray(initRes.discoveredArms) ? initRes.discoveredArms : Array.isArray(initRes.arms) ? initRes.arms : [];
+      const getArmStageCount = (arm) => {
+        if (typeof arm.stageCount === "number") return arm.stageCount;
+        const bundle = arm.bundle;
+        if (bundle && Array.isArray(bundle.entries)) return bundle.entries.length;
+        if (Array.isArray(arm.entries)) return arm.entries.length;
+        return 0;
+      };
+      const totalStages = discoveredArms.reduce((sum, arm) => sum + getArmStageCount(arm), 0);
+      if (discoveredArms.length === 0 || totalStages === 0) {
+        const candidateFiles = collectScrubbableFiles(resolvedDir);
+        const rawLifecycleFiles = candidateFiles.filter(
+          (f) => /(?:^|\/)stage_[^/]*_lifecycle_metrics\.json$|lifecycle_metrics\.json$/i.test(f)
+        );
+        const relRawFiles = rawLifecycleFiles.map(
+          (f) => path2.relative(resolvedDir, f) || path2.basename(f)
+        );
+        const converterHint = "Convert raw harness outputs to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: `benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2` (or `python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2`).";
+        const message = relRawFiles.length > 0 ? `No Benchmark Report v0.2 stage reports found in ${targetDir}, but detected ${relRawFiles.length} raw inference-perf lifecycle metrics file(s) (${relRawFiles.slice(0, 3).join(", ")}). ${converterHint}` : `No Benchmark Report v0.2 stage reports found in ${targetDir}. ${converterHint}`;
+        return emitResult(2, {
+          ok: false,
+          exitCode: 2,
+          command: "init",
+          error: "NO_BRV02_STAGES_FOUND",
+          message,
+          remediation: {
+            hint: converterHint,
+            converterCommand: "benchmark-report <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2",
+            pythonModuleCommand: "python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2",
+            detectedRawFiles: relRawFiles
+          },
+          discoveredArms: [],
+          piiReport
+        });
+      }
+      fs2.mkdirSync(path2.dirname(outputPath), { recursive: true });
+      fs2.writeFileSync(outputPath, yamlString, "utf8");
       const expBlock = configObject.experiment || {};
       return emitResult(0, {
         ok: true,

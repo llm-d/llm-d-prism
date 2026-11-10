@@ -88,7 +88,14 @@ app.get('/api/config', (req, res) => {
         localDir: !!process.env.PRISM_LOCAL_DIR,
         playgroundMode: isPlaygroundMode(),
         gitCommit: gitInfo?.commit || null,
-        gitDescribe: gitInfo?.display || null
+        gitDescribe: gitInfo?.display || null,
+        agentTooling: {
+            manifestUrl: '/api/results/agent',
+            skillUrl: '/SKILL.md',
+            llmsTxtUrl: '/llms.txt',
+            cliBundleUrl: '/api/results/agent/prism.mjs',
+            installScriptUrl: '/api/results/agent/install.sh'
+        }
     });
 });
 
@@ -1139,6 +1146,10 @@ app.get('*', async (req, res) => {
         // Inject before </head>
         html = html.replace('</head>', `${scriptTag}</head>`);
 
+        res.setHeader(
+            'Link',
+            '</SKILL.md>; rel="service-doc"; type="text/markdown", </llms.txt>; rel="alternate"; type="text/plain"'
+        );
         res.send(html);
     } catch (e) {
         console.error('Error serving index.html:', e);

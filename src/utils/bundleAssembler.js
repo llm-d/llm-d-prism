@@ -375,6 +375,17 @@ export function buildRemediationRecipe(validationOrArmResult, armContext = {}) {
         hints.push('Pass --drop-failed-stages to automatically exclude 100%-failed saturation stages');
     }
 
+    const hasEmptyEntriesError =
+        Boolean(fieldErrors['entries']) ||
+        (Array.isArray(bundle.entries) && bundle.entries.length === 0) ||
+        errors.some((e) => /at least one.*stage|entries/i.test(e));
+
+    if (hasEmptyEntriesError) {
+        hints.push(
+            'Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmdbenchmark.analysis.benchmark_report.cli ... -w inference-perf -b 0.2)'
+        );
+    }
+
     const experimentYamlPatch = Object.keys(defaultsPatch).length > 0 ? { defaults: defaultsPatch } : {};
     const cliFlags = cliFlagParts.join(' ');
     const hint =

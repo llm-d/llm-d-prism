@@ -25,7 +25,8 @@ import {
     getAgentSkillMdHandler,
     getAgentCliBundleHandler,
     getAgentExampleManifestHandler,
-    getAgentInstallScriptHandler
+    getAgentInstallScriptHandler,
+    getLlmsTxtHandler
 } from './routes/agent.ts';
 
 export const resultsRouter = Router();
@@ -38,6 +39,10 @@ resultsRouter.get('/api/results/agent', getAgentToolingManifestHandler);
 resultsRouter.get('/api/results/agent/SKILL.md', getAgentSkillMdHandler);
 resultsRouter.get('/api/results/agent/skill.md', getAgentSkillMdHandler);
 resultsRouter.get('/SKILL.md', getAgentSkillMdHandler);
+resultsRouter.get('/llms.txt', getLlmsTxtHandler);
+resultsRouter.get('/.well-known/agent.json', getAgentToolingManifestHandler);
+resultsRouter.get('/.well-known/skills/index.json', getAgentToolingManifestHandler);
+resultsRouter.get('/.well-known/skills/prism-results/SKILL.md', getAgentSkillMdHandler);
 resultsRouter.get('/api/results/agent/prism.mjs', getAgentCliBundleHandler);
 resultsRouter.get('/api/results/agent/experiment.yaml', getAgentExampleManifestHandler);
 resultsRouter.get('/api/results/agent/install.sh', getAgentInstallScriptHandler);
