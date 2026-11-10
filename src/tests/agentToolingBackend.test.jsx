@@ -34,7 +34,8 @@ import {
     getAgentSkillMdHandler,
     getAgentCliBundleHandler,
     getAgentExampleManifestHandler,
-    getAgentInstallScriptHandler
+    getAgentInstallScriptHandler,
+    getLlmsTxtHandler
 } from '../../server/results/routes/agent.ts';
 import { sanitizeSubmissionPayload } from '../../server/results/service.ts';
 import { combineStagesToRunBundle } from '../utils/benchmarkReportV02Parser.js';
@@ -492,5 +493,49 @@ describe('Agent-Native Results Store Backend & Schema (#185, #186)', () => {
         resultsRouter.handle(routerReq, routerRes, () => {});
         expect(routerRes.statusCode).toBe(200);
         expect(routerRes.body.name).toBe('prism-results');
+
+        // 7. Verify GET /llms.txt, /.well-known/agent.json, /.well-known/skills/index.json, and /.well-known/skills/prism-results/SKILL.md
+        const { req: llmsReq, res: llmsRes } = createReqRes({
+            method: 'GET',
+            url: '/llms.txt',
+            host: 'prism.llm-d.ai'
+        });
+        getLlmsTxtHandler(llmsReq, llmsRes);
+        expect(llmsRes.statusCode).toBe(200);
+        expect(llmsRes.getHeader('content-type')).toContain('text/plain');
+        expect(llmsRes.body).toContain('# Prism — llm-d Benchmark Explorer & Results Store');
+        expect(llmsRes.body).toContain('[Prism Results Store Agent Skill (SKILL.md)](https://prism.llm-d.ai/SKILL.md)');
+        expect(llmsRes.body).toContain('[Agent Tooling Discovery Manifest](https://prism.llm-d.ai/api/results/agent)');
+        expect(llmsRes.body).toContain('[Standalone CLI Bundle (prism.mjs)](https://prism.llm-d.ai/api/results/agent/prism.mjs)');
+        expect(llmsRes.body).toContain('[One-Line Skill Installer (install.sh)](https://prism.llm-d.ai/api/results/agent/install.sh)');
+        expect(llmsRes.body).toContain('[Example Multi-Arm Manifest (experiment.yaml)](https://prism.llm-d.ai/api/results/agent/experiment.yaml)');
+
+        const { req: wkAgentReq, res: wkAgentRes } = createReqRes({
+            method: 'GET',
+            url: '/.well-known/agent.json',
+            host: 'prism.llm-d.ai'
+        });
+        resultsRouter.handle(wkAgentReq, wkAgentRes, () => {});
+        expect(wkAgentRes.statusCode).toBe(200);
+        expect(wkAgentRes.body.name).toBe('prism-results');
+
+        const { req: wkSkillsIdxReq, res: wkSkillsIdxRes } = createReqRes({
+            method: 'GET',
+            url: '/.well-known/skills/index.json',
+            host: 'prism.llm-d.ai'
+        });
+        resultsRouter.handle(wkSkillsIdxReq, wkSkillsIdxRes, () => {});
+        expect(wkSkillsIdxRes.statusCode).toBe(200);
+        expect(wkSkillsIdxRes.body.name).toBe('prism-results');
+
+        const { req: wkSkillMdReq, res: wkSkillMdRes } = createReqRes({
+            method: 'GET',
+            url: '/.well-known/skills/prism-results/SKILL.md',
+            host: 'prism.llm-d.ai'
+        });
+        resultsRouter.handle(wkSkillMdReq, wkSkillMdRes, () => {});
+        expect(wkSkillMdRes.statusCode).toBe(200);
+        expect(wkSkillMdRes.getHeader('content-type')).toContain('text/markdown');
+        expect(wkSkillMdRes.body).toContain('Zero-Clone Remote Bootstrap (Served by `https://prism.llm-d.ai`)');
     });
 });

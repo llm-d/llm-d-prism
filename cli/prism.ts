@@ -962,13 +962,61 @@ export async function runPrismCli(argv: string[], io: PrismCliIo = {}): Promise<
                 ? path.resolve(flags.output)
                 : path.join(resolvedDir, 'experiment.yaml');
 
+            const piiReport = normalizePiiReport(initRes.piiReport as Record<string, unknown>);
+            const discoveredArms = Array.isArray(initRes.discoveredArms)
+                ? (initRes.discoveredArms as Array<Record<string, unknown>>)
+                : (Array.isArray(initRes.arms) ? (initRes.arms as Array<Record<string, unknown>>) : []);
+
+            const getArmStageCount = (arm: Record<string, unknown>): number => {
+                if (typeof arm.stageCount === 'number') return arm.stageCount;
+                const bundle = arm.bundle as Record<string, unknown> | undefined;
+                if (bundle && Array.isArray(bundle.entries)) return bundle.entries.length;
+                if (Array.isArray(arm.entries)) return arm.entries.length;
+                return 0;
+            };
+
+            const totalStages = discoveredArms.reduce((sum, arm) => sum + getArmStageCount(arm), 0);
+            if (discoveredArms.length === 0 || totalStages === 0) {
+                const candidateFiles = collectScrubbableFiles(resolvedDir);
+                const rawLifecycleFiles = candidateFiles.filter((f) =>
+                    /(?:^|\/)stage_[^/]*_lifecycle_metrics\.json$|lifecycle_metrics\.json$/i.test(f)
+                );
+                const relRawFiles = rawLifecycleFiles.map(
+                    (f) => path.relative(resolvedDir, f) || path.basename(f)
+                );
+
+                const converterHint =
+                    'Convert raw harness outputs to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: ' +
+                    '`benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2` ' +
+                    '(or `python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2`).';
+
+                const message =
+                    relRawFiles.length > 0
+                        ? `No Benchmark Report v0.2 stage reports found in ${targetDir}, but detected ${relRawFiles.length} raw inference-perf lifecycle metrics file(s) (${relRawFiles.slice(0, 3).join(', ')}). ${converterHint}`
+                        : `No Benchmark Report v0.2 stage reports found in ${targetDir}. ${converterHint}`;
+
+                return emitResult(2, {
+                    ok: false,
+                    exitCode: 2,
+                    command: 'init',
+                    error: 'NO_BRV02_STAGES_FOUND',
+                    message,
+                    remediation: {
+                        hint: converterHint,
+                        converterCommand:
+                            'benchmark-report <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2',
+                        pythonModuleCommand:
+                            'python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2',
+                        detectedRawFiles: relRawFiles,
+                    },
+                    discoveredArms: [],
+                    piiReport,
+                });
+            }
+
             fs.mkdirSync(path.dirname(outputPath), { recursive: true });
             fs.writeFileSync(outputPath, yamlString, 'utf8');
 
-            const piiReport = normalizePiiReport(initRes.piiReport as Record<string, unknown>);
-            const discoveredArms = Array.isArray(initRes.discoveredArms)
-                ? initRes.discoveredArms
-                : (Array.isArray(initRes.arms) ? initRes.arms : []);
             const expBlock = (configObject.experiment || {}) as Record<string, unknown>;
 
             return emitResult(0, {

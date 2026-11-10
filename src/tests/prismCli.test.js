@@ -155,6 +155,38 @@ describe('prism-results CLI (cli/prism.ts)', () => {
         expect(writtenYaml.arms[0].is_baseline).toBe(true);
     });
 
+    it('returns exitCode 2 (NO_BRV02_STAGES_FOUND) in prism init when only raw inference-perf lifecycle metrics exist without BR v0.2 conversion', async () => {
+        const rawDir = path.join(tmpDir, 'raw_inference_perf');
+        fs.mkdirSync(rawDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(rawDir, 'stage_0_lifecycle_metrics.json'),
+            JSON.stringify({ load_summary: { count: 50, achieved_rate: 5.0 } }, null, 2),
+            'utf8'
+        );
+        fs.writeFileSync(
+            path.join(rawDir, 'config.yaml'),
+            yaml.dump({ model: 'Qwen/Qwen3-32B' }),
+            'utf8'
+        );
+
+        const res = await runPrismCli(['init', rawDir, '--json'], {
+            stdout: () => {},
+        });
+
+        expect(res.exitCode).toBe(2);
+        expect(res.payload.ok).toBe(false);
+        expect(res.payload.error).toBe('NO_BRV02_STAGES_FOUND');
+        expect(res.payload.message).toContain('stage_0_lifecycle_metrics.json');
+        expect(res.payload.message).toContain('benchmark-report');
+        expect(res.payload.message).toContain('-w inference-perf -b 0.2');
+        expect(res.payload.remediation.detectedRawFiles).toContain('stage_0_lifecycle_metrics.json');
+        expect(res.payload.remediation.pythonModuleCommand).toContain(
+            'python -m llmdbenchmark.analysis.benchmark_report.cli'
+        );
+        // Should not write a broken experiment.yaml with 0 stages
+        expect(fs.existsSync(path.join(rawDir, 'experiment.yaml'))).toBe(false);
+    });
+
     it('scrubs PII across files and enforces --strict exit code 2 when redactions occur', async () => {
         const manifestPath = path.join(tmpDir, 'deployment.yaml');
         fs.writeFileSync(

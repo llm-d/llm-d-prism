@@ -247,3 +247,34 @@ export function getAgentInstallScriptHandler(req: Request, res: Response) {
         return res.status(500).json({ error: 'Failed to generate install.sh script.', details });
     }
 }
+
+/**
+ * GET /llms.txt
+ * Serves a standard llms.txt discovery document advertising the Prism Agent Skill and zero-clone CLI endpoints.
+ */
+export function getLlmsTxtHandler(req: Request, res: Response) {
+    try {
+        const baseUrl = resolveBaseUrl(req);
+        const content = [
+            '# Prism — llm-d Benchmark Explorer & Results Store',
+            '',
+            '> Explore, validate, scrub PII, submit, and compare LLM inference benchmarks on Prism.',
+            '',
+            '## Agent Skill & Zero-Clone CLI',
+            '',
+            `- [Prism Results Store Agent Skill (SKILL.md)](${baseUrl}/SKILL.md): End-to-end 5-stage workflow (offline validation, PII scrubbing, mandatory human DCO sign-off, multi-arm campaigns, and comparison).`,
+            `- [Agent Tooling Discovery Manifest](${baseUrl}/api/results/agent): JSON manifest with endpoints, SHA-256 checksums, and quick-start commands.`,
+            `- [Standalone CLI Bundle (prism.mjs)](${baseUrl}/api/results/agent/prism.mjs): Zero-dependency Node.js (>= 20) ESM CLI bundle.`,
+            `- [One-Line Skill Installer (install.sh)](${baseUrl}/api/results/agent/install.sh): \`curl -fsSL ${baseUrl}/api/results/agent/install.sh | bash\``,
+            `- [Example Multi-Arm Manifest (experiment.yaml)](${baseUrl}/api/results/agent/experiment.yaml): Declarative multi-arm parameter sweep manifest template.`,
+            ''
+        ].join('\n');
+
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return res.status(200).send(content);
+    } catch (error: unknown) {
+        const details = error instanceof Error ? error.message : String(error);
+        return res.status(500).json({ error: 'Failed to serve llms.txt.', details });
+    }
+}

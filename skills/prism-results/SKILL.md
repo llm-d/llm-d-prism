@@ -23,8 +23,9 @@ node /tmp/prism.mjs <command> [flags]
 
 | Hosted Endpoint | Description |
 | :--- | :--- |
-| `GET /api/results/agent` | JSON discovery manifest (`endpoints`, `sha256.prismMjs`, `quickStart` recipes) |
-| `GET /api/results/agent/SKILL.md` (or `/SKILL.md`) | Live `SKILL.md` with host-specific zero-clone bootstrap header |
+| `GET /llms.txt` | Standard `llms.txt` discovery index for AI agents |
+| `GET /api/results/agent` (or `/.well-known/agent.json`, `/.well-known/skills/index.json`) | JSON discovery manifest (`endpoints`, `sha256.prismMjs`, `quickStart` recipes) |
+| `GET /api/results/agent/SKILL.md` (or `/SKILL.md`, `/.well-known/skills/prism-results/SKILL.md`) | Live `SKILL.md` with host-specific zero-clone bootstrap header |
 | `GET /api/results/agent/prism.mjs` | Standalone bundled CLI (`X-Prism-CLI-SHA256` integrity header) |
 | `GET /api/results/agent/experiment.yaml` | Reference multi-arm `experiment.yaml` manifest |
 | `GET /api/results/agent/install.sh` | POSIX/bash installer (`PRISM_SKILL_DIR` override supported) |
@@ -54,6 +55,15 @@ Always pass `--json` when invoking `prism` programmatically:
 ## 2. Mandatory 5-Stage Agent Workflow
 
 Follow these 5 stages in order whenever packaging or submitting benchmark results:
+
+> **Prerequisite for Raw Harness Outputs (`inference-perf`, `guidellm`, `vllm-benchmark`)**:
+> Prism ingests **Benchmark Report v0.2 (`brv02`)** stage files (`benchmark_report_*.yaml` / `.json`). If a directory only contains raw harness outputs (such as `stage_*_lifecycle_metrics.json` from `inference-perf`), convert them to BR v0.2 first using [`llm-d/llm-d-benchmark`](https://github.com/llm-d/llm-d-benchmark)'s canonical converter:
+> ```bash
+> benchmark-report <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2
+> # Or via Python module:
+> python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2
+> ```
+> If `prism init` is invoked on a directory without BR v0.2 stage reports, it exits with `exitCode: 2` (`error: "NO_BRV02_STAGES_FOUND"`) and prints this conversion command.
 
 ### Stage 1: Initialize & Scrub PII (`init` / `scrub`)
 Scan the benchmark output directory to auto-discover single-run stage files or multi-arm subdirectories, infer hardware/model/serving-stack metadata from sibling Kubernetes manifests (`deployment.yaml`, `values.yaml`, `config.yaml`, `run_metadata.yaml`), and run automatic PII/secret redaction:
@@ -129,7 +139,7 @@ node skills/prism-results/scripts/prism.mjs compare \
   --json
 ```
 
-Present the Markdown comparison table and the `shareUrl` (`https://prism.llm-d.ai/?share=...&experimentId=...`) to the user.
+Present the Markdown comparison table and the `shareUrl` (`https://prism.llm-d.ai/?view=results-store&benchmarks=<encoded>&experimentId=...`) to the user.
 
 ### Stage 5: Failure Handling & GitHub Issue Recommendation
 Whenever any `prism` command returns a non-zero exit code (`exitCode !== 0`) due to an unhandled exception, API failure, or persistent validation error that cannot be auto-remediated:
