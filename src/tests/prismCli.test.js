@@ -180,11 +180,76 @@ describe('prism-results CLI (cli/prism.ts)', () => {
         expect(res.payload.message).toContain('benchmark-report');
         expect(res.payload.message).toContain('-w inference-perf -b 0.2');
         expect(res.payload.remediation.detectedRawFiles).toContain('stage_0_lifecycle_metrics.json');
+        expect(res.payload.remediation.installCommand).toBe('pip install llmd-benchmark-report');
         expect(res.payload.remediation.pythonModuleCommand).toContain(
-            'python -m llmdbenchmark.analysis.benchmark_report.cli'
+            'python -m llmd_benchmark_report.cli'
         );
         // Should not write a broken experiment.yaml with 0 stages
         expect(fs.existsSync(path.join(rawDir, 'experiment.yaml'))).toBe(false);
+    });
+
+    it('supports single-shot prism init flags (--target-state unlisted, --label, --dco-signoff, --reviewers, --tags) and subcommand --help', async () => {
+        const singleDir = path.join(tmpDir, 'single_run');
+        fs.mkdirSync(singleDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(singleDir, 'benchmark_report_stage_0.yaml'),
+            createSampleBrv02Report({ model: 'google/gemma-4-E2B-it', hardware: 'nvidia-rtx-pro-6000', count: 1 }),
+            'utf8'
+        );
+
+        const initRes = await runPrismCli(
+            [
+                'init',
+                singleDir,
+                '--target-state',
+                'unlisted',
+                '--experiment-label',
+                'Gemma-4 Sweep',
+                '--label',
+                'Gemma-4 vLLM on RTX PRO 6000',
+                '--dco-signoff',
+                'Jane Doe <jane@example.com>',
+                '--reviewers',
+                'alice,bob',
+                '--tags',
+                'gke,sweep',
+                '--json',
+            ],
+            { stdout: () => {} }
+        );
+
+        expect(initRes.exitCode).toBe(0);
+        const writtenYaml = yaml.load(fs.readFileSync(path.join(singleDir, 'experiment.yaml'), 'utf8'));
+        expect(writtenYaml.experiment.target_state).toBe('unlisted');
+        expect(writtenYaml.experiment.dco_signoff).toBe('Jane Doe <jane@example.com>');
+        expect(writtenYaml.experiment.requested_reviewers).toEqual(['alice', 'bob']);
+        expect(writtenYaml.arms[0].run_label).toBe('Gemma-4 vLLM on RTX PRO 6000');
+        expect(writtenYaml.arms[0].tags).toEqual(expect.arrayContaining(['gke', 'sweep']));
+
+        // Rejects invalid --target-state locally with exitCode 2
+        const badStateRes = await runPrismCli(['init', singleDir, '--target-state', 'private_draft', '--json'], {
+            stdout: () => {},
+        });
+        expect(badStateRes.exitCode).toBe(2);
+        expect(badStateRes.payload.error).toBe('INVALID_TARGET_STATE');
+
+        // Subcommand --help prints subcommand usage, options, and examples
+        const helpLines = [];
+        const subHelpRes = await runPrismCli(['validate', '--help'], {
+            stdout: (m) => helpLines.push(m),
+        });
+        expect(subHelpRes.exitCode).toBe(0);
+        expect(subHelpRes.payload.subcommand).toBe('validate');
+        expect(helpLines.join('\n')).toContain('Usage: prism validate [dir] [options]');
+        expect(helpLines.join('\n')).toContain('--drop-failed-stages');
+
+        const topHelpLines = [];
+        const topHelpRes = await runPrismCli(['--help'], {
+            stdout: (m) => topHelpLines.push(m),
+        });
+        expect(topHelpRes.exitCode).toBe(0);
+        expect(topHelpRes.payload.subcommand).toBeNull();
+        expect(topHelpLines.join('\n')).toContain('prism <command> --help');
     });
 
     it('scrubs PII across files and enforces --strict exit code 2 when redactions occur', async () => {

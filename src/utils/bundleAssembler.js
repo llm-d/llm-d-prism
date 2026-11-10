@@ -382,7 +382,7 @@ export function buildRemediationRecipe(validationOrArmResult, armContext = {}) {
 
     if (hasEmptyEntriesError) {
         hints.push(
-            'Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using llm-d/llm-d-benchmark: benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmdbenchmark.analysis.benchmark_report.cli ... -w inference-perf -b 0.2)'
+            'Convert raw harness outputs (e.g. stage_*_lifecycle_metrics.json) to Benchmark Report v0.2 first using `llmd-benchmark-report` (`pip install llmd-benchmark-report` or `pip install ./benchmark-report` from llm-d/llm-d-benchmark): benchmark-report <stage_N_lifecycle_metrics.json> <output.yaml> -w inference-perf -b 0.2 (or python -m llmd_benchmark_report.cli ... -w inference-perf -b 0.2)'
         );
     }
 
@@ -1511,12 +1511,29 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
         armBundles.map((b) => b.inference_tool_version),
         undefined
     );
+    const sharedHarness = resolveSharedDefault(
+        armBundles.map((b) => b.benchmark_harness),
+        options.harness || options.benchmark_harness || undefined
+    );
+    const sharedHarnessVer = resolveSharedDefault(
+        armBundles.map((b) => b.benchmark_harness_version),
+        options.harnessVersion || options.benchmark_harness_version || undefined
+    );
 
     const experimentId = options.experimentId || assembly.experiment.id || uuidv4();
     const experimentLabel =
         options.experimentLabel ||
         assembly.experiment.label ||
         `${path.basename(resolvedDir)} Benchmark Campaign`;
+
+    const explicitTags = Array.isArray(options.tags)
+        ? normalizeTags(options.tags)
+        : typeof options.tags === 'string'
+          ? normalizeTags(options.tags.split(','))
+          : [];
+    const mergedDefaultTags = normalizeTags([...(firstBundle.tags || []), ...explicitTags]);
+    const resolvedWellLitPath = options.wellLitPath || options.well_lit_path || firstBundle.well_lit_path || undefined;
+    const resolvedReviewers = options.requestedReviewers || options.reviewers || undefined;
 
     const defaultsBlock = {
         ...(sharedModel.isShared && sharedModel.value !== undefined ? { model_name: sharedModel.value } : {}),
@@ -1532,8 +1549,10 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
             : {}),
         ...(sharedTool.isShared && sharedTool.value !== undefined ? { inference_tool: sharedTool.value } : {}),
         ...(sharedToolVer.isShared && sharedToolVer.value ? { inference_tool_version: sharedToolVer.value } : {}),
-        ...(firstBundle.well_lit_path ? { well_lit_path: firstBundle.well_lit_path } : {}),
-        ...(Array.isArray(firstBundle.tags) && firstBundle.tags.length > 0 ? { tags: firstBundle.tags } : {}),
+        ...(sharedHarness.isShared && sharedHarness.value ? { benchmark_harness: sharedHarness.value } : {}),
+        ...(sharedHarnessVer.isShared && sharedHarnessVer.value ? { benchmark_harness_version: sharedHarnessVer.value } : {}),
+        ...(resolvedWellLitPath ? { well_lit_path: resolvedWellLitPath } : {}),
+        ...(mergedDefaultTags.length > 0 ? { tags: mergedDefaultTags } : {}),
     };
 
     const rawConfigObject = {
@@ -1542,8 +1561,8 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
             id: experimentId,
             label: experimentLabel,
             target_state: options.targetState || 'submitted_pending_review',
-            ...(options.requestedReviewers
-                ? { requested_reviewers: normalizeReviewers(options.requestedReviewers) }
+            ...(resolvedReviewers
+                ? { requested_reviewers: normalizeReviewers(resolvedReviewers) }
                 : {}),
             ...(options.dcoSignoff ? { dco_signoff: options.dcoSignoff } : {}),
         },
@@ -1562,9 +1581,14 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
             if (!sharedChips.isShared && Number(armBundle.hardware?.accelerator_count) > 0) {
                 armHw.accelerator_count = Number(armBundle.hardware.accelerator_count);
             }
+            const explicitSingleArmLabel =
+                assembly.arms.length === 1 && (options.runLabel || options.label)
+                    ? String(options.runLabel || options.label).trim()
+                    : '';
+            const armTags = normalizeTags([...(armBundle.tags || []), ...explicitTags]);
             return {
                 key: arm.armKey,
-                run_label: armBundle.runLabel || arm.armKey,
+                run_label: explicitSingleArmLabel || armBundle.runLabel || arm.armKey,
                 path: normalizedRel,
                 ...(isBaseline ? { is_baseline: true } : {}),
                 ...(!sharedModel.isShared && !isGapValue(armBundle.model_name)
@@ -1577,7 +1601,7 @@ export function generateExperimentYamlConfig(dirPath, options = {}) {
                 ...(!sharedToolVer.isShared && !isGapValue(armBundle.inference_tool_version)
                     ? { inference_tool_version: armBundle.inference_tool_version }
                     : {}),
-                ...(Array.isArray(armBundle.tags) && armBundle.tags.length > 0 ? { tags: armBundle.tags } : {}),
+                ...(armTags.length > 0 ? { tags: armTags } : {}),
             };
         }),
     };

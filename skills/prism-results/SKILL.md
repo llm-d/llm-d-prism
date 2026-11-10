@@ -57,23 +57,27 @@ Always pass `--json` when invoking `prism` programmatically:
 Follow these 5 stages in order whenever packaging or submitting benchmark results:
 
 > **Prerequisite for Raw Harness Outputs (`inference-perf`, `guidellm`, `vllm-benchmark`)**:
-> Prism ingests **Benchmark Report v0.2 (`brv02`)** stage files (`benchmark_report_*.yaml` / `.json`). If a directory only contains raw harness outputs (such as `stage_*_lifecycle_metrics.json` from `inference-perf`), convert them to BR v0.2 first using [`llm-d/llm-d-benchmark`](https://github.com/llm-d/llm-d-benchmark)'s canonical converter:
+> Prism ingests **Benchmark Report v0.2 (`brv02`)** stage files (`benchmark_report_*.yaml` / `.json`). If a directory only contains raw harness outputs (such as `stage_*_lifecycle_metrics.json` from `inference-perf`), convert them to BR v0.2 first using the standalone **`llmd-benchmark-report`** package (Python $\ge 3.11$; published on PyPI and under `benchmark-report/` in [`llm-d/llm-d-benchmark`](https://github.com/llm-d/llm-d-benchmark)):
 > ```bash
+> pip install llmd-benchmark-report
 > benchmark-report <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2
 > # Or via Python module:
-> python -m llmdbenchmark.analysis.benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2
+> python -m llmd_benchmark_report.cli <stage_N_lifecycle_metrics.json> <benchmark_report_stage_N.yaml> -w inference-perf -b 0.2
 > ```
+> *(Note: Prefer `llmd-benchmark-report` / `llmd_benchmark_report.cli` over the root `llmdbenchmark` package, which requires Python $\ge 3.14$.)*
 > If `prism init` is invoked on a directory without BR v0.2 stage reports, it exits with `exitCode: 2` (`error: "NO_BRV02_STAGES_FOUND"`) and prints this conversion command.
 
 ### Stage 1: Initialize & Scrub PII (`init` / `scrub`)
-Scan the benchmark output directory to auto-discover single-run stage files or multi-arm subdirectories, infer hardware/model/serving-stack metadata from sibling Kubernetes manifests (`deployment.yaml`, `values.yaml`, `config.yaml`, `run_metadata.yaml`), and run automatic PII/secret redaction:
+Scan the benchmark output directory to auto-discover single-run stage files or multi-arm subdirectories, infer hardware/model/serving-stack metadata from sibling Kubernetes manifests (`deployment.yaml`, `values.yaml`, `config.yaml`, `run_metadata.yaml`), set initial visibility (`--target-state unlisted|submitted_pending_review|public|promoted`), and run automatic PII/secret redaction:
 
 ```bash
 node skills/prism-results/scripts/prism.mjs init ./benchmark_sweep \
   --experiment-label "Llama-3.1-70B PD Disaggregation Sweep" \
+  --target-state unlisted \
   --baseline arm_01_baseline \
   --json
 ```
+*(Tip: For a single-arm run, pass `--label "My Run Label"` and `--dco-signoff "Name <email@domain>"` directly to `prism init` so `experiment.yaml` needs zero manual edits. Run `prism <command> --help` anytime to inspect subcommand flags.)*
 
 Or run standalone PII scrubbing (with `--in-place` to overwrite local files before archiving, or `--strict` to fail with exit code `2` if any secrets/PII were detected):
 
@@ -154,7 +158,7 @@ Whenever any `prism` command returns a non-zero exit code (`exitCode !== 0`) due
 
 | Command | Example | Description |
 | :--- | :--- | :--- |
-| `init <dir>` | `prism init ./runs -o ./runs/experiment.yaml --json` | Discover arms, infer metadata, scrub PII, and write `experiment.yaml`. |
+| `init <dir>` | `prism init ./runs --target-state unlisted -o ./runs/experiment.yaml --json` | Discover arms, infer metadata, scrub PII, and write `experiment.yaml` (`--label`, `--dco-signoff`). |
 | `scrub <dirOrFile>` | `prism scrub ./runs --in-place --strict --json` | Redact secrets/PII across reports, manifests, and configs. |
 | `validate [dir]` | `prism validate -f experiment.yaml --drop-failed-stages --json` | Offline 3-tier resolution, PII scrub check, and schema validation. |
 | `submit [dir]` | `prism submit -f experiment.yaml --publish --dco-signoff "Name <e@d.com>" --yes-user-approved --json` | Validate, enforce user sign-off gate, upload arms, and emit share link. |
