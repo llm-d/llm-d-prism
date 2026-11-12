@@ -126,13 +126,21 @@ export function isPlaygroundMode(): boolean {
  * Validates a GitHub user's permissions level based on the IAM bucket allowlists.
  */
 export async function validateGitHubUser(username: string): Promise<PermissionLevel> {
+    return (await resolveAllowlistRole(username)).role;
+}
+
+/**
+ * The allowlist role, and whether it is definitive: `complete` is false when the lists
+ * could not be read (the role then fails closed to 'none'), so callers don't cache it.
+ */
+export async function resolveAllowlistRole(username: string): Promise<{ role: PermissionLevel; complete: boolean }> {
     if (isPlaygroundMode()) {
-        return 'admin';
+        return { role: 'admin', complete: true };
     }
 
     const normalizedUsername = username.trim().toLowerCase();
     if (!normalizedUsername) {
-        return 'none';
+        return { role: 'none', complete: true };
     }
 
     try {
@@ -142,14 +150,14 @@ export async function validateGitHubUser(username: string): Promise<PermissionLe
         ]);
 
         if (admins.has(normalizedUsername)) {
-            return 'admin';
+            return { role: 'admin', complete: true };
         }
         if (users.has(normalizedUsername)) {
-            return 'user';
+            return { role: 'user', complete: true };
         }
-        return 'none';
+        return { role: 'none', complete: true };
     } catch (error) {
         console.error(`Error validating permissions for user ${username}:`, error);
-        return 'none';
+        return { role: 'none', complete: false };
     }
 }

@@ -19,13 +19,18 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-vi.mock('./iam', () => ({
-    validateGitHubUser: vi.fn(),
-    isPlaygroundMode: vi.fn(() => false)
-}));
+vi.mock('./iam', () => {
+    const validateGitHubUser = vi.fn();
+    return {
+        validateGitHubUser,
+        // Delegates to the mock above, so tests can keep stubbing validateGitHubUser.
+        resolveAllowlistRole: vi.fn(async (username: string) => ({ role: await validateGitHubUser(username), complete: true })),
+        isPlaygroundMode: vi.fn(() => false)
+    };
+});
 
-import { validateGitHubToken, buildGitHubAuthUrl, GITHUB_OAUTH_SCOPE } from './oauth';
-import { validateGitHubUser, isPlaygroundMode } from './iam';
+import { validateGitHubToken, buildGitHubAuthUrl, GITHUB_OAUTH_SCOPE, clearGitHubTokenCacheForTesting } from './oauth';
+import { validateGitHubUser, resolveAllowlistRole, isPlaygroundMode } from './iam';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,6 +52,7 @@ describe('validateGitHubToken', () => {
     const originalFetch = globalThis.fetch;
 
     beforeEach(() => {
+        clearGitHubTokenCacheForTesting();
         vi.clearAllMocks();
         vi.mocked(isPlaygroundMode).mockReturnValue(false);
     });
@@ -240,5 +246,109 @@ exit 1
 
         execFileSync(PRISM_IAM_PATH, ['user-allowlist', 'staging', 'add', 'first-contributor'], { env, encoding: 'utf8' });
         expect(fs.readFileSync(uploadedFile, 'utf8').trim()).toBe('first-contributor');
+    });
+});
+
+describe('validateGitHubToken caching', () => {
+    const originalFetch = globalThis.fetch;
+    const githubOk = () => vi.fn(async (url: string) => ({
+        ok: true,
+        status: url.includes('/memberships/') ? 404 : 200,
+        json: async () => (url.endsWith('/user') ? { login: 'alice' } : {})
+    }));
+
+    beforeEach(() => {
+        clearGitHubTokenCacheForTesting();
+        vi.clearAllMocks();
+        vi.mocked(isPlaygroundMode).mockReturnValue(false);
+        vi.mocked(validateGitHubUser).mockResolvedValue('user');
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+        vi.useRealTimers();
+    });
+
+    it('reuses a validation for the same token, including concurrent ones', async () => {
+        const fetchMock = githubOk();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        const [a, b] = await Promise.all([validateGitHubToken('tok-1'), validateGitHubToken('tok-1')]);
+        await validateGitHubToken('tok-1');
+        expect(a).toEqual(b);
+        const userCalls = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'));
+        expect(userCalls).toHaveLength(1);
+        expect(validateGitHubUser).toHaveBeenCalledTimes(1);
+        await validateGitHubToken('tok-2');
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
+    });
+
+    it('validates again after a minute, so revocations and permission changes take effect', async () => {
+        vi.useFakeTimers({ now: 0 });
+        const fetchMock = githubOk();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        await validateGitHubToken('tok-1');
+        vi.setSystemTime(59_000);
+        await validateGitHubToken('tok-1');
+        vi.setSystemTime(61_000);
+        await validateGitHubToken('tok-1');
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
+    });
+
+    it('does not keep a result computed while the org lookup failed', async () => {
+        let orgDown = true;
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/user')) return { ok: true, status: 200, json: async () => ({ login: 'alice' }) };
+            if (url.includes('/memberships/')) {
+                if (orgDown) throw new Error('ECONNRESET');
+                return { ok: true, status: 200, json: async () => ({ state: 'active', role: 'admin' }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        vi.mocked(validateGitHubUser).mockResolvedValue('none');
+        expect((await validateGitHubToken('tok-1')).permission).toBe('none'); // fails closed...
+        orgDown = false;
+        expect((await validateGitHubToken('tok-1')).permission).toBe('admin'); // ...but is not cached
+        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
+    });
+
+    it('caches a plain 403 org answer, but not a rate-limited one', async () => {
+        const run = async (headers: Record<string, string>) => {
+            clearGitHubTokenCacheForTesting();
+            const fetchMock = vi.fn(async (url: string) => {
+                if (url.endsWith('/user')) return { ok: true, status: 200, json: async () => ({ login: 'alice' }) };
+                if (url.includes('/memberships/')) return { ok: false, status: 403, headers: new Headers(headers), json: async () => ({}) };
+                return { ok: false, status: 404, json: async () => ({}) };
+            });
+            globalThis.fetch = fetchMock as unknown as typeof fetch;
+            await validateGitHubToken('tok-1');
+            await validateGitHubToken('tok-1');
+            return fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user')).length;
+        };
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(await run({})).toBe(1); // org restricts OAuth apps: stable, cached
+        expect(await run({ 'x-ratelimit-remaining': '0' })).toBe(2);
+        expect(await run({ 'retry-after': '30' })).toBe(2);
+    });
+
+    it('does not keep a result computed while the allowlists could not be read', async () => {
+        const fetchMock = githubOk();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        vi.mocked(resolveAllowlistRole)
+            .mockResolvedValueOnce({ role: 'none', complete: false })
+            .mockResolvedValueOnce({ role: 'admin', complete: true });
+        expect((await validateGitHubToken('tok-1')).permission).toBe('none');
+        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
+        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
+    });
+
+    it('does not keep a failed validation', async () => {
+        globalThis.fetch = vi.fn(async () => ({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) })) as unknown as typeof fetch;
+        await expect(validateGitHubToken('tok-1')).rejects.toThrow(/Invalid GitHub token/);
+        const fetchMock = githubOk();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        await expect(validateGitHubToken('tok-1')).resolves.toMatchObject({ username: 'alice', permission: 'user' });
     });
 });

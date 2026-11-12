@@ -59,16 +59,23 @@ const bundle = (runId, state) => ({
 const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
 
 /** A fake server: `runs` maps runId -> { state, owner }; visibility as the real routes (admin* see all). */
-function installServer(runs, { backend = 's3', runDelayMs = 0 } = {}) {
+function installServer(runs, { backend = 's3', playground = false, listDelayMs = 0, localDelayMs = () => 0 } = {}) {
     const calls = [];
     globalThis.fetch = window.fetch = vi.fn(async (url, opts = {}) => {
         const u = String(url);
         const token = opts.headers?.['X-Prism-Github-Token'] || null;
-        const caller = token ? token.replace('tok-', '') : null;
-        const isAdmin = !!caller?.startsWith('admin');
+        const caller = token ? token.replace('tok-', '').split('#')[0] : null; // 'tok-alice#2' = alice, refreshed
+        const isAdmin = playground || !!caller?.startsWith('admin');
         calls.push([u, token]);
-        if (u === '/api/config') return json({ buckets: [], projects: [], resultsStoreBackend: backend });
+        if (u === '/api/config') return json({ buckets: [], projects: [], resultsStoreBackend: backend, playgroundMode: playground });
+        if (u.startsWith('/api/local/list')) {
+            const delay = localDelayMs();
+            if (delay) await new Promise(r => setTimeout(r, delay));
+            return json({ files: [] });
+        }
         if (u.startsWith('/api/results?')) {
+            const delay = typeof listDelayMs === 'function' ? listDelayMs(u) : listDelayMs;
+            if (delay) await new Promise(r => setTimeout(r, delay));
             const own = u.includes('own=true');
             const status = new URL(u, 'http://x').searchParams.get('status');
             const items = Object.entries(runs)
@@ -80,7 +87,6 @@ function installServer(runs, { backend = 's3', runDelayMs = 0 } = {}) {
         }
         const m = u.match(/^\/api\/results\/([\w-]+)$/);
         if (m) {
-            if (runDelayMs) await new Promise(r => setTimeout(r, runDelayMs));
             const r = runs[m[1]];
             if (!r) return json({ error: 'not found' }, 404);
             if (!['public', 'promoted', 'unlisted'].includes(r.state) && r.owner !== caller && !isAdmin) return json({ error: 'forbidden' }, 403);
@@ -127,23 +133,121 @@ describe('useDashboardData with the S3 Results Store', () => {
         expect(storeTask(result)).toBe('completed');
     });
 
-    it('re-checks runs fetched with a token that is no longer current (any backend), instead of dropping them', async () => {
-        // GCS backend (no Results Store reload on token change) and an admin viewing
-        // someone else's pending run: nothing but the re-check can add it. The re-check's
-        // response is delayed, so the call must wait for it.
-        const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' }, pub: { state: 'public', owner: 'bob' } };
-        const calls = installServer(runs, { backend: 'gcs', runDelayMs: 30 });
+    it('keeps a withdrawn run in the table when an admin withdraws someone else\'s run', async () => {
+        const runs = { r1: { state: 'public', owner: 'bob' } };
+        installServer(runs);
         const { result } = renderWithToken('tok-admin');
         await act(async () => { await result.current.fetchConfig(); });
-        const entries = ['pend', 'pub'].flatMap(id => parseResultsBundle(bundle(id, runs[id].state), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY }));
+        await act(async () => { await result.current.loadAllData(null, true); });
+        runs.r1.state = 'unlisted';
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await waitFor(() => expect(storeRuns(result)).toEqual(['r1:unlisted']));
+    });
 
-        // Fetched before a token refresh: the public run is added at once, the pending
-        // one after re-fetching it with the current token.
-        await act(async () => { await result.current.injectDynamicEntries(entries, { token: 'tok-admin-old' }); });
-        // Resolved only once the re-checked run is in.
-        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pend:submitted_pending_review', 'pub:public']);
-        expect(calls).toContainEqual(['/api/results/pend', 'tok-admin']);
-        expect(calls).not.toContainEqual(['/api/results/pub', 'tok-admin']);
+    it('keeps a withdrawn run in the table in playground mode (no token)', async () => {
+        const runs = { r1: { state: 'public', owner: 'anonymous' } };
+        installServer(runs, { playground: true });
+        const { result } = renderWithToken(null);
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { await result.current.loadAllData(null, true); });
+        runs.r1.state = 'unlisted';
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await waitFor(() => expect(storeRuns(result)).toEqual(['r1:unlisted']));
+    });
+
+    it('keeps `loading` true until the Results Store load has finished', async () => {
+        installServer({ r1: { state: 'public', owner: 'bob' } }, { listDelayMs: 50 });
+        const { result } = renderWithToken(null);
+        await act(async () => { await result.current.fetchConfig(); });
+        let load;
+        act(() => { load = result.current.loadAllData(null, true); });
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(result.current.loading).toBe(true);
+        expect(storeRuns(result)).toEqual([]);
+        await act(async () => { await load; });
+        expect(result.current.loading).toBe(false);
+        expect(storeRuns(result)).toEqual(['r1:public']);
+    });
+
+    it('keeps `loading` true while a newer, overlapping Results Store load is still running', async () => {
+        // First call: its store load is instant, its other sources take 300 ms. Second call,
+        // started meanwhile: its store load takes 1.5 s. When the first call finishes, the
+        // second store load is still running, so `loading` must stay true.
+        let phase = 'first';
+        installServer({ r1: { state: 'public', owner: 'bob' } }, {
+            localDelayMs: () => (phase === 'first' ? 300 : 0),
+            listDelayMs: url => (phase === 'second' && url.includes('limit=100') ? 1500 : 0)
+        });
+        const { result } = renderWithToken(null);
+        await act(async () => { await result.current.fetchConfig(); });
+        let first, second;
+        act(() => { first = result.current.loadAllData(null, true); });
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        phase = 'second';
+        act(() => { second = result.current.loadAllData(null, true); });
+        await act(async () => { await new Promise(r => setTimeout(r, 600)); });
+        expect(result.current.loading).toBe(true);
+        await act(async () => { await Promise.all([first, second]); });
+        expect(result.current.loading).toBe(false);
+        expect(storeRuns(result)).toEqual(['r1:public']);
+    });
+
+    it('does not hang on a superseded Results Store load whose request never answers', async () => {
+        let phase = 'first';
+        installServer({ r1: { state: 'public', owner: 'bob' } }, {
+            // The first load's store listing never answers.
+            listDelayMs: url => (phase === 'first' && url.includes('limit=100') ? 1e9 : 0)
+        });
+        const { result } = renderWithToken(null);
+        await act(async () => { await result.current.fetchConfig(); });
+        let firstDone = false;
+        act(() => { result.current.loadAllData(null, true).then(() => { firstDone = true; }); });
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        phase = 'second';
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await waitFor(() => expect(firstDone).toBe(true));
+        expect(result.current.loading).toBe(false);
+        expect(storeRuns(result)).toEqual(['r1:public']);
+    });
+
+    it('stale-token results: open runs are added at once, the rest after one re-fetch (GCS admin)', async () => {
+        // GCS: no Results Store reload on token change, and hydration only fetches the
+        // caller's own and unlisted runs, so only the re-fetch can add bob's pending run.
+        const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' }, pub: { state: 'public', owner: 'bob' }, unl: { state: 'unlisted', owner: 'bob' } };
+        const calls = installServer(runs, { backend: 'gcs' });
+        const { result } = renderWithToken('tok-admin#2');
+        await act(async () => { await result.current.fetchConfig(); });
+        const entries = Object.keys(runs).flatMap(id => parseResultsBundle(bundle(id, runs[id].state), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY }));
+        act(() => { result.current.injectDynamicEntries(entries, { token: 'tok-admin#1' }); });
+        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pub:public', 'unl:unlisted']);
+        await waitFor(() => expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pend:submitted_pending_review', 'pub:public', 'unl:unlisted']));
+        expect(calls.filter(([u]) => u === '/api/results/pend')).toEqual([['/api/results/pend', 'tok-admin#2']]);
+    });
+
+    it('re-fetches a stale-token run once, even if the token changes again meanwhile', async () => {
+        const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' } };
+        const calls = installServer(runs, { backend: 'gcs' });
+        const { result, setToken } = renderWithToken('tok-admin#2');
+        await act(async () => { await result.current.fetchConfig(); });
+        const entries = parseResultsBundle(bundle('pend', 'submitted_pending_review'), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY });
+        act(() => { result.current.injectDynamicEntries(entries, { token: 'tok-admin#1' }); });
+        await act(async () => { setToken('tok-admin#3'); });
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(calls.filter(([u]) => u === '/api/results/pend')).toHaveLength(1);
+        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual([]);
+    });
+
+    it('after a token refresh, the reload brings back a private run the identity may see', async () => {
+        const runs = { pend: { state: 'submitted_pending_review', owner: 'alice' } };
+        installServer(runs);
+        const { result, setToken } = renderWithToken('tok-alice#1');
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { setToken('tok-alice#2'); });
+        // A share-link result fetched with the old token is not trusted...
+        const entries = parseResultsBundle(bundle('pend', 'submitted_pending_review'), { sourceKey: RESULTS_STORE_SOURCE_KEY });
+        act(() => { result.current.injectDynamicEntries(entries, { token: 'tok-alice#1' }); });
+        // ...but the reload that the token change started loads it for the current identity.
+        await waitFor(() => expect(storeRuns(result)).toEqual(['pend:submitted_pending_review']));
     });
 
     it('does not show a private run fetched before logout', async () => {
@@ -157,34 +261,5 @@ describe('useDashboardData with the S3 Results Store', () => {
         await act(async () => { result.current.injectDynamicEntries(entries, { token: 'tok-alice' }); });
         await act(async () => { await new Promise(r => setTimeout(r, 20)); });
         expect(storeRuns(result)).toEqual([]);
-    });
-
-    it('starts the re-check over if the token changes again while it is in flight', async () => {
-        const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' } };
-        const calls = installServer(runs, { backend: 'gcs' });
-        const { result, setToken } = renderWithToken('tok-admin');
-        await act(async () => { await result.current.fetchConfig(); });
-        const serve = globalThis.fetch;
-        // Hold the re-check made with tok-admin; it is answered 403 only after the token
-        // became tok-admin2 (another admin, not the owner, so hydration doesn't add the run).
-        let release;
-        const held = new Promise(r => { release = r; });
-        globalThis.fetch = window.fetch = vi.fn(async (url, opts = {}) => {
-            if (String(url) === '/api/results/pend' && opts.headers?.['X-Prism-Github-Token'] === 'tok-admin') {
-                calls.push([String(url), 'tok-admin']);
-                await held;
-                return json({ error: 'forbidden' }, 403);
-            }
-            return serve(url, opts);
-        });
-        const entries = parseResultsBundle(bundle('pend', 'submitted_pending_review'), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY });
-        let injected;
-        act(() => { injected = result.current.injectDynamicEntries(entries, { token: 'tok-old' }); });
-        await waitFor(() => expect(calls).toContainEqual(['/api/results/pend', 'tok-admin']));
-        await act(async () => { setToken('tok-admin2'); });
-        release();
-        await act(async () => { await injected; });
-        expect(calls).toContainEqual(['/api/results/pend', 'tok-admin2']);
-        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pend:submitted_pending_review']);
     });
 });

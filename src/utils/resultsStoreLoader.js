@@ -18,9 +18,8 @@
  * On the GCS backend the dashboard reads approved runs by listing the bucket through
  * /api/gcs (unchanged). On the S3 backend the bucket is never exposed to the browser,
  * so the dashboard pages GET /api/results, which applies the server's visibility rules,
- * and fetches each run with GET /api/results/:runId. Signed-in users also get all their
- * own runs (including unlisted ones). Other unlisted runs, which listings omit, reach the
- * dashboard through share links and submissions hydration, as on GCS.
+ * and fetches each run with GET /api/results/:runId. Unlisted runs, which the general
+ * listing omits, are listed separately (as submissions hydration also does on GCS).
  */
 
 import { parseReportV02, stageToEntry, forwardBundleMetadata } from './benchmarkReportV02Parser';
@@ -82,7 +81,8 @@ export function parseResultsBundle(payload, { sourceKey, state = null, runId = p
 const authHeaders = (token) => (token ? { 'X-Prism-Github-Token': token } : {});
 const fetchRun = (fetchFn, runId, headers) => fetchFn(`/api/results/${encodeURIComponent(runId)}`, { headers });
 
-const PUBLIC_STATES = new Set(['public', 'promoted']);
+/** States anyone may open, so those runs are fetched without the GitHub token. */
+const OPEN_STATES = new Set(['public', 'promoted', 'unlisted']);
 
 /**
  * Pages one listing into `items` (first occurrence of a runId wins). Returns an error
@@ -109,12 +109,12 @@ async function listInto(items, { fetchFn, headers, query, pageLimit, maxPages })
 }
 
 /**
- * Loads every run visible to the caller from the Results Store API: the general listing,
- * plus (when signed in) all of the caller's own runs, so a withdrawn (unlisted) run stays
- * in its owner's table.
+ * Loads every run visible to the caller from the Results Store API: the general listing
+ * plus unlisted runs, so a withdrawn run stays in the table whoever withdrew it (owner,
+ * admin, or anyone in playground mode).
  *
- * Public runs are fetched without the GitHub token, so they cost the server no GitHub
- * API calls; only the caller's other runs (own or, for admins, pending review) send it.
+ * Runs anyone may open are fetched without the GitHub token, so they cost the server no
+ * GitHub API calls; only the caller's other runs (own, or pending review for admins) send it.
  *
  * @param {{
  *   fetchFn?: typeof fetch,
@@ -137,15 +137,16 @@ export async function loadResultsStoreRuns({
     const listing = { fetchFn, headers, pageLimit, maxPages };
     const all = await listInto(items, { ...listing, query: {} });
     if (all.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: all.error };
-    const own = token ? await listInto(items, { ...listing, query: { own: 'true' } }) : { error: null, truncated: false };
-    if (own.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: own.error };
+    const unlisted = await listInto(items, { ...listing, query: { status: 'unlisted' } });
+    if (unlisted.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: unlisted.error };
 
     let failed = 0;
     const perRun = await mapLimit([...items.values()], concurrency, async (item) => {
         try {
-            let res = await fetchRun(fetchFn, item.runId, PUBLIC_STATES.has(item.state) ? {} : headers);
-            // A run that stopped being public since the listing needs the caller's identity.
-            if ((res.status === 401 || res.status === 403) && token && PUBLIC_STATES.has(item.state)) {
+            const open = OPEN_STATES.has(item.state);
+            let res = await fetchRun(fetchFn, item.runId, open ? {} : headers);
+            // A run that stopped being open since the listing needs the caller's identity.
+            if ((res.status === 401 || res.status === 403) && token && open) {
                 res = await fetchRun(fetchFn, item.runId, headers);
             }
             if (res.ok) {
@@ -160,7 +161,7 @@ export async function loadResultsStoreRuns({
         return [];
     });
 
-    return { entries: perRun.flat(), runs: items.size, failed, truncated: all.truncated || own.truncated, error: null };
+    return { entries: perRun.flat(), runs: items.size, failed, truncated: all.truncated || unlisted.truncated, error: null };
 }
 
 /**

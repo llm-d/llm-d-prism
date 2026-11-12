@@ -169,7 +169,7 @@ AWS_SECRET_ACCESS_KEY=...
 ```
 
 - Credentials need list, read, write and delete access to the bucket (for IBM COS, HMAC credentials with the Writer role). Supply them from a secret store, never commit them.
-- Authorization works as on GCS: GitHub login, with `prism-iam/github-admin-allowlist.txt` and `prism-iam/github-user-allowlist.txt` read from the same bucket (one GitHub login per line; changes apply on the next request). `RESULTS_STORE_PLAYGROUND_MODE` is unchanged. Manage the lists with `tools/prism-iam`, which uses the `aws` CLI for `s3://` buckets and reads the same `RESULTS_STORE_S3_ENDPOINT` / `RESULTS_STORE_S3_REGION` and AWS credentials:
+- Authorization works as on GCS: GitHub login, with `prism-iam/github-admin-allowlist.txt` and `prism-iam/github-user-allowlist.txt` read from the same bucket (one GitHub login per line; changes apply within a minute). `RESULTS_STORE_PLAYGROUND_MODE` is unchanged. Manage the lists with `tools/prism-iam`, which uses the `aws` CLI for `s3://` buckets and reads the same `RESULTS_STORE_S3_ENDPOINT` / `RESULTS_STORE_S3_REGION` and AWS credentials:
 
   ```bash
   tools/prism-iam user-allowlist s3://my-bucket add <github-login>

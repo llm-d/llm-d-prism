@@ -96,6 +96,7 @@ describe('loadResultsStoreRuns', () => {
         const fetchFn = vi.fn(async (url) => {
             if (url === '/api/results?limit=2') return jsonResponse({ items: [{ runId: 'a', state: 'public' }, { runId: 'b', state: 'promoted' }], nextPageToken: 'T1' });
             if (url === '/api/results?limit=2&pageToken=T1') return jsonResponse({ items: [{ runId: 'b', state: 'promoted' }, { runId: 'c', state: 'submitted_pending_review' }], nextPageToken: null });
+            if (url === '/api/results?status=unlisted&limit=2') return jsonResponse({ items: [], nextPageToken: null });
             const m = url.match(/^\/api\/results\/(\w+)$/);
             if (m) return jsonResponse(bundle(m[1], 1));
             throw new Error(`unexpected ${url}`);
@@ -119,29 +120,33 @@ describe('loadResultsStoreRuns', () => {
         await loadResultsStoreRuns({ fetchFn, token: 'tok' });
         expect(fetchFn.mock.calls.map(([u, o]) => [u, o.headers])).toEqual([
             ['/api/results?limit=100', { 'X-Prism-Github-Token': 'tok' }],
-            ['/api/results?own=true&limit=100', { 'X-Prism-Github-Token': 'tok' }]
+            ['/api/results?status=unlisted&limit=100', { 'X-Prism-Github-Token': 'tok' }]
         ]);
         fetchFn.mockClear();
         await loadResultsStoreRuns({ fetchFn });
-        expect(fetchFn.mock.calls.map(([u, o]) => [u, o.headers])).toEqual([['/api/results?limit=100', {}]]);
+        expect(fetchFn.mock.calls.map(([u, o]) => [u, o.headers])).toEqual([
+            ['/api/results?limit=100', {}],
+            ['/api/results?status=unlisted&limit=100', {}]
+        ]);
     });
 
-    it("keeps the caller's own runs that listings omit (e.g. withdrawn = unlisted)", async () => {
-        const fetchFn = vi.fn(async (url) => {
-            if (url.startsWith('/api/results?own=true')) return jsonResponse({ items: [{ runId: 'mine', state: 'unlisted' }, { runId: 'pub', state: 'public' }] });
-            if (url.startsWith('/api/results?')) return jsonResponse({ items: [{ runId: 'pub', state: 'public' }] });
-            const id = url.split('/').pop();
-            return jsonResponse({ ...bundle(id, 1), submission_state: id === 'mine' ? 'unlisted' : 'public' });
-        });
-        const r = await loadResultsStoreRuns({ fetchFn, token: 'tok' });
-        expect(r.runs).toBe(2);
-        expect(r.entries.map(e => [e.run_id, e.source_info.submission_state]).sort()).toEqual([['mine', 'unlisted'], ['pub', 'public']]);
+    it('lists unlisted runs too, so a withdrawn run stays loaded for any identity', async () => {
+        for (const token of ['tok', null]) {
+            const fetchFn = vi.fn(async (url) => {
+                if (url.startsWith('/api/results?status=unlisted')) return jsonResponse({ items: [{ runId: 'withdrawn', state: 'unlisted' }] });
+                if (url.startsWith('/api/results?')) return jsonResponse({ items: [{ runId: 'pub', state: 'public' }] });
+                const id = url.split('/').pop();
+                return jsonResponse({ ...bundle(id, 1), submission_state: id === 'withdrawn' ? 'unlisted' : 'public' });
+            });
+            const r = await loadResultsStoreRuns({ fetchFn, token });
+            expect(r.entries.map(e => [e.run_id, e.source_info.submission_state]).sort()).toEqual([['pub', 'public'], ['withdrawn', 'unlisted']]);
+        }
     });
 
-    it('fetches public runs without the token, others with it, and retries a run that stopped being public', async () => {
+    it('fetches public and unlisted runs without the token, others with it, and retries a run that stopped being open', async () => {
         const fetchFn = vi.fn(async (url, { headers }) => {
             if (url.startsWith('/api/results?')) {
-                return jsonResponse({ items: url.includes('own=true') ? [] : [
+                return jsonResponse({ items: url.includes('status=unlisted') ? [{ runId: 'unl', state: 'unlisted' }] : [
                     { runId: 'pub', state: 'public' }, { runId: 'pending', state: 'submitted_pending_review' }, { runId: 'flipped', state: 'public' }
                 ] });
             }
@@ -150,10 +155,10 @@ describe('loadResultsStoreRuns', () => {
             return jsonResponse(bundle(id, 1));
         });
         const r = await loadResultsStoreRuns({ fetchFn, token: 'tok' });
-        expect(r).toMatchObject({ runs: 3, failed: 0 });
+        expect(r).toMatchObject({ runs: 4, failed: 0 });
         const runCalls = fetchFn.mock.calls.filter(([u]) => !u.includes('?')).map(([u, o]) => [u.split('/').pop(), !!o.headers['X-Prism-Github-Token']]);
-        expect(runCalls).toEqual(expect.arrayContaining([['pub', false], ['pending', true], ['flipped', false], ['flipped', true]]));
-        expect(runCalls).toHaveLength(4);
+        expect(runCalls).toEqual(expect.arrayContaining([['pub', false], ['unl', false], ['pending', true], ['flipped', false], ['flipped', true]]));
+        expect(runCalls).toHaveLength(5);
     });
 
     it('reports a list failure with the server message and returns no entries', async () => {
@@ -178,7 +183,7 @@ describe('loadResultsStoreRuns', () => {
             ? jsonResponse({ items: [], nextPageToken: 'again' })
             : jsonResponse(bundle('x', 1)));
         const r = await loadResultsStoreRuns({ fetchFn, maxPages: 3 });
-        expect(fetchFn).toHaveBeenCalledTimes(3);
+        expect(fetchFn).toHaveBeenCalledTimes(6); // two listings, 3 pages each
         expect(r).toMatchObject({ truncated: true, error: null });
         const done = await loadResultsStoreRuns({ fetchFn: async () => jsonResponse({ items: [], nextPageToken: null }) });
         expect(done.truncated).toBe(false);

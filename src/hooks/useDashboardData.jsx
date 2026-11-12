@@ -926,16 +926,22 @@ export const useDashboardData = (initialState, dashboardState) => {
     // A call while a load for the same identity is in flight shares that load, unless
     // `force` (a refresh after a change) asks for fresh data. Only the latest load applies
     // its result, so a slow, older one can't overwrite a newer one.
-    const resultsStoreLoad = useRef(null); // { token, promise, done } of the latest load
+    const resultsStoreLoad = useRef(null); // { token, promise, done, settled } of the latest load
     const loadResultsStoreSource = (force = false) => {
         if (resultsStoreBackendRef.current !== 's3') return Promise.resolve();
         const token = accessTokenRef.current || null;
         const current = resultsStoreLoad.current;
         if (!force && current && !current.done && current.token === token) return current.promise;
-        const load = { token, done: false };
+        // `settled` resolves when the load finishes or a newer load replaces it, so waiting
+        // for "the latest load" never hangs on a superseded one.
+        let supersede;
+        const load = { token, done: false, supersede: () => supersede() };
+        const superseded = new Promise(r => { supersede = r; });
+        current?.supersede?.();
         resultsStoreLoad.current = load;
         load.promise = runResultsStoreLoad(token, () => resultsStoreLoad.current === load)
             .finally(() => { load.done = true; });
+        load.settled = Promise.race([load.promise.catch(() => {}), superseded]);
         return load.promise;
     };
 
@@ -1488,8 +1494,9 @@ export const useDashboardData = (initialState, dashboardState) => {
         setGcsLoading(true);
         setGcsError(null);
 
-        // S3-backed Results Store (no-op on GCS): loaded via /api/results and not awaited,
-        // so it never delays the rest of the dashboard.
+        // S3-backed Results Store (no-op on GCS): loaded via /api/results in parallel with
+        // the other sources. `loading` stays true until it is done too, so nothing treats a
+        // partial dataset as complete (e.g. the Dashboard's saved-filter cleanup).
         void loadResultsStoreSource(forceRefresh);
 
         const apisToFetch = [...apiConfigs];
@@ -1806,6 +1813,10 @@ export const useDashboardData = (initialState, dashboardState) => {
             console.error("loadAllData Error:", e);
             setGcsError(`Load failed: ${e.message}`);
         } finally {
+            // The latest load, which may be newer than the one started above.
+            for (let load; (load = resultsStoreLoad.current) && !load.done;) {
+                await load.settled;
+            }
             setLoading(false);
             setGcsLoading(false);
         }
@@ -2662,7 +2673,7 @@ export const useDashboardData = (initialState, dashboardState) => {
                         }
                     }));
                     if (hydratedEntries.length > 0) {
-                        await injectDynamicEntries(hydratedEntries, { token: accessToken });
+                        injectDynamicEntries(hydratedEntries, { token: accessToken });
                         setAvailableSources(prev => new Set([...prev, hydrationSourceKey]));
                         setSelectedSources(prev => new Set([...prev, hydrationSourceKey]));
                     }
@@ -2845,38 +2856,22 @@ export const useDashboardData = (initialState, dashboardState) => {
         return map;
     }, [submissions]);
 
-    // Re-fetches runs with the current identity and adds those it may see. If the token
-    // changes while the requests are in flight, it starts over with the new one.
-    const recheckRunsForCurrentIdentity = useCallback(async (runIds, sourceKey) => {
-        for (;;) {
-            const token = accessTokenRef.current || null;
-            const { entries } = await revalidateResultsStoreRuns(runIds, { token, sourceKey });
-            if ((accessTokenRef.current || null) === token) {
-                addEntries(entries);
-                return;
-            }
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads refs; addEntries is stable
-    }, []);
-
     // `token`: the GitHub token the entries were fetched with. If it is no longer the
-    // current one (logout, account switch, or a token refresh), runs anyone may open are
-    // added as they are, and the rest are re-fetched with the current identity, which
-    // adds them only if it may still see them. Resolves once every entry is settled.
-    const injectDynamicEntries = useCallback(async (newEntries, { token } = {}) => {
-        if (!newEntries || newEntries.length === 0) return;
-        if (token === undefined || (token || null) === (accessTokenRef.current || null)) {
-            addEntries(newEntries);
-            return;
+    // current one (logout, account switch, or a token refresh), only runs anyone may open
+    // (public, promoted, unlisted) are added right away. The others are fetched once more
+    // with the current token (not awaited, never repeated) and added if it may see them.
+    const injectDynamicEntries = useCallback((newEntries, { token, refetch = true } = {}) => {
+        const currentToken = accessTokenRef.current || null;
+        if (newEntries?.length && token !== undefined && (token || null) !== currentToken) {
+            const isOpen = e => ['public', 'promoted', 'unlisted'].includes(e.source_info?.submission_state);
+            const sourceOfRun = new Map(newEntries.filter(e => !isOpen(e) && e.run_id).map(e => [e.run_id, e.source]));
+            for (const sourceKey of refetch ? new Set(sourceOfRun.values()) : []) {
+                const runIds = [...sourceOfRun].filter(([, s]) => s === sourceKey).map(([id]) => id);
+                revalidateResultsStoreRuns(runIds, { token: currentToken, sourceKey })
+                    .then(({ entries }) => injectDynamicEntries(entries, { token: currentToken, refetch: false }), () => {});
+            }
+            newEntries = newEntries.filter(isOpen);
         }
-        const isOpen = e => ['public', 'promoted', 'unlisted'].includes(e.source_info?.submission_state);
-        addEntries(newEntries.filter(isOpen));
-        const sourceOfRun = new Map(newEntries.filter(e => !isOpen(e) && e.run_id).map(e => [e.run_id, e.source]));
-        await Promise.all([...new Set(sourceOfRun.values())].map(sourceKey => recheckRunsForCurrentIdentity(
-            [...sourceOfRun].filter(([, s]) => s === sourceKey).map(([id]) => id), sourceKey)));
-    }, [recheckRunsForCurrentIdentity]);
-
-    function addEntries(newEntries) {
         if (!newEntries || newEntries.length === 0) return;
         const getEntryDedupeKey = (d) => [
             d.run_id || d.source || '',
@@ -2897,7 +2892,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             }
             return filteredNew.length > 0 ? [...prev, ...filteredNew] : prev;
         });
-    }
+    }, []);
 
     useEffect(() => {
         loadSubmissions();
