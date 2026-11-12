@@ -41,7 +41,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { INTEGRATIONS, getBucket, getRatioType, getEffectiveTp, sortBuckets, findParetoPoint, getNodesAndType, getBenchmarkKey, getAcceleratorCount, extractAcceleratorCount } from '../utils/dashboardHelpers';
 import { getCanonicalBucketName, dedupeBucketConfigs } from '../utils/bucketUtils';
 import { isValidUuid } from '../utils/shareLinkEncoder';
-import { parseReportV02, stageToEntry, forwardBundleMetadata } from '../utils/benchmarkReportV02Parser';
+import { parseResultsBundle, getResultsStoreSourceKey } from '../utils/resultsStoreLoader';
 
 const getCleanModelName = (name) => {
     if (!name || typeof name !== 'string') return '';
@@ -230,7 +230,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         apiError, setApiError, refreshSource,
         handleValidatedUpload,
         submissions, isLoadingSubmissions, loadSubmissions,
-        submissionsMap, injectDynamicEntries
+        submissionsMap, injectDynamicEntries,
+        resultsStoreBackend, configResolved, resultsStoreLoading
     } = dashboardData;
 
     const fetchedSharedUuidsRef = useRef(new Set());
@@ -1088,7 +1089,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
     // Sanitize activeFilters on load to remove stale filters that are not in the dataset
     useEffect(() => {
-        if (loading || baseData.length === 0) return;
+        // Also wait for the S3 Results Store, which loads independently of `loading`.
+        if (loading || resultsStoreLoading || baseData.length === 0) return;
 
         setActiveFilters(prev => {
             const next = { ...prev };
@@ -1110,12 +1112,14 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             }
             return changed ? next : prev;
         });
-    }, [loading, baseData, filterOptions.models]);
+    }, [loading, resultsStoreLoading, baseData, filterOptions.models]);
 
 
     // Fetch missing shared runs (e.g. from share links)
     useEffect(() => {
         if (!selectedBenchmarks || selectedBenchmarks.size === 0) return;
+        // Wait for /api/config so runs are tagged with the right source key.
+        if (!configResolved) return;
 
         const missingUuids = [];
         selectedBenchmarks.forEach(key => {
@@ -1165,29 +1169,11 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
                 const jsonPayload = await res.json();
                 if (jsonPayload && jsonPayload.entries && Array.isArray(jsonPayload.entries)) {
-                    const parsedEntries = [];
-                    for (const stageEntry of jsonPayload.entries) {
-                        if (stageEntry.raw_report) {
-                            const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
-                            if (parsedStage) {
-                                forwardBundleMetadata(parsedStage, jsonPayload);
-                                const entry = stageToEntry(parsedStage);
-                                entry.run_id = jsonPayload.runId;
-                                entry.source = 'gcs:llm-d-benchmarks';
-                                entry.source_info = {
-                                    type: 'benchmark_report_v02',
-                                    origin: 'gcs:llm-d-benchmarks',
-                                    submission_state: jsonPayload.submission_state || 'public',
-                                    file_identifier: jsonPayload.runId
-                                };
-                                parsedEntries.push(entry);
-                            }
-                        }
-                    }
+                    const parsedEntries = parseResultsBundle(jsonPayload, { sourceKey: getResultsStoreSourceKey({ resultsStoreBackend }) });
 
                     if (parsedEntries.length > 0) {
                         if (injectDynamicEntries) {
-                            injectDynamicEntries(parsedEntries);
+                            injectDynamicEntries(parsedEntries, { token });
                         }
                         if (setSelectedSources) {
                             setSelectedSources(prev => {
@@ -1212,7 +1198,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         return () => {
             isMounted = false;
         };
-    }, [selectedBenchmarks, data, injectDynamicEntries, setSelectedSources]);
+    }, [selectedBenchmarks, data, injectDynamicEntries, setSelectedSources, resultsStoreBackend, configResolved]);
 
     // Unified Synchronization & Migration Effect
     // 1. Converts legacy/portable wildcards to concrete keys.
@@ -1221,7 +1207,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
     useEffect(() => {
         const isAnySourceLoading = gcsProfiles.some(p => p.loading);
         console.log("[Sync Effect] Running. loading:", loading, "isRestoringConnections:", isRestoringConnections, "isAnySourceLoading:", isAnySourceLoading, "filteredBySource length:", filteredBySource.length);
-        if (loading || isRestoringConnections || isAnySourceLoading || isFetchingSharedRuns || filteredBySource.length === 0) return;
+        if (loading || resultsStoreLoading || isRestoringConnections || isAnySourceLoading || isFetchingSharedRuns || filteredBySource.length === 0) return;
 
         const currentKeys = filteredBySource.map(d => getBenchmarkKey(d));
         const validKeys = new Set(currentKeys);
@@ -1319,17 +1305,17 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             if (isFirstLoad.current) isFirstLoad.current = false;
             return changed ? next : prev;
         });
-    }, [loading, isRestoringConnections, gcsProfiles, filteredBySource, getBenchmarkKey, initialState, isFetchingSharedRuns]);
+    }, [loading, resultsStoreLoading, isRestoringConnections, gcsProfiles, filteredBySource, getBenchmarkKey, initialState, isFetchingSharedRuns]);
 
     // Clear baseline if its benchmark is no longer present in the visible
     // dataset (e.g., the user removed an upload or filtered out its source).
     useEffect(() => {
         if (!baselineBenchmarkKey) return;
-        if (loading || isRestoringConnections) return;
+        if (loading || resultsStoreLoading || isRestoringConnections) return;
         if (filteredBySource.length === 0) return;
         const stillVisible = filteredBySource.some(d => getBenchmarkKey(d) === baselineBenchmarkKey);
         if (!stillVisible) setBaselineBenchmarkKey(null);
-    }, [baselineBenchmarkKey, filteredBySource, loading, isRestoringConnections]);
+    }, [baselineBenchmarkKey, filteredBySource, loading, resultsStoreLoading, isRestoringConnections]);
 
     // Derive selectedModels for compatibility with Header/components
     const selectedModels = useMemo(() => {

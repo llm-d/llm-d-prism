@@ -21,7 +21,7 @@ import { useGitHubAuth } from '../hooks/useGitHubAuth.js';
 import { Button, Modal, Spinner, Checkbox, Input } from './ui';
 import { cn } from '../utils/cn';
 import { decodeShareLink } from '../utils/shareLinkEncoder';
-import { parseReportV02, stageToEntry, forwardBundleMetadata } from '../utils/benchmarkReportV02Parser';
+import { parseResultsBundle, getResultsStoreSourceKey } from '../utils/resultsStoreLoader';
 import { clearResultsStoreParams, clearSrcParams, syncResultsStoreParams, GRAPH_FILTER_DEFAULTS } from '../utils/urlParams';
 
 
@@ -112,7 +112,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         newBucketName, setNewBucketName,
         newBucketAlias, setNewBucketAlias,
         connectionType, setConnectionType,
-        loadAllData
+        loadAllData,
+        resultsStoreBackend, configResolved
     } = dashboardData;
 
 
@@ -312,6 +313,9 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             }
 
             if (processedBenchmarksParamRef.current === benchmarksParam) return;
+            // Wait for /api/config so runs are tagged with the right source key; the
+            // effect re-runs when it resolves (configResolved is read from dashboardData).
+            if (!configResolved) return;
             processedBenchmarksParamRef.current = benchmarksParam;
 
             let targetUuids = [];
@@ -444,33 +448,18 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
                         const jsonPayload = await res.json();
                         if (jsonPayload && jsonPayload.entries && Array.isArray(jsonPayload.entries)) {
-                            const parsedEntries = [];
-                            for (const stageEntry of jsonPayload.entries) {
-                                if (stageEntry.raw_report) {
-                                    const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
-                                    if (parsedStage) {
-                                        forwardBundleMetadata(parsedStage, jsonPayload);
-                                        const entry = stageToEntry(parsedStage);
-                                        const resolvedState = submissionsMap?.[jsonPayload.runId]?.status
-                                            || jsonPayload.submission_state
-                                            || jsonPayload.state
-                                            || 'unlisted';
-                                        entry.run_id = jsonPayload.runId;
-                                        entry.source = 'gcs:llm-d-benchmarks';
-                                        entry.source_info = {
-                                            type: 'benchmark_report_v02',
-                                            origin: 'gcs:llm-d-benchmarks',
-                                            submission_state: resolvedState,
-                                            file_identifier: jsonPayload.runId
-                                        };
-                                        parsedEntries.push(entry);
-                                    }
-                                }
-                            }
+                            // The GET's own state is newer than the submissions list.
+                            const resolvedState = jsonPayload.submission_state
+                                || submissionsMap?.[jsonPayload.runId]?.status
+                                || jsonPayload.state
+                                || 'unlisted';
+                            const parsedEntries = parseResultsBundle(jsonPayload, { sourceKey: getResultsStoreSourceKey({ resultsStoreBackend }), state: resolvedState });
 
                             if (parsedEntries.length > 0) {
-                                if (dashboardData.injectDynamicEntries) {
-                                    dashboardData.injectDynamicEntries(parsedEntries);
+                                // false: fetched with a token that changed meanwhile, so private
+                                // runs were not shown; reported like any inaccessible run.
+                                if (dashboardData.injectDynamicEntries?.(parsedEntries, { token }) === false) {
+                                    forbiddenCount++;
                                 }
                                 if (setSelectedSources) {
                                     setSelectedSources(prev => {
@@ -519,7 +508,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         };
 
         processShareLink();
-    }, [urlSearch, data, dashboardData, dashboardState, setSelectedBenchmarks, setShowComparisonDrawer, setSelectedSources]);
+    }, [urlSearch, data, dashboardData, dashboardState, setSelectedBenchmarks, setShowComparisonDrawer, setSelectedSources, configResolved, resultsStoreBackend]);
 
 
 

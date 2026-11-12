@@ -21,6 +21,11 @@ import {
 } from '../buckets.js';
 import { isPlaygroundMode } from '../iam.ts';
 import { normalizeReviewers } from '../../src/utils/benchmarkReportV02Parser.js';
+import { buildListFilters } from './listFilters.ts';
+import { isS3ResultsStore } from './backend.ts';
+
+/** The S3 store, imported on first use so GCS deployments never load the AWS SDK. */
+const s3Store = async () => (await import('./store/active.ts')).getS3ResultsStore();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -100,6 +105,7 @@ function decodePageToken(tokenStr: string): { gcsToken: string; skipCount: numbe
  * experimentId campaign filter, and user permission authorization checks.
  */
 export async function listResults(options: ListResultsOptions): Promise<ListResultsResult> {
+    if (isS3ResultsStore()) return (await s3Store()).list(options);
     const { limit, pageToken, statusFilter, ownFilter, experimentId, username, permission } = options;
     const normalizedExperimentId = experimentId && experimentId.trim() ? experimentId.trim() : null;
     const { gcsToken, skipCount } = pageToken ? decodePageToken(pageToken) : { gcsToken: '', skipCount: 0 };
@@ -107,39 +113,8 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
     const bucket = getPrismResultsBucket();
     const resultsPrefix = getPrismResultsPrefix();
 
-    // Craft list of filter predicates upfront depending on options and permissions
-    // eslint-disable-next-line no-unused-vars
-    const filters: ((state: PrismSubmissionState, user: string) => boolean)[] = [];
-
-    // 1. Permission check (non-admins can see public/promoted, explicit status=unlisted, or their own results)
-    if (permission !== 'admin' && !isPlaygroundMode()) {
-        filters.push((state, user) => {
-            const isApproved = state === 'public' || state === 'promoted';
-            const isExplicitUnlisted = state === 'unlisted' && statusFilter === 'unlisted';
-            const isOwn = !!(username && user.toLowerCase() === username.toLowerCase());
-            return isApproved || isExplicitUnlisted || isOwn;
-        });
-    }
-
-    // 2. Default Grid Filtering (general list queries without status, own, or experimentId filter exclude unlisted)
-    if (!statusFilter && !ownFilter && !normalizedExperimentId) {
-        filters.push((state) => state !== 'unlisted');
-    }
-
-    // 3. Status Filter
-    if (statusFilter) {
-        filters.push((state) => state === statusFilter);
-    }
-
-    // 4. Ownership Filter
-    if (ownFilter) {
-        filters.push((_, user) => !!(username && user.toLowerCase() === username.toLowerCase()));
-    }
-
-    // Helper: returns true if the item metadata matches all filters
-    const matchesFilters = (state: PrismSubmissionState, user: string): boolean => {
-        return filters.every(f => f(state, user));
-    };
+    // Visibility rules are shared with every storage backend (see listFilters.ts).
+    const matchesFilters = buildListFilters({ statusFilter, ownFilter, experimentId, username, permission });
 
     // Construct single query filter parameter if possible as GCS side optimization
     let gcsFilter: string | undefined;
@@ -268,6 +243,7 @@ export async function listResults(options: ListResultsOptions): Promise<ListResu
  * Fetches the JSON file payload content of a benchmark result run bundle from Google Cloud Storage.
  */
 export async function readResultPayload(runId: string): Promise<PrismResultPayload> {
+    if (isS3ResultsStore()) return (await s3Store()).readPayload(runId);
     const bucketName = getPrismResultsBucket();
     const objectName = getResultsStoreObjectPath(runId);
     const file = storage.bucket(bucketName).file(objectName);
@@ -279,6 +255,7 @@ export async function readResultPayload(runId: string): Promise<PrismResultPaylo
  * Fetches GCS metadata for a single benchmark result run bundle to check ownership and state.
  */
 export async function readResultMetadata(runId: string): Promise<{ user: string; state: PrismSubmissionState } | null> {
+    if (isS3ResultsStore()) return (await s3Store()).readMetadata(runId);
     const bucketName = getPrismResultsBucket();
     const objectName = getResultsStoreObjectPath(runId);
     const file = storage.bucket(bucketName).file(objectName);
@@ -302,6 +279,7 @@ export async function writeResult(
     submissionState: PrismSubmissionState,
     githubUser: string
 ): Promise<void> {
+    if (isS3ResultsStore()) return (await s3Store()).write(runId, payload, submissionState, githubUser);
     const bucketName = getPrismResultsBucket();
     const objectName = getResultsStoreObjectPath(runId);
     const file = storage.bucket(bucketName).file(objectName);
@@ -385,6 +363,7 @@ export async function writeResult(
  * Deletes a benchmark result bundle from Google Cloud Storage by its runId.
  */
 export async function deleteResult(runId: string): Promise<void> {
+    if (isS3ResultsStore()) return (await s3Store()).delete(runId);
     const bucketName = getPrismResultsBucket();
     const objectName = getResultsStoreObjectPath(runId);
     const file = storage.bucket(bucketName).file(objectName);

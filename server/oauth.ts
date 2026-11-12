@@ -14,7 +14,7 @@
 
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { validateGitHubUser, PermissionLevel, isPlaygroundMode } from './iam';
+import { resolveAllowlistRole, PermissionLevel, isPlaygroundMode } from './iam';
 
 export const oauthRouter = Router();
 
@@ -98,14 +98,52 @@ oauthRouter.get('/api/auth/github/login', (req: Request, res: Response) => {
     res.redirect(githubAuthUrl);
 });
 
+type GitHubIdentity = { username: string, permission: PermissionLevel, avatarUrl?: string };
+
+/**
+ * Read routes (list, get, export) may reuse a validation briefly ({ cached: true }), keyed by
+ * a hash of the token: a dashboard load sends the token with many reads, and each validation
+ * otherwise costs several GitHub API calls against the user's hourly limit. For those reads a
+ * revoked token or a permission change therefore takes effect within this window. Routes
+ * that change data always validate afresh. Only definitive results are kept: not failures,
+ * and not a permission computed while the org or allowlist lookup failed.
+ */
+const TOKEN_CACHE_TTL_MS = 60_000;
+const TOKEN_CACHE_MAX_ENTRIES = 1000;
+const tokenCache = new Map<string, { expiresAt: number; identity: Promise<GitHubIdentity> }>();
+
+/** Test hook: forget cached validations. */
+export function clearGitHubTokenCacheForTesting(): void {
+    tokenCache.clear();
+}
+
 /**
  * Validates a GitHub access token.
- * Fetches the user profile and permissions directly from GitHub API.
+ * Fetches the user profile and permissions directly from GitHub API (with `cached`, possibly
+ * from a validation made in the last minute; see above).
  */
-export async function validateGitHubToken(token: string): Promise<{ username: string, permission: PermissionLevel, avatarUrl?: string }> {
+export async function validateGitHubToken(token: string, { cached = false }: { cached?: boolean } = {}): Promise<GitHubIdentity> {
     if (isPlaygroundMode()) {
         return { username: 'anonymous', permission: 'admin' };
     }
+    if (!cached) return (await fetchGitHubIdentity(token)).identity;
+    const key = crypto.createHash('sha256').update(token).digest('hex');
+    const hit = tokenCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.identity;
+
+    // Concurrent requests with the same token share one validation.
+    const lookup = fetchGitHubIdentity(token);
+    const identity = lookup.then(r => r.identity);
+    tokenCache.delete(key);
+    tokenCache.set(key, { expiresAt: Date.now() + TOKEN_CACHE_TTL_MS, identity });
+    const forget = () => { if (tokenCache.get(key)?.identity === identity) tokenCache.delete(key); };
+    lookup.then(r => { if (!r.definitive) forget(); }, forget);
+    if (tokenCache.size > TOKEN_CACHE_MAX_ENTRIES) tokenCache.delete(tokenCache.keys().next().value!);
+    return identity;
+}
+
+/** `definitive` is false when a permission lookup failed and the result fell back to less. */
+async function fetchGitHubIdentity(token: string): Promise<{ identity: GitHubIdentity; definitive: boolean }> {
     const userResponse = await fetch('https://api.github.com/user', {
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -122,6 +160,7 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
 
     // Resolve organization membership role
     let orgRole: PermissionLevel = 'none';
+    let orgLookupComplete = true;
     const encodedUsername = encodeURIComponent(username);
     try {
         const orgResponse = await fetch(`https://api.github.com/orgs/llm-d/memberships/${encodedUsername}`, {
@@ -140,6 +179,11 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
                 }
             }
         } else if (orgResponse.status === 403) {
+            // A plain 403 (org restricts OAuth apps, missing scope) is a stable answer; a
+            // rate-limit 403 is temporary, so a result computed during it is not cached.
+            if (orgResponse.headers?.get?.('x-ratelimit-remaining') === '0' || orgResponse.headers?.get?.('retry-after')) {
+                orgLookupComplete = false;
+            }
             console.warn(
                 `GitHub org membership check returned 403 for ${username}; ` +
                 `ensure token has 'read:org' scope or the GitHub App is installed on 'llm-d' with Members: Read-only. ` +
@@ -153,14 +197,19 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
             });
             if (publicMemberResponse.status === 204) {
                 orgRole = 'user';
+            } else if (publicMemberResponse.status !== 404) {
+                orgLookupComplete = false;
             }
+        } else if (orgResponse.status !== 404) {
+            orgLookupComplete = false;
         }
     } catch (e) {
+        orgLookupComplete = false;
         console.warn(`Error checking llm-d organization membership for user ${username}:`, e);
     }
 
     // Resolve allowlist role
-    const allowlistRole = await validateGitHubUser(username);
+    const { role: allowlistRole, complete: allowlistComplete } = await resolveAllowlistRole(username);
 
     // Determine highest role
     let permission: PermissionLevel = 'none';
@@ -170,7 +219,10 @@ export async function validateGitHubToken(token: string): Promise<{ username: st
         permission = 'user';
     }
 
-    return { username, permission, avatarUrl: userData.avatar_url };
+    return {
+        identity: { username, permission, avatarUrl: userData.avatar_url },
+        definitive: orgLookupComplete && allowlistComplete,
+    };
 }
 
 /**

@@ -15,6 +15,7 @@
 import { GoogleAuth, UserRefreshClient } from 'google-auth-library';
 import fs from 'fs';
 import { getResultsStoreBucket } from './buckets.js';
+import { isS3ResultsStore } from './results/backend.ts';
 
 const auth = new GoogleAuth();
 
@@ -59,7 +60,22 @@ async function getAccessToken(): Promise<string> {
 }
 
 /**
- * Fetches and parses an allowlist file from the GCS IAM bucket.
+ * Parses an allowlist file: one GitHub username per line, blank lines and lines
+ * starting with '#' ignored, case-insensitive.
+ */
+function parseAllowlist(text: string): Set<string> {
+    return new Set(
+        text
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'))
+            .map(line => line.toLowerCase())
+    );
+}
+
+/**
+ * Fetches and parses an allowlist file from the active Results Store backend: the GCS
+ * IAM bucket, or the S3 store's bucket.
  */
 async function fetchAllowlist(filename: string): Promise<Set<string>> {
     const bucket = getIAMBucket();
@@ -67,6 +83,17 @@ async function fetchAllowlist(filename: string): Promise<Set<string>> {
     const url = `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(objectPath)}?alt=media`;
 
     try {
+        if (isS3ResultsStore()) {
+            // Imported lazily to avoid an import cycle (store -> listFilters.ts -> this module).
+            const { getS3ResultsStore } = await import('./results/store/active.ts');
+            const text = await getS3ResultsStore().readIamFile(objectPath);
+            if (text === null) {
+                console.warn(`Allowlist file ${objectPath} not found in the S3 Results Store`);
+                return new Set<string>();
+            }
+            return parseAllowlist(text);
+        }
+
         const accessToken = await getAccessToken();
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -80,14 +107,7 @@ async function fetchAllowlist(filename: string): Promise<Set<string>> {
             throw new Error(`Failed to fetch allowlist: ${response.status} ${response.statusText}`);
         }
 
-        const text = await response.text();
-        const users = text
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line && !line.startsWith('#'))
-            .map(line => line.toLowerCase());
-
-        return new Set(users);
+        return parseAllowlist(await response.text());
     } catch (error) {
         console.error(`Error fetching allowlist ${filename}:`, error);
         throw error;
@@ -106,13 +126,21 @@ export function isPlaygroundMode(): boolean {
  * Validates a GitHub user's permissions level based on the IAM bucket allowlists.
  */
 export async function validateGitHubUser(username: string): Promise<PermissionLevel> {
+    return (await resolveAllowlistRole(username)).role;
+}
+
+/**
+ * The allowlist role, and whether it is definitive: `complete` is false when the lists
+ * could not be read (the role then fails closed to 'none'), so callers don't cache it.
+ */
+export async function resolveAllowlistRole(username: string): Promise<{ role: PermissionLevel; complete: boolean }> {
     if (isPlaygroundMode()) {
-        return 'admin';
+        return { role: 'admin', complete: true };
     }
 
     const normalizedUsername = username.trim().toLowerCase();
     if (!normalizedUsername) {
-        return 'none';
+        return { role: 'none', complete: true };
     }
 
     try {
@@ -122,14 +150,14 @@ export async function validateGitHubUser(username: string): Promise<PermissionLe
         ]);
 
         if (admins.has(normalizedUsername)) {
-            return 'admin';
+            return { role: 'admin', complete: true };
         }
         if (users.has(normalizedUsername)) {
-            return 'user';
+            return { role: 'user', complete: true };
         }
-        return 'none';
+        return { role: 'none', complete: true };
     } catch (error) {
         console.error(`Error validating permissions for user ${username}:`, error);
-        return 'none';
+        return { role: 'none', complete: false };
     }
 }
