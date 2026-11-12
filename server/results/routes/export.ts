@@ -15,6 +15,7 @@
 import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { readResultPayload, readResultMetadata } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { PrismResultPayload } from '../api.ts';
 import { createRunZipBuffer, getBRV02StageFilename, serializeRawReportToYaml, syncPayloadMetadataToRawReport } from '../exporter.ts';
 
@@ -114,7 +115,7 @@ export async function exportResultsHandler(req: Request, res: Response) {
 
     } catch (error: any) {
         console.error('[Results Export API Error]', error);
-        return res.status(500).json({ error: 'Failed to export benchmark run', details: error.message });
+        return res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to export benchmark run', details: error.message });
     }
 }
 
@@ -155,6 +156,6 @@ export async function downloadEntryHandler(req: Request, res: Response) {
 
     } catch (error: any) {
         console.error('[Results Entry Download API Error]', error);
-        return res.status(500).json({ error: 'Failed to download stage entry', details: error.message });
+        return res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to download stage entry', details: error.message });
     }
 }

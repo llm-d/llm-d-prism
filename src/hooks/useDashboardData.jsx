@@ -35,6 +35,7 @@ import {
     saveBrv02Runs,
     saveBrv02RunsSync
 } from '../utils/stagedBundlesStore';
+import { loadResultsStoreRuns, revalidateResultsStoreRuns, getResultsStoreSourceKey, parseResultsBundle, RESULTS_STORE_SOURCE_KEY } from '../utils/resultsStoreLoader';
 
 const getPrefixForBucket = (entry) => {
     // A "bucket/path" scoped entry restricts the scan to that subdirectory.
@@ -296,6 +297,21 @@ export const useDashboardData = (initialState, dashboardState) => {
     });
     const [gcsProfiles, setGcsProfiles] = useState([]);
     const [enableLLMDResults, setEnableLLMDResults] = useState(true);
+    // 'gcs' | 's3', from /api/config. On 's3' the Results Store is loaded through
+    // /api/results (see resultsStoreLoader.js) rather than by listing a bucket. The ref
+    // is for callbacks created before the config arrived (e.g. App's first loadAllData).
+    const resultsStoreBackendRef = useRef('gcs');
+    const [resultsStoreBackend, setResultsStoreBackend] = useState('gcs');
+    // Set once /api/config has been read (or failed), so code that tags runs with the
+    // Results Store source key knows the backend: effects check configResolved, other
+    // code checks configLoaded.done or waits for configLoaded.promise.
+    const [configResolved, setConfigResolved] = useState(false);
+    const [configLoaded] = useState(() => {
+        const c = { done: false };
+        c.promise = new Promise(r => { c.resolve = () => { c.done = true; r(); }; });
+        return c;
+    });
+    const accessTokenRef = useRef(accessToken);
     const [toasts, setToasts] = useState([]);
     const [siteName, setSiteName] = useState("");
     const [contactUrl, setContactUrl] = useState("");
@@ -409,8 +425,14 @@ export const useDashboardData = (initialState, dashboardState) => {
             const response = await fetch('/api/config');
             console.log(`[useDashboardData] fetchConfig Response Status: ${response.status}`);
             if (response.ok) {
-                const { buckets, projects, hostProject, siteName, gaTrackingId, contactUrl, gitCommit: fetchedCommit, gitDescribe: fetchedDescribe } = await response.json();
+                const { buckets, projects, hostProject, siteName, gaTrackingId, contactUrl, gitCommit: fetchedCommit, gitDescribe: fetchedDescribe, resultsStoreBackend: fetchedBackend } = await response.json();
                 console.log(`[useDashboardData] fetchConfig DATA: buckets=${buckets?.length}, projects=${projects?.length}, host=${hostProject}`);
+
+                if (fetchedBackend === 's3') {
+                    resultsStoreBackendRef.current = 's3';
+                    setResultsStoreBackend('s3');
+                    setSelectedSources(prev => new Set([...prev, RESULTS_STORE_SOURCE_KEY]));
+                }
 
                 if (siteName) {
                     setSiteName(siteName);
@@ -502,6 +524,9 @@ export const useDashboardData = (initialState, dashboardState) => {
         } catch (e) {
             console.error("Failed to fetch config", e);
             return null;
+        } finally {
+            setConfigResolved(true);
+            configLoaded.resolve();
         }
     };
 
@@ -857,7 +882,9 @@ export const useDashboardData = (initialState, dashboardState) => {
         }
     }, [loading]);
 
-    const updateSourceData = (sourceKey, newEntries, profile) => {
+    // `keep` selects existing entries of the source to keep alongside the new ones. (Some
+    // callers pass a mode string as the 4th argument; it has no `keep` and is ignored.)
+    const updateSourceData = (sourceKey, newEntries, profile, { keep } = {}) => {
         const normalized = newEntries.map(e => ({ ...e, source: sourceKey }));
         const [type, bucketName] = sourceKey.split(':');
         const finalProfile = {
@@ -868,7 +895,7 @@ export const useDashboardData = (initialState, dashboardState) => {
 
         setData(prev => {
             // Remove existing entries for this source
-            const filtered = prev.filter(d => d.source !== sourceKey);
+            const filtered = prev.filter(d => d.source !== sourceKey || (keep && keep(d)));
             // Add new entries, ensuring unique IDs
             const next = [...filtered, ...normalized].map((d, i) => ({ ...d, id: i }));
             return next;
@@ -893,6 +920,84 @@ export const useDashboardData = (initialState, dashboardState) => {
             return next;
         });
     };
+
+    // Loads the S3-backed Results Store through /api/results. Replaces the source's
+    // entries every time (also when empty), so withdrawn/deleted runs disappear.
+    // A call while a load for the same identity is in flight shares that load, unless
+    // `force` (a refresh after a change) asks for fresh data. Only the latest load applies
+    // its result, so a slow, older one can't overwrite a newer one.
+    const resultsStoreLoad = useRef(null); // { token, promise, done } of the latest load
+    const loadResultsStoreSource = (force = false) => {
+        if (resultsStoreBackendRef.current !== 's3') return Promise.resolve();
+        const token = accessTokenRef.current || null;
+        const current = resultsStoreLoad.current;
+        if (!force && current && !current.done && current.token === token) return current.promise;
+        const load = { token, done: false };
+        resultsStoreLoad.current = load;
+        load.promise = runResultsStoreLoad(token, () => resultsStoreLoad.current === load)
+            .finally(() => { load.done = true; });
+        return load.promise;
+    };
+
+    const runResultsStoreLoad = async (token, isLatest) => {
+        const taskId = RESULTS_STORE_SOURCE_KEY;
+        const profile = { bucketName: 'store', type: 'results', alias: 'Results Store', files: [] };
+        updateTaskProgress(taskId, { name: 'Results Store', type: 'results', status: 'loading', currentAction: 'Listing runs' });
+        try {
+            const result = await loadResultsStoreRuns({ token });
+            if (!isLatest()) return;
+            if (result.error) {
+                updateTaskProgress(taskId, { status: 'failed', currentAction: result.error });
+                setGcsProfiles(prev => [
+                    ...prev.filter(p => `${p.type}:${p.bucketName}` !== taskId),
+                    { ...profile, entryCount: 0, loading: false, error: result.error }
+                ]);
+                return;
+            }
+            // Runs added outside the listing (share links, hydration) are kept across
+            // reloads, but only after re-checking each with the server: deleted runs, or
+            // runs this identity can no longer see, are dropped. Runs that could not be
+            // checked right now (network error, 5xx) are kept as they are.
+            const listedRunIds = new Set(result.entries.map(e => e.run_id));
+            const injectedRunIds = [...new Set(dataRef.current
+                .filter(d => d.source === taskId && d._dynamicallyInjected && d.run_id && !listedRunIds.has(d.run_id))
+                .map(d => d.run_id))];
+            const { entries: revalidated, unverified } = injectedRunIds.length > 0
+                ? await revalidateResultsStoreRuns(injectedRunIds, { token })
+                : { entries: [], unverified: [] };
+            if (!isLatest()) return;
+            // Decided against the latest state, so runs injected while this load was in
+            // flight (not checked yet) are kept too.
+            const checked = new Set(injectedRunIds.filter(id => !unverified.includes(id)));
+            updateSourceData(taskId, [...result.entries, ...revalidated], {
+                ...profile,
+                entryCount: result.runs,
+                loadedAt: new Date().toISOString(),
+                error: result.failed > 0 ? `${result.failed} run(s) could not be loaded` : null
+            }, { keep: d => d._dynamicallyInjected && d.run_id && !listedRunIds.has(d.run_id) && !checked.has(d.run_id) });
+            updateTaskProgress(taskId, { status: 'completed', loaded: result.runs, total: result.runs, currentAction: `Loaded ${result.runs} run(s)` });
+        } catch (err) {
+            if (!isLatest()) return;
+            console.warn('[useDashboardData] Results Store load failed:', err);
+            updateTaskProgress(taskId, { status: 'failed', currentAction: err?.message || 'Failed to load Results Store' });
+        }
+    };
+
+    // Visibility depends on who is signed in (own runs, admin view), so reload the
+    // Results Store when the GitHub token changes (login, logout, refresh).
+    useEffect(() => {
+        if (accessTokenRef.current === accessToken) return;
+        accessTokenRef.current = accessToken;
+        if (resultsStoreBackendRef.current !== 's3') return;
+        // Drop runs only the previous identity could see before reloading. Injected unlisted
+        // runs (share links, readable by anyone with the link) are kept and re-checked by
+        // the reload; the new identity's own runs come back through hydration.
+        setData(prev => prev.filter(d => d.source !== RESULTS_STORE_SOURCE_KEY
+            || ['public', 'promoted'].includes(d.source_info?.submission_state)
+            || (d._dynamicallyInjected && d.source_info?.submission_state === 'unlisted')));
+        void loadResultsStoreSource();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadResultsStoreSource reads refs only
+    }, [accessToken]);
 
     const handleAddGCSBucket = async (alias = null, bucketNameOverride = null) => {
         const nameToUse = bucketNameOverride || newBucketName;
@@ -1378,6 +1483,10 @@ export const useDashboardData = (initialState, dashboardState) => {
         setLoading(true);
         setGcsLoading(true);
         setGcsError(null);
+
+        // S3-backed Results Store (no-op on GCS): loaded via /api/results and not awaited,
+        // so it never delays the rest of the dashboard.
+        void loadResultsStoreSource(forceRefresh);
 
         const apisToFetch = [...apiConfigs];
         if (fetchedConfig && fetchedConfig.projects) {
@@ -2527,42 +2636,36 @@ export const useDashboardData = (initialState, dashboardState) => {
                         .filter(Boolean)
                 );
                 const missingItems = listDataItems.filter(item => item.runId && !existingRunIds.has(item.runId));
-                if (missingItems.length > 0) {
+                // Hydrated runs are tagged with the backend's source key ('gcs:llm-d-benchmarks'
+                // on GCS, as before; 'results:store' on S3), which is known once /api/config
+                // has been read. Before that, hydration is deferred until it has.
+                const hydrate = async () => {
+                    const hydrationSourceKey = getResultsStoreSourceKey({ resultsStoreBackend: resultsStoreBackendRef.current });
                     const hydratedEntries = [];
                     await Promise.all(missingItems.map(async (item) => {
                         try {
                             const res = await fetch(`/api/results/${item.runId}`, { headers });
                             if (!res || !res.ok) return;
                             const jsonPayload = await res.json();
-                            if (jsonPayload && Array.isArray(jsonPayload.entries)) {
-                                for (const stageEntry of jsonPayload.entries) {
-                                    if (stageEntry.raw_report) {
-                                        const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
-                                        if (parsedStage) {
-                                            forwardBundleMetadata(parsedStage, jsonPayload);
-                                            const entry = stageToEntry(parsedStage);
-                                            entry.run_id = jsonPayload.runId || item.runId;
-                                            entry.source = 'gcs:llm-d-benchmarks';
-                                            entry.source_info = {
-                                                type: 'benchmark_report_v02',
-                                                origin: 'gcs:llm-d-benchmarks',
-                                                submission_state: item.state || jsonPayload.submission_state || 'unlisted',
-                                                file_identifier: jsonPayload.runId || item.runId
-                                            };
-                                            hydratedEntries.push(entry);
-                                        }
-                                    }
-                                }
-                            }
+                            hydratedEntries.push(...parseResultsBundle(jsonPayload, {
+                                sourceKey: hydrationSourceKey,
+                                // The GET's state is newer than the listing's.
+                                state: jsonPayload?.submission_state || item.state || 'unlisted',
+                                runId: jsonPayload?.runId || item.runId
+                            }));
                         } catch {
                             // Ignore individual hydration errors
                         }
                     }));
                     if (hydratedEntries.length > 0) {
-                        injectDynamicEntries(hydratedEntries);
-                        setAvailableSources(prev => new Set([...prev, 'gcs:llm-d-benchmarks']));
-                        setSelectedSources(prev => new Set([...prev, 'gcs:llm-d-benchmarks']));
+                        injectDynamicEntries(hydratedEntries, { token: accessToken });
+                        setAvailableSources(prev => new Set([...prev, hydrationSourceKey]));
+                        setSelectedSources(prev => new Set([...prev, hydrationSourceKey]));
                     }
+                };
+                if (missingItems.length > 0) {
+                    if (configLoaded.done) await hydrate();
+                    else void configLoaded.promise.then(hydrate);
                 }
             }
 
@@ -2574,7 +2677,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         } finally {
             setIsLoadingSubmissions(false);
         }
-    }, [accessToken, brv02Runs, addToast, mapStateToStatus]);
+    }, [accessToken, brv02Runs, addToast, mapStateToStatus, configLoaded]);
 
     const updateSubmissionStatus = useCallback(async (runId, status, feedback = '') => {
         setIsLoadingSubmissions(true);
@@ -2731,8 +2834,11 @@ export const useDashboardData = (initialState, dashboardState) => {
         return map;
     }, [submissions]);
 
-    const injectDynamicEntries = useCallback((newEntries) => {
+    // `token`: the GitHub token the entries were fetched with. Entries fetched for an
+    // identity that has since logged out or switched accounts are dropped.
+    const injectDynamicEntries = useCallback((newEntries, { token } = {}) => {
         if (!newEntries || newEntries.length === 0) return;
+        if (token !== undefined && (token || null) !== (accessTokenRef.current || null)) return;
         const getEntryDedupeKey = (d) => [
             d.run_id || d.source || '',
             d.prism_stage_index ?? d.stageIndex ?? d.workload?.stage ?? '',
@@ -2806,6 +2912,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
+        resultsStoreBackend, configResolved,
         handleAddGCSBucket, removeGCSBucket,
         brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs, scannedFilenames,
         brv02CustomLabels, setBrv02CustomLabels,

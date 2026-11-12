@@ -28,12 +28,14 @@ import { avatarRouter } from './avatar.ts';
 import { storage } from './results/gcs.ts';
 import {
     getConfiguredBucketEntries,
-    getConfiguredBucketNames,
+    parseBucketEntry,
+    DEFAULT_RESULTS_STORE_PREFIX,
     getResultsStoreBucket,
     getResultsStorePrefix,
     getResultsStoreUploadPath
 } from './buckets.js';
 import { parseGitCommit } from './git.js';
+import { isS3ResultsStore, resolveS3ResultsStore } from './results/backend.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -68,15 +70,36 @@ app.use('/api', limiter);
 // Google Auth Client
 const auth = new GoogleAuth();
 
+if (isS3ResultsStore()) {
+    const store = resolveS3ResultsStore();
+    if (store.ok) {
+        const { bucket, prefix, endpoint } = store.location;
+        console.log(`[Results Store] Using S3 backend: bucket '${bucket}', prefix '${prefix}', endpoint '${endpoint || 'AWS default'}'`);
+    } else {
+        console.error(`[Results Store] S3 backend selected but not usable: ${store.reason}`);
+    }
+}
+
+/**
+ * GCS bucket entries the dashboard reads. On S3, RESULTS_STORE_BUCKET names the S3 store,
+ * so it is not a GCS bucket and there is no implicit default: only DEFAULT_BUCKETS count.
+ */
+function gcsBucketEntries() {
+    if (!isS3ResultsStore()) {
+        return getConfiguredBucketEntries(process.env.DEFAULT_BUCKETS, process.env.RESULTS_STORE_BUCKET);
+    }
+    return String(process.env.DEFAULT_BUCKETS || '').trim() ? getConfiguredBucketEntries(process.env.DEFAULT_BUCKETS, '') : [];
+}
 
 // --- API: Shared Configuration ---
 app.get('/api/config', (req, res) => {
-    const defaultBuckets = getConfiguredBucketEntries(process.env.DEFAULT_BUCKETS, process.env.RESULTS_STORE_BUCKET);
+    const defaultBuckets = gcsBucketEntries();
     const defaultProjects = process.env.DEFAULT_PROJECTS ? process.env.DEFAULT_PROJECTS.split(',') : [];
     const gitInfo = parseGitCommit(process.env.GIT_COMMIT);
 
     res.json({
         buckets: defaultBuckets,
+        resultsStoreBackend: isS3ResultsStore() ? 's3' : 'gcs',
         resultsStoreBucket: getResultsStoreBucket(),
         resultsStorePrefix: getResultsStorePrefix(),
         resultsStorePath: getResultsStoreUploadPath(),
@@ -590,9 +613,11 @@ app.all('/api/gcs/*', async (req, res) => {
             return res.status(400).json({ error: 'Invalid GCS path format' });
         }
 
-        const resultsBuckets = getConfiguredBucketNames(process.env.DEFAULT_BUCKETS, process.env.RESULTS_STORE_BUCKET);
-        const resultsStoreBucket = getResultsStoreBucket();
-        const resultsStorePrefix = getResultsStorePrefix();
+        const resultsBuckets = gcsBucketEntries().map(e => parseBucketEntry(e).bucket).filter(Boolean);
+        // On S3 the Results Store is not on GCS: no GCS bucket is writable through here, and
+        // RESULTS_STORE_BUCKET's prefix (an S3 setting) does not apply to GCS buckets.
+        const resultsStoreBucket = isS3ResultsStore() ? null : getResultsStoreBucket();
+        const resultsStorePrefix = isS3ResultsStore() ? DEFAULT_RESULTS_STORE_PREFIX : getResultsStorePrefix();
         const isTargetBucket = (parsed.bucket === resultsStoreBucket || resultsBuckets.includes(parsed.bucket));
 
         if (!isTargetBucket) {

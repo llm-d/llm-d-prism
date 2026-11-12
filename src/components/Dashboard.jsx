@@ -41,7 +41,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { INTEGRATIONS, getBucket, getRatioType, getEffectiveTp, sortBuckets, findParetoPoint, getNodesAndType, getBenchmarkKey, getAcceleratorCount, extractAcceleratorCount } from '../utils/dashboardHelpers';
 import { getCanonicalBucketName, dedupeBucketConfigs } from '../utils/bucketUtils';
 import { isValidUuid } from '../utils/shareLinkEncoder';
-import { parseReportV02, stageToEntry, forwardBundleMetadata } from '../utils/benchmarkReportV02Parser';
+import { parseResultsBundle, getResultsStoreSourceKey } from '../utils/resultsStoreLoader';
 
 const getCleanModelName = (name) => {
     if (!name || typeof name !== 'string') return '';
@@ -230,7 +230,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         apiError, setApiError, refreshSource,
         handleValidatedUpload,
         submissions, isLoadingSubmissions, loadSubmissions,
-        submissionsMap, injectDynamicEntries
+        submissionsMap, injectDynamicEntries,
+        resultsStoreBackend, configResolved
     } = dashboardData;
 
     const fetchedSharedUuidsRef = useRef(new Set());
@@ -1116,6 +1117,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
     // Fetch missing shared runs (e.g. from share links)
     useEffect(() => {
         if (!selectedBenchmarks || selectedBenchmarks.size === 0) return;
+        // Wait for /api/config so runs are tagged with the right source key.
+        if (!configResolved) return;
 
         const missingUuids = [];
         selectedBenchmarks.forEach(key => {
@@ -1165,29 +1168,11 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
                 const jsonPayload = await res.json();
                 if (jsonPayload && jsonPayload.entries && Array.isArray(jsonPayload.entries)) {
-                    const parsedEntries = [];
-                    for (const stageEntry of jsonPayload.entries) {
-                        if (stageEntry.raw_report) {
-                            const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
-                            if (parsedStage) {
-                                forwardBundleMetadata(parsedStage, jsonPayload);
-                                const entry = stageToEntry(parsedStage);
-                                entry.run_id = jsonPayload.runId;
-                                entry.source = 'gcs:llm-d-benchmarks';
-                                entry.source_info = {
-                                    type: 'benchmark_report_v02',
-                                    origin: 'gcs:llm-d-benchmarks',
-                                    submission_state: jsonPayload.submission_state || 'public',
-                                    file_identifier: jsonPayload.runId
-                                };
-                                parsedEntries.push(entry);
-                            }
-                        }
-                    }
+                    const parsedEntries = parseResultsBundle(jsonPayload, { sourceKey: getResultsStoreSourceKey({ resultsStoreBackend }) });
 
                     if (parsedEntries.length > 0) {
                         if (injectDynamicEntries) {
-                            injectDynamicEntries(parsedEntries);
+                            injectDynamicEntries(parsedEntries, { token });
                         }
                         if (setSelectedSources) {
                             setSelectedSources(prev => {
@@ -1212,7 +1197,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         return () => {
             isMounted = false;
         };
-    }, [selectedBenchmarks, data, injectDynamicEntries, setSelectedSources]);
+    }, [selectedBenchmarks, data, injectDynamicEntries, setSelectedSources, resultsStoreBackend, configResolved]);
 
     // Unified Synchronization & Migration Effect
     // 1. Converts legacy/portable wildcards to concrete keys.

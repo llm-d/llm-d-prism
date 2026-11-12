@@ -154,6 +154,32 @@ The following environment variables can be set via `--set-env-vars` in the `gclo
 - **`GITHUB_CLIENT_ID`**: The Client ID of your registered GitHub OAuth App (used for authentication).
 - **`GITHUB_CLIENT_SECRET`**: The Client Secret of your registered GitHub OAuth App (used for authentication).
 
+##### Results Store on S3-compatible storage (`RESULTS_STORE_BACKEND=s3`)
+
+The Results Store (submit, review, publish, delete, export, and the `prism-results` CLI) uses GCS by default. To keep it in an S3-compatible bucket instead (AWS S3, IBM Cloud Object Storage, MinIO, Ceph, R2):
+
+```bash
+RESULTS_STORE_BACKEND=s3
+RESULTS_STORE_BUCKET=my-bucket            # or my-bucket/path/to/dir; default prefix prism-results-store/
+RESULTS_STORE_S3_ENDPOINT=https://s3.us-south.cloud-object-storage.appdomain.cloud   # omit for AWS
+RESULTS_STORE_S3_REGION=us-south          # default us-east-1
+RESULTS_STORE_S3_FORCE_PATH_STYLE=true    # only for endpoints without virtual-host buckets (e.g. MinIO)
+AWS_ACCESS_KEY_ID=...                     # or any other AWS SDK credential source
+AWS_SECRET_ACCESS_KEY=...
+```
+
+- Credentials need list, read, write and delete access to the bucket (for IBM COS, HMAC credentials with the Writer role). Supply them from a secret store, never commit them.
+- Authorization works as on GCS: GitHub login, with `prism-iam/github-admin-allowlist.txt` and `prism-iam/github-user-allowlist.txt` read from the same bucket (one GitHub login per line; changes apply on the next request). `RESULTS_STORE_PLAYGROUND_MODE` is unchanged. Manage the lists with `tools/prism-iam`, which uses the `aws` CLI for `s3://` buckets and reads the same `RESULTS_STORE_S3_ENDPOINT` / `RESULTS_STORE_S3_REGION` and AWS credentials:
+
+  ```bash
+  tools/prism-iam user-allowlist s3://my-bucket add <github-login>
+  tools/prism-iam summarize s3://my-bucket
+  ```
+- Each run is one object at `<prefix><runId>.v1.json`, as on GCS. State and owner are object metadata (`x-amz-meta-prism-*`). A listing reads every run's metadata (reused for 5 s), which suits up to a few thousand runs.
+- The dashboard loads the store through `/api/results`, so the bucket can stay private.
+- GCS buckets are loaded only when listed in `DEFAULT_BUCKETS`; `RESULTS_STORE_BUCKET` is not added to them.
+- If `RESULTS_STORE_BUCKET` is unset, the Results Store API returns `503`.
+
 #### Automated Deployment with GitHub Actions
 
 For automatic deployment on push to `main` branch, see [GitHub Actions Setup Guide](docs/github-actions-setup.md).

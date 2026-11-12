@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { listResults, ListResultsResult as ResultsListResponse } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { PrismSubmissionState } from '../api.ts';
 
 export interface ResultsListQuery {
@@ -91,6 +92,6 @@ export async function listResultsHandler(
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error('[Results List API Error]', error);
-        res.status(500).json({ error: 'Failed to list results', details: msg });
+        res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to list results', details: msg });
     }
 }

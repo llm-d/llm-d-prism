@@ -17,6 +17,7 @@ import crypto from 'crypto';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { writeResult, deleteResult } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { processSubmission } from '../processing.ts';
 import { PrismSubmissionState, PrismResultPayload } from '../api.ts';
 import { normalizeReportUnits, normalizeReviewers } from '../../../src/utils/benchmarkReportV02Parser.js';
@@ -192,6 +193,6 @@ export async function submitResultsHandler(
                 console.error('[Results Submit API Cleanup Error]', cleanupErr);
             });
         }
-        res.status(502).json({ error: 'Failed to submit or process result in storage backend', details: error instanceof Error ? error.message : String(error) });
+        res.status(storageErrorStatus(error, 502)).json({ error: 'Failed to submit or process result in storage backend', details: error instanceof Error ? error.message : String(error) });
     }
 }

@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { readResultPayload, writeResult, readResultMetadata } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { PrismSubmissionState } from '../api.ts';
 
 export interface ReviewResultsRequest {
@@ -145,7 +146,7 @@ export async function reviewResultsHandler(
     } catch (error: unknown) {
         console.error('[Results Review API Error]', error);
         const msg = error instanceof Error ? error.message : String(error);
-        return res.status(500).json({ error: 'Failed to update result submission status', details: msg });
+        return res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to update result submission status', details: msg });
     }
 }
 
