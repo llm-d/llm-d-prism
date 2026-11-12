@@ -17871,10 +17871,22 @@ var toMs = (val, units) => {
   const factor = unitToSecondsFactor(units);
   return n * (factor * 1e3);
 };
-var pct = (val) => {
-  const v = safeNum(val);
-  if (v === null) return null;
-  return v <= 1 ? v * 100 : v;
+var PERCENT_STAT_KEYS = ["mean", "p50", "p99"];
+var normalizePercentStats = (block) => {
+  if (!block || typeof block !== "object" || Array.isArray(block)) return block;
+  const units = typeof block.units === "string" ? block.units.trim().toLowerCase() : "";
+  const values = PERCENT_STAT_KEYS.filter((k) => k in block).map((k) => safeNum(block[k]));
+  let scale;
+  if (units === "percent") scale = 1;
+  else if (units === "fraction") scale = 100;
+  else scale = values.every((v) => v === null || v <= 1) ? 100 : 1;
+  const out = { ...block };
+  for (const k of PERCENT_STAT_KEYS) {
+    if (!(k in block)) continue;
+    const v = safeNum(block[k]);
+    out[k] = v === null ? null : v * scale;
+  }
+  return out;
 };
 var TIME_SERIES_LABELS = {
   kv_cache_usage: "KV Cache Usage",
@@ -17949,19 +17961,18 @@ var deriveRunLabel = (doc) => {
   return "";
 };
 var numericField = external_exports.preprocess(safeNum, external_exports.number().nullable());
-var percentField = external_exports.preprocess(pct, external_exports.number().nullable());
 var MetricValuesSchema = external_exports.object({
   units: external_exports.string().optional().nullable(),
   mean: numericField.optional(),
   p50: numericField.optional(),
   p99: numericField.optional()
 }).passthrough().optional().nullable();
-var PercentValuesSchema = external_exports.object({
+var PercentValuesSchema = external_exports.preprocess(normalizePercentStats, external_exports.object({
   units: external_exports.string().optional().nullable(),
-  mean: percentField.optional(),
-  p50: percentField.optional(),
-  p99: percentField.optional()
-}).passthrough().optional().nullable();
+  mean: external_exports.number().optional().nullable(),
+  p50: external_exports.number().optional().nullable(),
+  p99: external_exports.number().optional().nullable()
+}).passthrough().optional().nullable());
 var ThroughputMetricSchema = external_exports.object({
   units: external_exports.string().optional().nullable(),
   mean: numericField.optional(),
@@ -21733,9 +21744,9 @@ function formatPctDelta(current, baseline) {
   if (current === null || baseline === null || baseline === 0) {
     return { pct: null, formatted: "N/A" };
   }
-  const pct2 = (current - baseline) / baseline * 100;
-  const sign = pct2 > 0 ? "+" : "";
-  return { pct: Number(pct2.toFixed(2)), formatted: `${sign}${pct2.toFixed(1)}%` };
+  const pct = (current - baseline) / baseline * 100;
+  const sign = pct > 0 ? "+" : "";
+  return { pct: Number(pct.toFixed(2)), formatted: `${sign}${pct.toFixed(1)}%` };
 }
 var SUPPORTED_COMMANDS = [
   "init",
