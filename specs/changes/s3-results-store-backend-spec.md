@@ -149,9 +149,10 @@ independent `llm-d` org-membership role is unchanged).
 
 ### 3.4 Dashboard and config
 
-- `/api/config` adds `resultsStoreBackend`. On `s3`, `RESULTS_STORE_BUCKET` is not added to the
-  GCS bucket list (explicit `DEFAULT_BUCKETS` entries still are), and the `/api/gcs` proxy does not
-  treat it as a GCS bucket either.
+- `/api/config` adds `resultsStoreBackend`. On `s3`, `resultsStoreBucket/Prefix/Path` report the
+  S3 store's location (`null` when it is not configured), `RESULTS_STORE_BUCKET` is not added to
+  the GCS bucket list (explicit `DEFAULT_BUCKETS` entries still are), and the `/api/gcs` proxy does
+  not treat it as a GCS bucket either.
 - `GET /api/results/:runId` adds `submission_state` (from storage metadata) to the payload it
   returns, on both backends. On GCS too, share-linked runs now show their real state (e.g.
   unlisted or pending) instead of an assumed `public`.
@@ -159,8 +160,13 @@ independent `llm-d` org-membership role is unchanged).
   `resultsStoreBackend === 's3'`):
   - Pages `GET /api/results?limit=100` until `nextPageToken` is null. The server applies the
     usual visibility (approved for everyone; own runs for the signed-in owner; all for admins;
-    unlisted excluded unless requested).
-  - Fetches each run with `GET /api/results/:runId` (bounded concurrency 6), parses the envelope
+    unlisted excluded unless requested). When signed in it also pages `?own=true`, so the caller's
+    own runs, including withdrawn (unlisted) ones, stay in their table. As on GCS, admins and owners
+    therefore also see non-public runs (that is the review surface). It stops after 100 pages per
+    listing and then reports the load as truncated.
+  - Fetches each run with `GET /api/results/:runId` (bounded concurrency 6). Public runs are fetched
+    without the GitHub token, so they cost the server no GitHub API calls; other runs send it (and a
+    public run that 401/403s is retried with it). It parses the envelope
     with the shared `parseResultsBundle()` helper, and takes `submission_state` from that GET
     (newer than the list item, which is the fallback).
   - Source key `results:store`, labelled "Results Store", type Cloud. The source's entries are
@@ -173,7 +179,9 @@ independent `llm-d` org-membership role is unchanged).
   that cannot be checked right now are kept, and so are runs injected while the reload ran.
 - The S3 Results Store source reloads when the GitHub token changes (login, logout, refresh);
   stale loads are discarded. On a token change, runs only the previous identity could see are
-  dropped at once, and hydration responses for a previous identity are ignored.
+  dropped at once. Share-link and hydration results fetched with a token that is no longer current
+  are not trusted: public and unlisted runs are added as they are, others are re-fetched with the
+  current identity and added only if it may still see them.
 - After submit/review/promote/delete the existing `loadAllData(null, true)` refresh re-runs the
   loader.
 

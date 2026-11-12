@@ -457,7 +457,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
                             if (parsedEntries.length > 0) {
                                 if (dashboardData.injectDynamicEntries) {
-                                    dashboardData.injectDynamicEntries(parsedEntries, { token });
+                                    await dashboardData.injectDynamicEntries(parsedEntries, { token });
                                 }
                                 if (setSelectedSources) {
                                     setSelectedSources(prev => {

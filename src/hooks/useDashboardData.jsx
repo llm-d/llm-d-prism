@@ -973,9 +973,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                 ...profile,
                 entryCount: result.runs,
                 loadedAt: new Date().toISOString(),
-                error: result.failed > 0 ? `${result.failed} run(s) could not be loaded` : null
+                error: [
+                    result.failed > 0 && `${result.failed} run(s) could not be loaded`,
+                    result.truncated && `only the first ${result.runs} runs were loaded`
+                ].filter(Boolean).join('; ') || null
             }, { keep: d => d._dynamicallyInjected && d.run_id && !listedRunIds.has(d.run_id) && !checked.has(d.run_id) });
             updateTaskProgress(taskId, { status: 'completed', loaded: result.runs, total: result.runs, currentAction: `Loaded ${result.runs} run(s)` });
+            if (result.truncated) addToast(`Results Store: only the first ${result.runs} runs were loaded.`, 'error');
         } catch (err) {
             if (!isLatest()) return;
             console.warn('[useDashboardData] Results Store load failed:', err);
@@ -991,7 +995,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         if (resultsStoreBackendRef.current !== 's3') return;
         // Drop runs only the previous identity could see before reloading. Injected unlisted
         // runs (share links, readable by anyone with the link) are kept and re-checked by
-        // the reload; the new identity's own runs come back through hydration.
+        // the reload; the new identity's own runs come back with the reload.
         setData(prev => prev.filter(d => d.source !== RESULTS_STORE_SOURCE_KEY
             || ['public', 'promoted'].includes(d.source_info?.submission_state)
             || (d._dynamicallyInjected && d.source_info?.submission_state === 'unlisted')));
@@ -2658,14 +2662,21 @@ export const useDashboardData = (initialState, dashboardState) => {
                         }
                     }));
                     if (hydratedEntries.length > 0) {
-                        injectDynamicEntries(hydratedEntries, { token: accessToken });
+                        await injectDynamicEntries(hydratedEntries, { token: accessToken });
                         setAvailableSources(prev => new Set([...prev, hydrationSourceKey]));
                         setSelectedSources(prev => new Set([...prev, hydrationSourceKey]));
                     }
                 };
                 if (missingItems.length > 0) {
-                    if (configLoaded.done) await hydrate();
-                    else void configLoaded.promise.then(hydrate);
+                    if (configLoaded.done) {
+                        await hydrate();
+                    } else {
+                        // Submissions are already set; only these extra dashboard rows wait.
+                        // They are injected with the token they were fetched with, so a
+                        // logout meanwhile is handled by injectDynamicEntries.
+                        void configLoaded.promise.then(hydrate)
+                            .catch(err => console.warn('[useDashboardData] Submissions hydration failed:', err));
+                    }
                 }
             }
 
@@ -2834,11 +2845,39 @@ export const useDashboardData = (initialState, dashboardState) => {
         return map;
     }, [submissions]);
 
-    // `token`: the GitHub token the entries were fetched with. Entries fetched for an
-    // identity that has since logged out or switched accounts are dropped.
-    const injectDynamicEntries = useCallback((newEntries, { token } = {}) => {
+    // Re-fetches runs with the current identity and adds those it may see. If the token
+    // changes while the requests are in flight, it starts over with the new one.
+    const recheckRunsForCurrentIdentity = useCallback(async (runIds, sourceKey) => {
+        for (;;) {
+            const token = accessTokenRef.current || null;
+            const { entries } = await revalidateResultsStoreRuns(runIds, { token, sourceKey });
+            if ((accessTokenRef.current || null) === token) {
+                addEntries(entries);
+                return;
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads refs; addEntries is stable
+    }, []);
+
+    // `token`: the GitHub token the entries were fetched with. If it is no longer the
+    // current one (logout, account switch, or a token refresh), runs anyone may open are
+    // added as they are, and the rest are re-fetched with the current identity, which
+    // adds them only if it may still see them. Resolves once every entry is settled.
+    const injectDynamicEntries = useCallback(async (newEntries, { token } = {}) => {
         if (!newEntries || newEntries.length === 0) return;
-        if (token !== undefined && (token || null) !== (accessTokenRef.current || null)) return;
+        if (token === undefined || (token || null) === (accessTokenRef.current || null)) {
+            addEntries(newEntries);
+            return;
+        }
+        const isOpen = e => ['public', 'promoted', 'unlisted'].includes(e.source_info?.submission_state);
+        addEntries(newEntries.filter(isOpen));
+        const sourceOfRun = new Map(newEntries.filter(e => !isOpen(e) && e.run_id).map(e => [e.run_id, e.source]));
+        await Promise.all([...new Set(sourceOfRun.values())].map(sourceKey => recheckRunsForCurrentIdentity(
+            [...sourceOfRun].filter(([, s]) => s === sourceKey).map(([id]) => id), sourceKey)));
+    }, [recheckRunsForCurrentIdentity]);
+
+    function addEntries(newEntries) {
+        if (!newEntries || newEntries.length === 0) return;
         const getEntryDedupeKey = (d) => [
             d.run_id || d.source || '',
             d.prism_stage_index ?? d.stageIndex ?? d.workload?.stage ?? '',
@@ -2858,7 +2897,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             }
             return filteredNew.length > 0 ? [...prev, ...filteredNew] : prev;
         });
-    }, []);
+    }
 
     useEffect(() => {
         loadSubmissions();

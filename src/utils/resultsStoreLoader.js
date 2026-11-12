@@ -18,11 +18,13 @@
  * On the GCS backend the dashboard reads approved runs by listing the bucket through
  * /api/gcs (unchanged). On the S3 backend the bucket is never exposed to the browser,
  * so the dashboard pages GET /api/results, which applies the server's visibility rules,
- * and fetches each run with GET /api/results/:runId. Unlisted runs, which listings omit,
- * reach the dashboard through share links and submissions hydration, as on GCS.
+ * and fetches each run with GET /api/results/:runId. Signed-in users also get all their
+ * own runs (including unlisted ones). Other unlisted runs, which listings omit, reach the
+ * dashboard through share links and submissions hydration, as on GCS.
  */
 
 import { parseReportV02, stageToEntry, forwardBundleMetadata } from './benchmarkReportV02Parser';
+import { mapLimit } from './mapLimit';
 
 /** Source key for runs loaded from an S3-backed Results Store. */
 export const RESULTS_STORE_SOURCE_KEY = 'results:store';
@@ -77,24 +79,42 @@ export function parseResultsBundle(payload, { sourceKey, state = null, runId = p
     return entries;
 }
 
-async function mapLimit(items, limit, fn) {
-    const results = new Array(items.length);
-    let next = 0;
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        while (next < items.length) {
-            const i = next++;
-            results[i] = await fn(items[i]);
-        }
-    });
-    await Promise.all(workers);
-    return results;
-}
-
 const authHeaders = (token) => (token ? { 'X-Prism-Github-Token': token } : {});
 const fetchRun = (fetchFn, runId, headers) => fetchFn(`/api/results/${encodeURIComponent(runId)}`, { headers });
 
+const PUBLIC_STATES = new Set(['public', 'promoted']);
+
 /**
- * Loads every run visible to the caller from the Results Store API.
+ * Pages one listing into `items` (first occurrence of a runId wins). Returns an error
+ * message, or `truncated: true` if it stopped at maxPages with more pages left.
+ */
+async function listInto(items, { fetchFn, headers, query, pageLimit, maxPages }) {
+    let pageToken = null;
+    for (let page = 0; page < maxPages; page++) {
+        const qs = new URLSearchParams({ ...query, limit: String(pageLimit) });
+        if (pageToken) qs.set('pageToken', pageToken);
+        const res = await fetchFn(`/api/results?${qs.toString()}`, { headers });
+        if (!res.ok) {
+            const detail = await res.json().then(b => b?.error, () => null);
+            return { error: detail || `Results Store request failed (${res.status}).`, truncated: false };
+        }
+        const body = await res.json();
+        for (const item of body.items || []) {
+            if (item?.runId && !items.has(item.runId)) items.set(item.runId, item);
+        }
+        pageToken = body.nextPageToken || null;
+        if (!pageToken) return { error: null, truncated: false };
+    }
+    return { error: null, truncated: true };
+}
+
+/**
+ * Loads every run visible to the caller from the Results Store API: the general listing,
+ * plus (when signed in) all of the caller's own runs, so a withdrawn (unlisted) run stays
+ * in its owner's table.
+ *
+ * Public runs are fetched without the GitHub token, so they cost the server no GitHub
+ * API calls; only the caller's other runs (own or, for admins, pending review) send it.
  *
  * @param {{
  *   fetchFn?: typeof fetch,
@@ -103,7 +123,7 @@ const fetchRun = (fetchFn, runId, headers) => fetchFn(`/api/results/${encodeURIC
  *   maxPages?: number,
  *   concurrency?: number
  * }} [options]
- * @returns {Promise<{ entries: object[], runs: number, failed: number, error: string | null }>}
+ * @returns {Promise<{ entries: object[], runs: number, failed: number, truncated: boolean, error: string | null }>}
  */
 export async function loadResultsStoreRuns({
     fetchFn = fetch,
@@ -113,29 +133,21 @@ export async function loadResultsStoreRuns({
     concurrency = 6
 } = {}) {
     const headers = authHeaders(token);
-
-    const items = new Map(); // runId -> list item; pages may overlap
-    let pageToken = null;
-    for (let page = 0; page < maxPages; page++) {
-        const qs = new URLSearchParams({ limit: String(pageLimit) });
-        if (pageToken) qs.set('pageToken', pageToken);
-        const res = await fetchFn(`/api/results?${qs.toString()}`, { headers });
-        if (!res.ok) {
-            const detail = await res.json().then(b => b?.error, () => null);
-            return { entries: [], runs: 0, failed: 0, error: detail || `Results Store request failed (${res.status}).` };
-        }
-        const body = await res.json();
-        for (const item of body.items || []) {
-            if (item?.runId && !items.has(item.runId)) items.set(item.runId, item);
-        }
-        pageToken = body.nextPageToken || null;
-        if (!pageToken) break;
-    }
+    const items = new Map(); // runId -> list item; listings and pages may overlap
+    const listing = { fetchFn, headers, pageLimit, maxPages };
+    const all = await listInto(items, { ...listing, query: {} });
+    if (all.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: all.error };
+    const own = token ? await listInto(items, { ...listing, query: { own: 'true' } }) : { error: null, truncated: false };
+    if (own.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: own.error };
 
     let failed = 0;
     const perRun = await mapLimit([...items.values()], concurrency, async (item) => {
         try {
-            const res = await fetchRun(fetchFn, item.runId, headers);
+            let res = await fetchRun(fetchFn, item.runId, PUBLIC_STATES.has(item.state) ? {} : headers);
+            // A run that stopped being public since the listing needs the caller's identity.
+            if ((res.status === 401 || res.status === 403) && token && PUBLIC_STATES.has(item.state)) {
+                res = await fetchRun(fetchFn, item.runId, headers);
+            }
             if (res.ok) {
                 // The GET's state is newer than the listing's.
                 const payload = await res.json();
@@ -148,7 +160,7 @@ export async function loadResultsStoreRuns({
         return [];
     });
 
-    return { entries: perRun.flat(), runs: items.size, failed, error: null };
+    return { entries: perRun.flat(), runs: items.size, failed, truncated: all.truncated || own.truncated, error: null };
 }
 
 /**
@@ -159,10 +171,10 @@ export async function loadResultsStoreRuns({
  * neither list, so callers drop them.
  *
  * @param {string[]} runIds
- * @param {{ fetchFn?: typeof fetch, token?: string | null, concurrency?: number }} [options]
+ * @param {{ fetchFn?: typeof fetch, token?: string | null, concurrency?: number, sourceKey?: string }} [options]
  * @returns {Promise<{ entries: object[], unverified: string[] }>}
  */
-export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, token = null, concurrency = 6 } = {}) {
+export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, token = null, concurrency = 6, sourceKey = RESULTS_STORE_SOURCE_KEY } = {}) {
     const headers = authHeaders(token);
     const unverified = [];
     const perRun = await mapLimit(runIds, concurrency, async (runId) => {
@@ -170,7 +182,7 @@ export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, toke
             const res = await fetchRun(fetchFn, runId, headers);
             if ([401, 403, 404].includes(res.status)) return [];
             if (res.ok) {
-                return parseResultsBundle(await res.json(), { sourceKey: RESULTS_STORE_SOURCE_KEY })
+                return parseResultsBundle(await res.json(), { sourceKey })
                     .map(e => ({ ...e, _dynamicallyInjected: true }));
             }
         } catch {

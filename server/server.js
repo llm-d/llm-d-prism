@@ -94,15 +94,18 @@ function gcsBucketEntries() {
 // --- API: Shared Configuration ---
 app.get('/api/config', (req, res) => {
     const defaultBuckets = gcsBucketEntries();
+    // On S3, report the S3 store's location (null if unset) rather than a GCS default.
+    const s3Store = isS3ResultsStore() ? resolveS3ResultsStore() : null;
+    const s3Location = s3Store?.ok ? s3Store.location : null;
     const defaultProjects = process.env.DEFAULT_PROJECTS ? process.env.DEFAULT_PROJECTS.split(',') : [];
     const gitInfo = parseGitCommit(process.env.GIT_COMMIT);
 
     res.json({
         buckets: defaultBuckets,
         resultsStoreBackend: isS3ResultsStore() ? 's3' : 'gcs',
-        resultsStoreBucket: getResultsStoreBucket(),
-        resultsStorePrefix: getResultsStorePrefix(),
-        resultsStorePath: getResultsStoreUploadPath(),
+        resultsStoreBucket: s3Store ? (s3Location?.bucket ?? null) : getResultsStoreBucket(),
+        resultsStorePrefix: s3Store ? (s3Location?.prefix ?? null) : getResultsStorePrefix(),
+        resultsStorePath: s3Store ? (s3Location ? `${s3Location.bucket}/${s3Location.prefix.replace(/\/+$/, '')}` : null) : getResultsStoreUploadPath(),
         projects: defaultProjects.map(p => p.trim()).filter(p => p),
         hostProject: process.env.GOOGLE_CLOUD_PROJECT || null,
         siteName: process.env.SITE_NAME || null,

@@ -46,6 +46,7 @@ import { PrismSubmissionStateSchema, type PrismResultPayload, type PrismSubmissi
 import type { ListResultsOptions, ListResultsResult, ResultsListItem } from '../gcs.ts';
 import { buildListFilters } from '../listFilters.ts';
 import { normalizeReviewers } from '../../../src/utils/benchmarkReportV02Parser.js';
+import { mapLimit } from '../../../src/utils/mapLimit.js';
 import { ResultsStoreError, type S3ResultsStoreLocation } from '../backend.ts';
 import { randomUUID } from 'crypto';
 
@@ -250,20 +251,6 @@ export interface S3ResultsStoreConfig extends Partial<Pick<S3ResultsStoreLocatio
      * of finished scans.
      */
     summaryTtlMs?: number;
-}
-
-// eslint-disable-next-line no-unused-vars
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let next = 0;
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        while (next < items.length) {
-            const i = next++;
-            results[i] = await fn(items[i]);
-        }
-    });
-    await Promise.all(workers);
-    return results;
 }
 
 /** Revision id stored on every write; objects written by other tools fall back to ETag + LastModified. */

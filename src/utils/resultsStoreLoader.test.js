@@ -114,17 +114,51 @@ describe('loadResultsStoreRuns', () => {
         expect(r.entries.map(e => e.source_info.submission_state)).toEqual(['unlisted']);
     });
 
-    it('sends the GitHub token when signed in, and none when not', async () => {
+    it('sends the GitHub token to the listings when signed in, and none when not', async () => {
         const fetchFn = vi.fn(async () => jsonResponse({ items: [], nextPageToken: null }));
         await loadResultsStoreRuns({ fetchFn, token: 'tok' });
+        expect(fetchFn.mock.calls.map(([u, o]) => [u, o.headers])).toEqual([
+            ['/api/results?limit=100', { 'X-Prism-Github-Token': 'tok' }],
+            ['/api/results?own=true&limit=100', { 'X-Prism-Github-Token': 'tok' }]
+        ]);
+        fetchFn.mockClear();
         await loadResultsStoreRuns({ fetchFn });
-        expect(fetchFn.mock.calls[0][1].headers).toEqual({ 'X-Prism-Github-Token': 'tok' });
-        expect(fetchFn.mock.calls[1][1].headers).toEqual({});
+        expect(fetchFn.mock.calls.map(([u, o]) => [u, o.headers])).toEqual([['/api/results?limit=100', {}]]);
+    });
+
+    it("keeps the caller's own runs that listings omit (e.g. withdrawn = unlisted)", async () => {
+        const fetchFn = vi.fn(async (url) => {
+            if (url.startsWith('/api/results?own=true')) return jsonResponse({ items: [{ runId: 'mine', state: 'unlisted' }, { runId: 'pub', state: 'public' }] });
+            if (url.startsWith('/api/results?')) return jsonResponse({ items: [{ runId: 'pub', state: 'public' }] });
+            const id = url.split('/').pop();
+            return jsonResponse({ ...bundle(id, 1), submission_state: id === 'mine' ? 'unlisted' : 'public' });
+        });
+        const r = await loadResultsStoreRuns({ fetchFn, token: 'tok' });
+        expect(r.runs).toBe(2);
+        expect(r.entries.map(e => [e.run_id, e.source_info.submission_state]).sort()).toEqual([['mine', 'unlisted'], ['pub', 'public']]);
+    });
+
+    it('fetches public runs without the token, others with it, and retries a run that stopped being public', async () => {
+        const fetchFn = vi.fn(async (url, { headers }) => {
+            if (url.startsWith('/api/results?')) {
+                return jsonResponse({ items: url.includes('own=true') ? [] : [
+                    { runId: 'pub', state: 'public' }, { runId: 'pending', state: 'submitted_pending_review' }, { runId: 'flipped', state: 'public' }
+                ] });
+            }
+            const id = url.split('/').pop();
+            if (id === 'flipped' && !headers['X-Prism-Github-Token']) return jsonResponse({ error: 'forbidden' }, 403);
+            return jsonResponse(bundle(id, 1));
+        });
+        const r = await loadResultsStoreRuns({ fetchFn, token: 'tok' });
+        expect(r).toMatchObject({ runs: 3, failed: 0 });
+        const runCalls = fetchFn.mock.calls.filter(([u]) => !u.includes('?')).map(([u, o]) => [u.split('/').pop(), !!o.headers['X-Prism-Github-Token']]);
+        expect(runCalls).toEqual(expect.arrayContaining([['pub', false], ['pending', true], ['flipped', false], ['flipped', true]]));
+        expect(runCalls).toHaveLength(4);
     });
 
     it('reports a list failure with the server message and returns no entries', async () => {
         const fetchFn = async () => jsonResponse({ error: 'Results Store is not configured' }, 503);
-        expect(await loadResultsStoreRuns({ fetchFn })).toEqual({ entries: [], runs: 0, failed: 0, error: 'Results Store is not configured' });
+        expect(await loadResultsStoreRuns({ fetchFn })).toEqual({ entries: [], runs: 0, failed: 0, truncated: false, error: 'Results Store is not configured' });
     });
 
     it('counts runs that fail to load without failing the whole load', async () => {
@@ -139,12 +173,15 @@ describe('loadResultsStoreRuns', () => {
         expect(r.entries.map(e => e.run_id)).toEqual(['b']);
     });
 
-    it('stops after maxPages even if the server keeps returning tokens', async () => {
+    it('stops after maxPages and reports the load as truncated', async () => {
         const fetchFn = vi.fn(async (url) => url.startsWith('/api/results?')
             ? jsonResponse({ items: [], nextPageToken: 'again' })
             : jsonResponse(bundle('x', 1)));
-        await loadResultsStoreRuns({ fetchFn, maxPages: 3 });
+        const r = await loadResultsStoreRuns({ fetchFn, maxPages: 3 });
         expect(fetchFn).toHaveBeenCalledTimes(3);
+        expect(r).toMatchObject({ truncated: true, error: null });
+        const done = await loadResultsStoreRuns({ fetchFn: async () => jsonResponse({ items: [], nextPageToken: null }) });
+        expect(done.truncated).toBe(false);
     });
 });
 

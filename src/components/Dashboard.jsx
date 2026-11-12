@@ -1172,7 +1172,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
                     if (parsedEntries.length > 0) {
                         if (injectDynamicEntries) {
-                            injectDynamicEntries(parsedEntries, { token });
+                            await injectDynamicEntries(parsedEntries, { token });
                         }
                         if (setSelectedSources) {
                             setSelectedSources(prev => {
