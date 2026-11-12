@@ -52,7 +52,7 @@ const getPrefixForBucket = (entry) => {
 
 export const useDashboardData = (initialState, dashboardState) => {
     const { setSelectedBenchmarks } = dashboardState;
-    const { accessToken, user } = useGitHubAuth();
+    const { accessToken, user, isPlaygroundMode } = useGitHubAuth();
     const pendingRequests = useRef(new Map());
     const [data, setData] = useState([]);
     const dataRef = useRef(data);
@@ -926,32 +926,47 @@ export const useDashboardData = (initialState, dashboardState) => {
     // A call while a load for the same identity is in flight shares that load, unless
     // `force` (a refresh after a change) asks for fresh data. Only the latest load applies
     // its result, so a slow, older one can't overwrite a newer one.
-    const resultsStoreLoad = useRef(null); // { token, promise, done, settled } of the latest load
+    const resultsStoreLoad = useRef(null); // { token, promise, done } of the latest load
+    // True while the latest Results Store load runs, so code that acts on "all data loaded"
+    // (e.g. the Dashboard's saved-filter cleanup) can wait for it.
+    const [resultsStoreLoading, setResultsStoreLoading] = useState(false);
+    // Admins (and everyone in playground mode) also get every unlisted run, as on GCS.
+    const listAllUnlistedRef = useRef(false);
+    useEffect(() => {
+        const admin = !!isPlaygroundMode || user?.permission === 'admin';
+        if (admin === listAllUnlistedRef.current) return;
+        listAllUnlistedRef.current = admin;
+        if (admin) void loadResultsStoreSource(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadResultsStoreSource reads refs
+    }, [isPlaygroundMode, user?.permission]);
     const loadResultsStoreSource = (force = false) => {
         if (resultsStoreBackendRef.current !== 's3') return Promise.resolve();
         const token = accessTokenRef.current || null;
         const current = resultsStoreLoad.current;
         if (!force && current && !current.done && current.token === token) return current.promise;
-        // `settled` resolves when the load finishes or a newer load replaces it, so waiting
-        // for "the latest load" never hangs on a superseded one.
-        let supersede;
-        const load = { token, done: false, supersede: () => supersede() };
-        const superseded = new Promise(r => { supersede = r; });
-        current?.supersede?.();
+        const load = { token, done: false };
         resultsStoreLoad.current = load;
+        setResultsStoreLoading(true);
         load.promise = runResultsStoreLoad(token, () => resultsStoreLoad.current === load)
-            .finally(() => { load.done = true; });
-        load.settled = Promise.race([load.promise.catch(() => {}), superseded]);
+            .finally(() => {
+                load.done = true;
+                if (resultsStoreLoad.current === load) setResultsStoreLoading(false);
+            });
         return load.promise;
     };
 
+    const truncationWarned = useRef(false);
+    // Listings the latest Results Store load could not complete ('all', 'own', 'unlisted');
+    // hydration then fetches those runs itself instead of assuming the store covers them.
+    const failedStoreListings = useRef(new Set());
     const runResultsStoreLoad = async (token, isLatest) => {
         const taskId = RESULTS_STORE_SOURCE_KEY;
         const profile = { bucketName: 'store', type: 'results', alias: 'Results Store', files: [] };
         updateTaskProgress(taskId, { name: 'Results Store', type: 'results', status: 'loading', currentAction: 'Listing runs' });
         try {
-            const result = await loadResultsStoreRuns({ token });
+            const result = await loadResultsStoreRuns({ token, allUnlisted: listAllUnlistedRef.current });
             if (!isLatest()) return;
+            failedStoreListings.current = new Set(result.error ? ['all'] : result.failedListings || []);
             if (result.error) {
                 updateTaskProgress(taskId, { status: 'failed', currentAction: result.error });
                 setGcsProfiles(prev => [
@@ -980,12 +995,16 @@ export const useDashboardData = (initialState, dashboardState) => {
                 entryCount: result.runs,
                 loadedAt: new Date().toISOString(),
                 error: [
+                    result.partialError && `some runs could not be listed (${result.partialError})`,
                     result.failed > 0 && `${result.failed} run(s) could not be loaded`,
                     result.truncated && `only the first ${result.runs} runs were loaded`
                 ].filter(Boolean).join('; ') || null
             }, { keep: d => d._dynamicallyInjected && d.run_id && !listedRunIds.has(d.run_id) && !checked.has(d.run_id) });
             updateTaskProgress(taskId, { status: 'completed', loaded: result.runs, total: result.runs, currentAction: `Loaded ${result.runs} run(s)` });
-            if (result.truncated) addToast(`Results Store: only the first ${result.runs} runs were loaded.`, 'error');
+            if (result.truncated && !truncationWarned.current) {
+                truncationWarned.current = true; // once per session; the source's error keeps it visible
+                addToast(`Results Store: only the first ${result.runs} runs were loaded.`, 'error');
+            }
         } catch (err) {
             if (!isLatest()) return;
             console.warn('[useDashboardData] Results Store load failed:', err);
@@ -1495,8 +1514,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         setGcsError(null);
 
         // S3-backed Results Store (no-op on GCS): loaded via /api/results in parallel with
-        // the other sources. `loading` stays true until it is done too, so nothing treats a
-        // partial dataset as complete (e.g. the Dashboard's saved-filter cleanup).
+        // the other sources and not awaited; `resultsStoreLoading` tracks it.
         void loadResultsStoreSource(forceRefresh);
 
         const apisToFetch = [...apiConfigs];
@@ -1813,10 +1831,6 @@ export const useDashboardData = (initialState, dashboardState) => {
             console.error("loadAllData Error:", e);
             setGcsError(`Load failed: ${e.message}`);
         } finally {
-            // The latest load, which may be newer than the one started above.
-            for (let load; (load = resultsStoreLoad.current) && !load.done;) {
-                await load.settled;
-            }
             setLoading(false);
             setGcsLoading(false);
         }
@@ -2645,16 +2659,28 @@ export const useDashboardData = (initialState, dashboardState) => {
             // Hydrate any server submissions (e.g. uploaded via CLI) that are missing from `data`
             // due to a cached GCS bucket snapshot or unlisted filtering.
             if (listDataItems.length > 0) {
-                const existingRunIds = new Set(
-                    (dataRef.current || [])
-                        .map(d => d.run_id || (d.source?.startsWith('brv02:') ? d.source.slice(6) : null))
-                        .filter(Boolean)
-                );
-                const missingItems = listDataItems.filter(item => item.runId && !existingRunIds.has(item.runId));
                 // Hydrated runs are tagged with the backend's source key ('gcs:llm-d-benchmarks'
-                // on GCS, as before; 'results:store' on S3), which is known once /api/config
-                // has been read. Before that, hydration is deferred until it has.
+                // on GCS, as before; 'results:store' on S3), known once /api/config has been
+                // read. On S3 the Results Store load already includes the caller's own runs
+                // (and, for admins, every unlisted run), so only other users' unlisted runs
+                // are hydrated, and nothing is fetched twice.
                 const hydrate = async () => {
+                    await configLoaded.promise;
+                    const me = user?.username?.toLowerCase();
+                    const failed = failedStoreListings.current;
+                    const s3Covered = item => {
+                        if (resultsStoreBackendRef.current !== 's3' || failed.has('all')) return false;
+                        if (item.state !== 'unlisted') return true; // in the general listing
+                        if (item.github_author?.username?.toLowerCase() === me) return !failed.has('own');
+                        return listAllUnlistedRef.current && !failed.has('unlisted');
+                    };
+                    const existingRunIds = new Set(
+                        (dataRef.current || [])
+                            .map(d => d.run_id || (d.source?.startsWith('brv02:') ? d.source.slice(6) : null))
+                            .filter(Boolean)
+                    );
+                    const missingItems = listDataItems.filter(item => item.runId && !existingRunIds.has(item.runId) && !s3Covered(item));
+                    if (missingItems.length === 0) return;
                     const hydrationSourceKey = getResultsStoreSourceKey({ resultsStoreBackend: resultsStoreBackendRef.current });
                     const hydratedEntries = [];
                     await Promise.all(missingItems.map(async (item) => {
@@ -2678,16 +2704,13 @@ export const useDashboardData = (initialState, dashboardState) => {
                         setSelectedSources(prev => new Set([...prev, hydrationSourceKey]));
                     }
                 };
-                if (missingItems.length > 0) {
-                    if (configLoaded.done) {
-                        await hydrate();
-                    } else {
-                        // Submissions are already set; only these extra dashboard rows wait.
-                        // They are injected with the token they were fetched with, so a
-                        // logout meanwhile is handled by injectDynamicEntries.
-                        void configLoaded.promise.then(hydrate)
-                            .catch(err => console.warn('[useDashboardData] Submissions hydration failed:', err));
-                    }
+                if (configLoaded.done) {
+                    await hydrate();
+                } else {
+                    // Submissions are already set; only these extra dashboard rows wait. They
+                    // are injected with the token they were fetched with, so a logout
+                    // meanwhile is handled by injectDynamicEntries.
+                    void hydrate().catch(err => console.warn('[useDashboardData] Submissions hydration failed:', err));
                 }
             }
 
@@ -2699,7 +2722,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         } finally {
             setIsLoadingSubmissions(false);
         }
-    }, [accessToken, brv02Runs, addToast, mapStateToStatus, configLoaded]);
+    }, [accessToken, brv02Runs, addToast, mapStateToStatus, configLoaded, user?.username]);
 
     const updateSubmissionStatus = useCallback(async (runId, status, feedback = '') => {
         setIsLoadingSubmissions(true);
@@ -2858,21 +2881,17 @@ export const useDashboardData = (initialState, dashboardState) => {
 
     // `token`: the GitHub token the entries were fetched with. If it is no longer the
     // current one (logout, account switch, or a token refresh), only runs anyone may open
-    // (public, promoted, unlisted) are added right away. The others are fetched once more
-    // with the current token (not awaited, never repeated) and added if it may see them.
-    const injectDynamicEntries = useCallback((newEntries, { token, refetch = true } = {}) => {
-        const currentToken = accessTokenRef.current || null;
-        if (newEntries?.length && token !== undefined && (token || null) !== currentToken) {
-            const isOpen = e => ['public', 'promoted', 'unlisted'].includes(e.source_info?.submission_state);
-            const sourceOfRun = new Map(newEntries.filter(e => !isOpen(e) && e.run_id).map(e => [e.run_id, e.source]));
-            for (const sourceKey of refetch ? new Set(sourceOfRun.values()) : []) {
-                const runIds = [...sourceOfRun].filter(([, s]) => s === sourceKey).map(([id]) => id);
-                revalidateResultsStoreRuns(runIds, { token: currentToken, sourceKey })
-                    .then(({ entries }) => injectDynamicEntries(entries, { token: currentToken, refetch: false }), () => {});
-            }
-            newEntries = newEntries.filter(isOpen);
+    // (public, promoted, unlisted) are added, and the call returns false. Private runs the
+    // current identity may see come back through what a token change re-runs: the S3
+    // Results Store reload, submissions hydration, and the GCS bucket listing.
+    const injectDynamicEntries = useCallback((newEntries, { token } = {}) => {
+        let complete = true;
+        if (newEntries?.length && token !== undefined && (token || null) !== (accessTokenRef.current || null)) {
+            const open = newEntries.filter(e => ['public', 'promoted', 'unlisted'].includes(e.source_info?.submission_state));
+            complete = open.length === newEntries.length;
+            newEntries = open;
         }
-        if (!newEntries || newEntries.length === 0) return;
+        if (!newEntries || newEntries.length === 0) return complete;
         const getEntryDedupeKey = (d) => [
             d.run_id || d.source || '',
             d.prism_stage_index ?? d.stageIndex ?? d.workload?.stage ?? '',
@@ -2892,6 +2911,7 @@ export const useDashboardData = (initialState, dashboardState) => {
             }
             return filteredNew.length > 0 ? [...prev, ...filteredNew] : prev;
         });
+        return complete;
     }, []);
 
     useEffect(() => {
@@ -2946,7 +2966,7 @@ export const useDashboardData = (initialState, dashboardState) => {
         expandedIntegration, setExpandedIntegration,
         awsBucketConfigs, setAwsBucketConfigs,
         fetchAWSBucketData, handleAddAWSBucket, removeAWSBucket,
-        resultsStoreBackend, configResolved,
+        resultsStoreBackend, configResolved, resultsStoreLoading,
         handleAddGCSBucket, removeGCSBucket,
         brv02Runs, brv02Error, setBrv02Error, brv02Loading, handleBrv02Upload, handleValidatedUpload, removeBrv02Run, promoteStagedRunId, clearAllBrv02Runs, scannedFilenames,
         brv02CustomLabels, setBrv02CustomLabels,

@@ -40,7 +40,7 @@ async function fetchAndAuthorizeResult(req: Request, runId: string): Promise<{
 
     if (token) {
         try {
-            const authResult = await validateGitHubToken(token);
+            const authResult = await validateGitHubToken(token, { cached: true });
             username = authResult.username;
             permission = authResult.permission;
         } catch (e: any) {

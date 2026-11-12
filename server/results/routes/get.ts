@@ -52,7 +52,7 @@ export async function getResultsHandler(req: Request, res: Response<ResultsGetRe
 
     if (token) {
         try {
-            const authResult = await validateGitHubToken(token);
+            const authResult = await validateGitHubToken(token, { cached: true });
             username = authResult.username;
             permission = authResult.permission;
         } catch (e: any) {

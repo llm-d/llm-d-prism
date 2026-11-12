@@ -231,7 +231,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
         handleValidatedUpload,
         submissions, isLoadingSubmissions, loadSubmissions,
         submissionsMap, injectDynamicEntries,
-        resultsStoreBackend, configResolved
+        resultsStoreBackend, configResolved, resultsStoreLoading
     } = dashboardData;
 
     const fetchedSharedUuidsRef = useRef(new Set());
@@ -1089,7 +1089,8 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
 
     // Sanitize activeFilters on load to remove stale filters that are not in the dataset
     useEffect(() => {
-        if (loading || baseData.length === 0) return;
+        // Also wait for the S3 Results Store, which loads independently of `loading`.
+        if (loading || resultsStoreLoading || baseData.length === 0) return;
 
         setActiveFilters(prev => {
             const next = { ...prev };
@@ -1111,7 +1112,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             }
             return changed ? next : prev;
         });
-    }, [loading, baseData, filterOptions.models]);
+    }, [loading, resultsStoreLoading, baseData, filterOptions.models]);
 
 
     // Fetch missing shared runs (e.g. from share links)
@@ -1206,7 +1207,7 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
     useEffect(() => {
         const isAnySourceLoading = gcsProfiles.some(p => p.loading);
         console.log("[Sync Effect] Running. loading:", loading, "isRestoringConnections:", isRestoringConnections, "isAnySourceLoading:", isAnySourceLoading, "filteredBySource length:", filteredBySource.length);
-        if (loading || isRestoringConnections || isAnySourceLoading || isFetchingSharedRuns || filteredBySource.length === 0) return;
+        if (loading || resultsStoreLoading || isRestoringConnections || isAnySourceLoading || isFetchingSharedRuns || filteredBySource.length === 0) return;
 
         const currentKeys = filteredBySource.map(d => getBenchmarkKey(d));
         const validKeys = new Set(currentKeys);
@@ -1304,17 +1305,17 @@ const Dashboard = ({ mode = 'browser', onNavigateBack, onNavigate, dashboardStat
             if (isFirstLoad.current) isFirstLoad.current = false;
             return changed ? next : prev;
         });
-    }, [loading, isRestoringConnections, gcsProfiles, filteredBySource, getBenchmarkKey, initialState, isFetchingSharedRuns]);
+    }, [loading, resultsStoreLoading, isRestoringConnections, gcsProfiles, filteredBySource, getBenchmarkKey, initialState, isFetchingSharedRuns]);
 
     // Clear baseline if its benchmark is no longer present in the visible
     // dataset (e.g., the user removed an upload or filtered out its source).
     useEffect(() => {
         if (!baselineBenchmarkKey) return;
-        if (loading || isRestoringConnections) return;
+        if (loading || resultsStoreLoading || isRestoringConnections) return;
         if (filteredBySource.length === 0) return;
         const stillVisible = filteredBySource.some(d => getBenchmarkKey(d) === baselineBenchmarkKey);
         if (!stillVisible) setBaselineBenchmarkKey(null);
-    }, [baselineBenchmarkKey, filteredBySource, loading, isRestoringConnections]);
+    }, [baselineBenchmarkKey, filteredBySource, loading, resultsStoreLoading, isRestoringConnections]);
 
     // Derive selectedModels for compatibility with Header/components
     const selectedModels = useMemo(() => {

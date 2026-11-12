@@ -595,7 +595,8 @@ app.all('/api/gcs/*', async (req, res) => {
 
         if (githubToken) {
             try {
-                const authResult = await validateGitHubToken(githubToken);
+                // Reads may reuse a recent validation (see oauth.ts); writes validate afresh.
+                const authResult = await validateGitHubToken(githubToken, { cached: req.method === 'GET' || req.method === 'HEAD' });
                 username = authResult.username;
                 permission = authResult.permission;
             } catch (e) {

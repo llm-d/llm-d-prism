@@ -59,7 +59,7 @@ const bundle = (runId, state) => ({
 const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
 
 /** A fake server: `runs` maps runId -> { state, owner }; visibility as the real routes (admin* see all). */
-function installServer(runs, { backend = 's3', playground = false, listDelayMs = 0, localDelayMs = () => 0 } = {}) {
+function installServer(runs, { backend = 's3', playground = false, listDelayMs = 0, localDelayMs = () => 0, failList = () => false } = {}) {
     const calls = [];
     globalThis.fetch = window.fetch = vi.fn(async (url, opts = {}) => {
         const u = String(url);
@@ -76,6 +76,7 @@ function installServer(runs, { backend = 's3', playground = false, listDelayMs =
         if (u.startsWith('/api/results?')) {
             const delay = typeof listDelayMs === 'function' ? listDelayMs(u) : listDelayMs;
             if (delay) await new Promise(r => setTimeout(r, delay));
+            if (failList(u)) return json({ error: 'listing failed' }, 500);
             const own = u.includes('own=true');
             const status = new URL(u, 'http://x').searchParams.get('status');
             const items = Object.entries(runs)
@@ -97,8 +98,14 @@ function installServer(runs, { backend = 's3', playground = false, listDelayMs =
     return calls;
 }
 
-function renderWithToken(token) {
-    let auth = { user: token ? { username: token.replace('tok-', ''), permission: 'user' } : null, accessToken: token, isAuthenticated: !!token, isLoading: false, isPlaygroundMode: false };
+const userFor = (t) => {
+    if (!t) return null;
+    const username = t.replace('tok-', '').split('#')[0];
+    return { username, permission: username.startsWith('admin') ? 'admin' : 'user' };
+};
+
+function renderWithToken(token, { playground = false } = {}) {
+    let auth = { user: userFor(token), accessToken: token, isAuthenticated: !!token, isLoading: false, isPlaygroundMode: playground };
     const wrapper = ({ children }) => <GitHubAuthContext.Provider value={auth}>{children}</GitHubAuthContext.Provider>;
     // Wired as App.jsx does.
     const hook = renderHook(() => {
@@ -106,7 +113,7 @@ function renderWithToken(token) {
         return useDashboardData(dashboardState.initialState, dashboardState);
     }, { wrapper });
     const setToken = (t) => {
-        auth = { ...auth, accessToken: t, user: t ? { username: t.replace('tok-', ''), permission: 'user' } : null, isAuthenticated: !!t };
+        auth = { ...auth, accessToken: t, user: userFor(t), isAuthenticated: !!t };
         hook.rerender();
     };
     return { ...hook, setToken };
@@ -147,7 +154,7 @@ describe('useDashboardData with the S3 Results Store', () => {
     it('keeps a withdrawn run in the table in playground mode (no token)', async () => {
         const runs = { r1: { state: 'public', owner: 'anonymous' } };
         installServer(runs, { playground: true });
-        const { result } = renderWithToken(null);
+        const { result } = renderWithToken(null, { playground: true });
         await act(async () => { await result.current.fetchConfig(); });
         await act(async () => { await result.current.loadAllData(null, true); });
         runs.r1.state = 'unlisted';
@@ -155,86 +162,103 @@ describe('useDashboardData with the S3 Results Store', () => {
         await waitFor(() => expect(storeRuns(result)).toEqual(['r1:unlisted']));
     });
 
-    it('keeps `loading` true until the Results Store load has finished', async () => {
-        installServer({ r1: { state: 'public', owner: 'bob' } }, { listDelayMs: 50 });
+    it('the store load does not list other users\' unlisted runs for non-admins (as on GCS)', async () => {
+        const runs = { theirs: { state: 'unlisted', owner: 'bob' }, pub: { state: 'public', owner: 'bob' } };
+        const calls = installServer(runs);
+        const { result } = renderWithToken('tok-alice');
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await waitFor(() => expect(storeRuns(result)).toContain('pub:public'));
+        // The store load doesn't list all unlisted runs for non-admins. (Hydration still adds
+        // the most recent ones, as upstream does on GCS.)
+        expect(calls.some(([u]) => u.startsWith('/api/results?status=unlisted&limit=100'))).toBe(false);
+    });
+
+    it('tracks the store load in `resultsStoreLoading` without holding up `loading`', async () => {
+        installServer({ r1: { state: 'public', owner: 'bob' } }, { listDelayMs: url => (url.includes('limit=100') ? 400 : 0) });
         const { result } = renderWithToken(null);
         await act(async () => { await result.current.fetchConfig(); });
-        let load;
-        act(() => { load = result.current.loadAllData(null, true); });
-        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
-        expect(result.current.loading).toBe(true);
+        await act(async () => { await result.current.loadAllData(null, true); });
+        expect(result.current.loading).toBe(false); // other sources are done
+        expect(result.current.resultsStoreLoading).toBe(true);
         expect(storeRuns(result)).toEqual([]);
-        await act(async () => { await load; });
-        expect(result.current.loading).toBe(false);
+        await waitFor(() => expect(result.current.resultsStoreLoading).toBe(false));
         expect(storeRuns(result)).toEqual(['r1:public']);
     });
 
-    it('keeps `loading` true while a newer, overlapping Results Store load is still running', async () => {
-        // First call: its store load is instant, its other sources take 300 ms. Second call,
-        // started meanwhile: its store load takes 1.5 s. When the first call finishes, the
-        // second store load is still running, so `loading` must stay true.
+    it('keeps `resultsStoreLoading` true through a newer load, and not stuck on a superseded one', async () => {
         let phase = 'first';
         installServer({ r1: { state: 'public', owner: 'bob' } }, {
-            localDelayMs: () => (phase === 'first' ? 300 : 0),
-            listDelayMs: url => (phase === 'second' && url.includes('limit=100') ? 1500 : 0)
+            // The first load's store listing never answers; the second's takes 300 ms.
+            listDelayMs: url => (url.includes('limit=100') ? (phase === 'first' ? 1e9 : 300) : 0)
         });
         const { result } = renderWithToken(null);
         await act(async () => { await result.current.fetchConfig(); });
-        let first, second;
-        act(() => { first = result.current.loadAllData(null, true); });
-        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
-        phase = 'second';
-        act(() => { second = result.current.loadAllData(null, true); });
-        await act(async () => { await new Promise(r => setTimeout(r, 600)); });
-        expect(result.current.loading).toBe(true);
-        await act(async () => { await Promise.all([first, second]); });
-        expect(result.current.loading).toBe(false);
-        expect(storeRuns(result)).toEqual(['r1:public']);
-    });
-
-    it('does not hang on a superseded Results Store load whose request never answers', async () => {
-        let phase = 'first';
-        installServer({ r1: { state: 'public', owner: 'bob' } }, {
-            // The first load's store listing never answers.
-            listDelayMs: url => (phase === 'first' && url.includes('limit=100') ? 1e9 : 0)
-        });
-        const { result } = renderWithToken(null);
-        await act(async () => { await result.current.fetchConfig(); });
-        let firstDone = false;
-        act(() => { result.current.loadAllData(null, true).then(() => { firstDone = true; }); });
-        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        await act(async () => { await result.current.loadAllData(null, true); });
         phase = 'second';
         await act(async () => { await result.current.loadAllData(null, true); });
-        await waitFor(() => expect(firstDone).toBe(true));
-        expect(result.current.loading).toBe(false);
+        await act(async () => { await new Promise(r => setTimeout(r, 100)); });
+        expect(result.current.resultsStoreLoading).toBe(true);
+        await waitFor(() => expect(result.current.resultsStoreLoading).toBe(false));
         expect(storeRuns(result)).toEqual(['r1:public']);
     });
 
-    it('stale-token results: open runs are added at once, the rest after one re-fetch (GCS admin)', async () => {
-        // GCS: no Results Store reload on token change, and hydration only fetches the
-        // caller's own and unlisted runs, so only the re-fetch can add bob's pending run.
+    it('an older store load finishing late does not clear `resultsStoreLoading` for a newer one', async () => {
+        let phase = 'first';
+        installServer({ r1: { state: 'public', owner: 'bob' } }, {
+            // First load's listing answers at 300 ms, the second's at 900 ms.
+            listDelayMs: url => (url.includes('limit=100') ? (phase === 'first' ? 300 : 900) : 0)
+        });
+        const { result } = renderWithToken(null);
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { await result.current.loadAllData(null, true); });
+        phase = 'second';
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await act(async () => { await new Promise(r => setTimeout(r, 500)); }); // first done, second not
+        expect(result.current.resultsStoreLoading).toBe(true);
+        await waitFor(() => expect(result.current.resultsStoreLoading).toBe(false), { timeout: 2000 });
+    });
+
+    it('hydration on S3 skips runs the store load covers, so nothing is fetched twice', async () => {
+        const runs = { mine: { state: 'unlisted', owner: 'alice' } };
+        const calls = installServer(runs, { listDelayMs: url => (url.includes('limit=100') ? 100 : 0) });
+        const { result } = renderWithToken('tok-alice');
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await act(async () => { await result.current.loadSubmissions(true); });
+        await waitFor(() => expect(storeRuns(result)).toEqual(['mine:unlisted']));
+        await act(async () => { await new Promise(r => setTimeout(r, 200)); });
+        expect(calls.filter(([u]) => u === '/api/results/mine')).toHaveLength(1);
+    });
+
+    it('hydration fetches own runs itself when the store\'s own listing failed', async () => {
+        const runs = { mine: { state: 'unlisted', owner: 'alice' } };
+        installServer(runs, { failList: url => url.includes('own=true&limit=100') });
+        const { result } = renderWithToken('tok-alice');
+        await act(async () => { await result.current.fetchConfig(); });
+        await act(async () => { await result.current.loadAllData(null, true); });
+        await waitFor(() => expect(result.current.resultsStoreLoading).toBe(false));
+        await act(async () => { await result.current.loadSubmissions(true); });
+        await waitFor(() => expect(storeRuns(result)).toEqual(['mine:unlisted']));
+    });
+
+    it('stale-token results: adds only open runs, makes no extra requests, and returns false', async () => {
         const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' }, pub: { state: 'public', owner: 'bob' }, unl: { state: 'unlisted', owner: 'bob' } };
         const calls = installServer(runs, { backend: 'gcs' });
         const { result } = renderWithToken('tok-admin#2');
         await act(async () => { await result.current.fetchConfig(); });
+        const before = calls.length;
         const entries = Object.keys(runs).flatMap(id => parseResultsBundle(bundle(id, runs[id].state), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY }));
-        act(() => { result.current.injectDynamicEntries(entries, { token: 'tok-admin#1' }); });
+        let returned;
+        act(() => { returned = result.current.injectDynamicEntries(entries, { token: 'tok-admin#1' }); });
+        expect(returned).toBe(false);
         expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pub:public', 'unl:unlisted']);
-        await waitFor(() => expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pend:submitted_pending_review', 'pub:public', 'unl:unlisted']));
-        expect(calls.filter(([u]) => u === '/api/results/pend')).toEqual([['/api/results/pend', 'tok-admin#2']]);
-    });
-
-    it('re-fetches a stale-token run once, even if the token changes again meanwhile', async () => {
-        const runs = { pend: { state: 'submitted_pending_review', owner: 'bob' } };
-        const calls = installServer(runs, { backend: 'gcs' });
-        const { result, setToken } = renderWithToken('tok-admin#2');
-        await act(async () => { await result.current.fetchConfig(); });
-        const entries = parseResultsBundle(bundle('pend', 'submitted_pending_review'), { sourceKey: GCS_RESULTS_STORE_SOURCE_KEY });
-        act(() => { result.current.injectDynamicEntries(entries, { token: 'tok-admin#1' }); });
-        await act(async () => { setToken('tok-admin#3'); });
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
-        expect(calls.filter(([u]) => u === '/api/results/pend')).toHaveLength(1);
-        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual([]);
+        expect(calls.slice(before).filter(([u]) => u.startsWith('/api/results/'))).toEqual([]);
+        // With the current token, everything is added.
+        act(() => { returned = result.current.injectDynamicEntries(entries, { token: 'tok-admin#2' }); });
+        expect(returned).toBe(true);
+        expect(storeRuns(result, GCS_RESULTS_STORE_SOURCE_KEY)).toEqual(['pend:submitted_pending_review', 'pub:public', 'unl:unlisted']);
     });
 
     it('after a token refresh, the reload brings back a private run the identity may see', async () => {

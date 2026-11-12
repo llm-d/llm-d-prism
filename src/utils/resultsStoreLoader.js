@@ -18,8 +18,9 @@
  * On the GCS backend the dashboard reads approved runs by listing the bucket through
  * /api/gcs (unchanged). On the S3 backend the bucket is never exposed to the browser,
  * so the dashboard pages GET /api/results, which applies the server's visibility rules,
- * and fetches each run with GET /api/results/:runId. Unlisted runs, which the general
- * listing omits, are listed separately (as submissions hydration also does on GCS).
+ * and fetches each run with GET /api/results/:runId. The general listing omits unlisted
+ * runs, so the caller's own runs are listed too, and for admins all unlisted runs: the
+ * same runs the GCS dashboard shows (approved runs plus own runs; everything for admins).
  */
 
 import { parseReportV02, stageToEntry, forwardBundleMetadata } from './benchmarkReportV02Parser';
@@ -109,9 +110,11 @@ async function listInto(items, { fetchFn, headers, query, pageLimit, maxPages })
 }
 
 /**
- * Loads every run visible to the caller from the Results Store API: the general listing
- * plus unlisted runs, so a withdrawn run stays in the table whoever withdrew it (owner,
- * admin, or anyone in playground mode).
+ * Loads the runs the caller's dashboard shows, as on GCS: the general listing, the caller's
+ * own runs when signed in (including withdrawn, i.e. unlisted, ones), and for admins
+ * (`allUnlisted`, also set in playground mode) every unlisted run. Only the general listing
+ * is required; if another listing fails, its runs are missing, `partialError` says why and
+ * `failedListings` names it ('own' or 'unlisted') so callers can fill the gap.
  *
  * Runs anyone may open are fetched without the GitHub token, so they cost the server no
  * GitHub API calls; only the caller's other runs (own, or pending review for admins) send it.
@@ -119,15 +122,17 @@ async function listInto(items, { fetchFn, headers, query, pageLimit, maxPages })
  * @param {{
  *   fetchFn?: typeof fetch,
  *   token?: string | null,
+ *   allUnlisted?: boolean,
  *   pageLimit?: number,
  *   maxPages?: number,
  *   concurrency?: number
  * }} [options]
- * @returns {Promise<{ entries: object[], runs: number, failed: number, truncated: boolean, error: string | null }>}
+ * @returns {Promise<{ entries: object[], runs: number, failed: number, truncated: boolean, partialError: string | null, failedListings: string[], error: string | null }>}
  */
 export async function loadResultsStoreRuns({
     fetchFn = fetch,
     token = null,
+    allUnlisted = false,
     pageLimit = 100,
     maxPages = 100,
     concurrency = 6
@@ -136,9 +141,15 @@ export async function loadResultsStoreRuns({
     const items = new Map(); // runId -> list item; listings and pages may overlap
     const listing = { fetchFn, headers, pageLimit, maxPages };
     const all = await listInto(items, { ...listing, query: {} });
-    if (all.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: all.error };
-    const unlisted = await listInto(items, { ...listing, query: { status: 'unlisted' } });
-    if (unlisted.error) return { entries: [], runs: 0, failed: 0, truncated: false, error: unlisted.error };
+    if (all.error) return { entries: [], runs: 0, failed: 0, truncated: false, partialError: null, failedListings: [], error: all.error };
+    const listingFailed = e => ({ error: e?.message || String(e), truncated: false });
+    const extra = [
+        token && ['own', { own: 'true' }],
+        allUnlisted && ['unlisted', { status: 'unlisted' }]
+    ].filter(Boolean);
+    const extraResults = await Promise.all(extra.map(([, query]) => listInto(items, { ...listing, query }).catch(listingFailed)));
+    const failedListings = extra.filter((_, i) => extraResults[i].error).map(([name]) => name);
+    const partialError = extraResults.find(r => r.error)?.error || null;
 
     let failed = 0;
     const perRun = await mapLimit([...items.values()], concurrency, async (item) => {
@@ -161,7 +172,10 @@ export async function loadResultsStoreRuns({
         return [];
     });
 
-    return { entries: perRun.flat(), runs: items.size, failed, truncated: all.truncated || unlisted.truncated, error: null };
+    return {
+        entries: perRun.flat(), runs: items.size, failed,
+        truncated: [all, ...extraResults].some(r => r.truncated), partialError, failedListings, error: null
+    };
 }
 
 /**
@@ -172,10 +186,10 @@ export async function loadResultsStoreRuns({
  * neither list, so callers drop them.
  *
  * @param {string[]} runIds
- * @param {{ fetchFn?: typeof fetch, token?: string | null, concurrency?: number, sourceKey?: string }} [options]
+ * @param {{ fetchFn?: typeof fetch, token?: string | null, concurrency?: number }} [options]
  * @returns {Promise<{ entries: object[], unverified: string[] }>}
  */
-export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, token = null, concurrency = 6, sourceKey = RESULTS_STORE_SOURCE_KEY } = {}) {
+export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, token = null, concurrency = 6 } = {}) {
     const headers = authHeaders(token);
     const unverified = [];
     const perRun = await mapLimit(runIds, concurrency, async (runId) => {
@@ -183,7 +197,7 @@ export async function revalidateResultsStoreRuns(runIds, { fetchFn = fetch, toke
             const res = await fetchRun(fetchFn, runId, headers);
             if ([401, 403, 404].includes(res.status)) return [];
             if (res.ok) {
-                return parseResultsBundle(await res.json(), { sourceKey })
+                return parseResultsBundle(await res.json(), { sourceKey: RESULTS_STORE_SOURCE_KEY })
                     .map(e => ({ ...e, _dynamicallyInjected: true }));
             }
         } catch {

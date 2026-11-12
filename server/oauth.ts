@@ -101,11 +101,12 @@ oauthRouter.get('/api/auth/github/login', (req: Request, res: Response) => {
 type GitHubIdentity = { username: string, permission: PermissionLevel, avatarUrl?: string };
 
 /**
- * Validations are reused briefly, keyed by a hash of the token. A dashboard load sends the
- * token with many requests, and each validation otherwise costs several GitHub API calls
- * against the user's hourly limit. A revoked token or a permission change (allowlist, org
- * membership) therefore takes effect within this window. Only definitive results are kept:
- * not failures, and not a permission computed while the org or allowlist lookup failed.
+ * Read routes (list, get, export) may reuse a validation briefly ({ cached: true }), keyed by
+ * a hash of the token: a dashboard load sends the token with many reads, and each validation
+ * otherwise costs several GitHub API calls against the user's hourly limit. For those reads a
+ * revoked token or a permission change therefore takes effect within this window. Routes
+ * that change data always validate afresh. Only definitive results are kept: not failures,
+ * and not a permission computed while the org or allowlist lookup failed.
  */
 const TOKEN_CACHE_TTL_MS = 60_000;
 const TOKEN_CACHE_MAX_ENTRIES = 1000;
@@ -118,15 +119,17 @@ export function clearGitHubTokenCacheForTesting(): void {
 
 /**
  * Validates a GitHub access token.
- * Fetches the user profile and permissions directly from GitHub API (cached briefly, see above).
+ * Fetches the user profile and permissions directly from GitHub API (with `cached`, possibly
+ * from a validation made in the last minute; see above).
  */
-export async function validateGitHubToken(token: string): Promise<GitHubIdentity> {
+export async function validateGitHubToken(token: string, { cached = false }: { cached?: boolean } = {}): Promise<GitHubIdentity> {
     if (isPlaygroundMode()) {
         return { username: 'anonymous', permission: 'admin' };
     }
+    if (!cached) return (await fetchGitHubIdentity(token)).identity;
     const key = crypto.createHash('sha256').update(token).digest('hex');
-    const cached = tokenCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.identity;
+    const hit = tokenCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.identity;
 
     // Concurrent requests with the same token share one validation.
     const lookup = fetchGitHubIdentity(token);

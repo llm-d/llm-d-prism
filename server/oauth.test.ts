@@ -249,7 +249,7 @@ exit 1
     });
 });
 
-describe('validateGitHubToken caching', () => {
+describe('validateGitHubToken caching (read routes)', () => {
     const originalFetch = globalThis.fetch;
     const githubOk = () => vi.fn(async (url: string) => ({
         ok: true,
@@ -269,16 +269,25 @@ describe('validateGitHubToken caching', () => {
         vi.useRealTimers();
     });
 
+    it('validates afresh unless the caller opts in (routes that change data never do)', async () => {
+        const fetchMock = githubOk();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        await validateGitHubToken('tok-1', { cached: true });
+        await validateGitHubToken('tok-1');
+        await validateGitHubToken('tok-1');
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(3);
+    });
+
     it('reuses a validation for the same token, including concurrent ones', async () => {
         const fetchMock = githubOk();
         globalThis.fetch = fetchMock as unknown as typeof fetch;
-        const [a, b] = await Promise.all([validateGitHubToken('tok-1'), validateGitHubToken('tok-1')]);
-        await validateGitHubToken('tok-1');
+        const [a, b] = await Promise.all([validateGitHubToken('tok-1', { cached: true }), validateGitHubToken('tok-1', { cached: true })]);
+        await validateGitHubToken('tok-1', { cached: true });
         expect(a).toEqual(b);
         const userCalls = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'));
         expect(userCalls).toHaveLength(1);
         expect(validateGitHubUser).toHaveBeenCalledTimes(1);
-        await validateGitHubToken('tok-2');
+        await validateGitHubToken('tok-2', { cached: true });
         expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
     });
 
@@ -286,11 +295,11 @@ describe('validateGitHubToken caching', () => {
         vi.useFakeTimers({ now: 0 });
         const fetchMock = githubOk();
         globalThis.fetch = fetchMock as unknown as typeof fetch;
-        await validateGitHubToken('tok-1');
+        await validateGitHubToken('tok-1', { cached: true });
         vi.setSystemTime(59_000);
-        await validateGitHubToken('tok-1');
+        await validateGitHubToken('tok-1', { cached: true });
         vi.setSystemTime(61_000);
-        await validateGitHubToken('tok-1');
+        await validateGitHubToken('tok-1', { cached: true });
         expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
     });
 
@@ -306,10 +315,10 @@ describe('validateGitHubToken caching', () => {
         });
         globalThis.fetch = fetchMock as unknown as typeof fetch;
         vi.mocked(validateGitHubUser).mockResolvedValue('none');
-        expect((await validateGitHubToken('tok-1')).permission).toBe('none'); // fails closed...
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('none'); // fails closed...
         orgDown = false;
-        expect((await validateGitHubToken('tok-1')).permission).toBe('admin'); // ...but is not cached
-        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('admin'); // ...but is not cached
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('admin');
         expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
     });
 
@@ -322,8 +331,8 @@ describe('validateGitHubToken caching', () => {
                 return { ok: false, status: 404, json: async () => ({}) };
             });
             globalThis.fetch = fetchMock as unknown as typeof fetch;
-            await validateGitHubToken('tok-1');
-            await validateGitHubToken('tok-1');
+            await validateGitHubToken('tok-1', { cached: true });
+            await validateGitHubToken('tok-1', { cached: true });
             return fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user')).length;
         };
         vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -338,17 +347,17 @@ describe('validateGitHubToken caching', () => {
         vi.mocked(resolveAllowlistRole)
             .mockResolvedValueOnce({ role: 'none', complete: false })
             .mockResolvedValueOnce({ role: 'admin', complete: true });
-        expect((await validateGitHubToken('tok-1')).permission).toBe('none');
-        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
-        expect((await validateGitHubToken('tok-1')).permission).toBe('admin');
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('none');
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('admin');
+        expect((await validateGitHubToken('tok-1', { cached: true })).permission).toBe('admin');
         expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/user'))).toHaveLength(2);
     });
 
     it('does not keep a failed validation', async () => {
         globalThis.fetch = vi.fn(async () => ({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) })) as unknown as typeof fetch;
-        await expect(validateGitHubToken('tok-1')).rejects.toThrow(/Invalid GitHub token/);
+        await expect(validateGitHubToken('tok-1', { cached: true })).rejects.toThrow(/Invalid GitHub token/);
         const fetchMock = githubOk();
         globalThis.fetch = fetchMock as unknown as typeof fetch;
-        await expect(validateGitHubToken('tok-1')).resolves.toMatchObject({ username: 'alice', permission: 'user' });
+        await expect(validateGitHubToken('tok-1', { cached: true })).resolves.toMatchObject({ username: 'alice', permission: 'user' });
     });
 });

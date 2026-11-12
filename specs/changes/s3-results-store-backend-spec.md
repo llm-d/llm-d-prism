@@ -160,10 +160,11 @@ independent `llm-d` org-membership role is unchanged).
   `resultsStoreBackend === 's3'`):
   - Pages `GET /api/results?limit=100` until `nextPageToken` is null. The server applies the
     usual visibility (approved for everyone; own runs for the signed-in owner; all for admins;
-    unlisted excluded unless requested). It also pages `?status=unlisted` (as submissions
-    hydration does on GCS), so a withdrawn run stays loaded whoever withdrew it: the owner, an
-    admin, or anyone in playground mode. As on GCS, admins and owners also see non-public runs
-    (that is the review surface). It stops after 100 pages per listing and then warns the user.
+    unlisted excluded unless requested). To show what the GCS dashboard shows (approved runs plus
+    own runs; everything for admins), it also pages `?own=true` when signed in, and
+    `?status=unlisted` for admins and in playground mode, so a withdrawn run stays loaded whoever
+    withdrew it. Only the general listing is required: if another one fails, its runs are missing
+    and the source shows an error. It stops after 100 pages per listing and warns once per session.
   - Fetches each run with `GET /api/results/:runId` (bounded concurrency 6). Runs anyone may open
     (public, promoted, unlisted) are fetched without the GitHub token; other runs send it (and an
     open run that 401/403s is retried with it). It parses the envelope
@@ -174,23 +175,32 @@ independent `llm-d` org-membership role is unchanged).
 - Share-link loaders (`Dashboard.jsx`, `ResultsStore.jsx`) wait for `/api/config`, then use
   `parseResultsBundle()` and the backend's source key (`gcs:llm-d-benchmarks` on GCS — unchanged —
   or `results:store` on S3). Hydrated runs (the signed-in user's own and unlisted runs) use the
-  same helper. On S3, runs added this way are kept across Results Store reloads after
+  same helper. On S3, hydration fetches only runs the Results Store load doesn't include (other
+  users' unlisted runs, for non-admins), so nothing is fetched twice; if one of the store's
+  listings failed, hydration fetches those runs itself. Runs added this way are kept
+  across Results Store reloads after
   re-fetching each one: runs that are gone or no longer visible (401/403/404) are dropped, runs
   that cannot be checked right now are kept, and so are runs injected while the reload ran.
 - The S3 Results Store source reloads when the GitHub token changes (login, logout, refresh);
   stale loads are discarded. On a token change, runs only the previous identity could see are
   dropped at once. Share-link and hydration results fetched with a token that is no longer current
-  are not trusted: public, promoted and unlisted runs are added at once; the others are fetched
-  once more with the current token (not awaited, never repeated) and added if it may see them.
-- `loadAllData` keeps `loading` true until the latest S3 Results Store load has finished (a load
-  replaced by a newer one no longer counts), so code that acts when loading ends (e.g. the
-  Dashboard's saved-filter cleanup) never sees a partial dataset.
-- GitHub token validation (`server/oauth.ts`, both backends) is cached for 60 s per token (keyed by
-  a hash; concurrent requests share one validation). A dashboard load sends the token with every
-  non-public run, and each validation otherwise costs several GitHub API calls against the user's
-  hourly limit. Only definitive results are kept: not failures, and not a permission computed
-  while the org lookup failed or was rate-limited, or while the allowlists could not be read
-  (`resolveAllowlistRole`). A revoked token or a permission change takes effect within a minute.
+  are not trusted: only public, promoted and unlisted runs are added, and `injectDynamicEntries`
+  returns false (the Results Store page reports such runs as inaccessible). Private runs the
+  current identity may see come back through what a token change re-runs: the Results Store
+  reload, submissions hydration, and the GCS bucket listing.
+- The S3 Results Store loads in parallel with the other sources and does not hold up `loading`.
+  `resultsStoreLoading` is true while the latest load runs (an older load finishing late doesn't
+  clear it). The Dashboard's cleanups of saved filters, the selection and the baseline wait for it,
+  so they never see a partial dataset.
+- GitHub token validation (`server/oauth.ts`, both backends): read routes (list, get, export, and
+  GET/HEAD through the `/api/gcs` proxy) reuse a validation for up to 60 s (`validateGitHubToken(token, { cached: true })`, keyed by a
+  hash; concurrent requests share one). A dashboard load sends the token with every non-public
+  run, and each validation otherwise costs several GitHub API calls against the user's hourly
+  limit. Routes that change data (submit, review, promote, delete) always validate afresh, as
+  before. Only definitive results are cached: not failures, and not a permission computed while
+  the org lookup failed or was rate-limited, or while the allowlists could not be read
+  (`resolveAllowlistRole`). For reads, a revoked token or a permission change takes effect within
+  a minute.
 - After submit/review/promote/delete the existing `loadAllData(null, true)` refresh re-runs the
   loader.
 

@@ -456,8 +456,10 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                             const parsedEntries = parseResultsBundle(jsonPayload, { sourceKey: getResultsStoreSourceKey({ resultsStoreBackend }), state: resolvedState });
 
                             if (parsedEntries.length > 0) {
-                                if (dashboardData.injectDynamicEntries) {
-                                    dashboardData.injectDynamicEntries(parsedEntries, { token });
+                                // false: fetched with a token that changed meanwhile, so private
+                                // runs were not shown; reported like any inaccessible run.
+                                if (dashboardData.injectDynamicEntries?.(parsedEntries, { token }) === false) {
+                                    forbiddenCount++;
                                 }
                                 if (setSelectedSources) {
                                     setSelectedSources(prev => {
