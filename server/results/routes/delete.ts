@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { readResultMetadata, readResultPayload, writeResult, deleteResult } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 
 export interface DeleteResultsResponse {
     success: boolean;
@@ -138,7 +139,7 @@ export async function deleteResultsHandler(
     } catch (error: unknown) {
         console.error('[Results Delete API Error]', error);
         const msg = error instanceof Error ? error.message : String(error);
-        return res.status(500).json({ error: 'Failed to process benchmark deletion', details: msg });
+        return res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to process benchmark deletion', details: msg });
     }
 }
 

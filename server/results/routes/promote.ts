@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { readResultPayload, writeResult, readResultMetadata } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { processSubmission } from '../processing.ts';
 import { PrismSubmissionState } from '../api.ts';
 
@@ -173,6 +174,6 @@ export async function promoteResultsHandler(
     } catch (error: unknown) {
         console.error('[Results Promote API Error]', error);
         const msg = error instanceof Error ? error.message : String(error);
-        return res.status(500).json({ error: 'Failed to promote benchmark submission', details: msg });
+        return res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to promote benchmark submission', details: msg });
     }
 }

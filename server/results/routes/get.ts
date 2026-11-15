@@ -16,6 +16,7 @@ import { Request, Response } from 'express';
 import { validateGitHubToken } from '../../oauth.ts';
 import { isPlaygroundMode } from '../../iam.ts';
 import { readResultPayload, readResultMetadata } from '../gcs.ts';
+import { storageErrorStatus } from '../backend.ts';
 import { PrismResultPayload } from '../api.ts';
 
 export type ResultsGetResponse = PrismResultPayload;
@@ -51,7 +52,7 @@ export async function getResultsHandler(req: Request, res: Response<ResultsGetRe
 
     if (token) {
         try {
-            const authResult = await validateGitHubToken(token);
+            const authResult = await validateGitHubToken(token, { cached: true });
             username = authResult.username;
             permission = authResult.permission;
         } catch (e: any) {
@@ -88,12 +89,12 @@ export async function getResultsHandler(req: Request, res: Response<ResultsGetRe
             return res.status(403).json({ error: 'Access denied. You do not have permissions to view this result.' });
         }
 
-        // 4. Fetch actual file content from GCS
+        // 4. Fetch the payload; its state lives in storage metadata, so add it.
         const fileContent = await readResultPayload(runId);
-        res.json(fileContent);
+        res.json({ ...fileContent, submission_state: itemState });
 
     } catch (error: any) {
         console.error('[Results Get API Error]', error);
-        res.status(500).json({ error: 'Failed to retrieve result details', details: error.message });
+        res.status(storageErrorStatus(error, 500)).json({ error: 'Failed to retrieve result details', details: error.message });
     }
 }
