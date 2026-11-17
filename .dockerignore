@@ -29,3 +29,6 @@ public/results_temp
 # Large directories
 private
 .git
+
+# Local env files with secrets (e.g. .s3.env)
+.*.env

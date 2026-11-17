@@ -55,7 +55,7 @@ function App() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [bypassLoading, setBypassLoading] = useState(false);
 
-  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles, loadingTasks } = dashboardData;
+  const { fetchConfig, loadAllData, enableLLMDResults, loading, isRestoringConnections, gcsProfiles, loadingTasks, resultsStoreLoading } = dashboardData;
   const hasFetchedConfig = useRef(false);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ function App() {
     }
   };
 
-  const activeLoading = loading || isRestoringConnections || (gcsProfiles && gcsProfiles.some(p => p.loading));
+  const activeLoading = loading || resultsStoreLoading || isRestoringConnections || (gcsProfiles && gcsProfiles.some(p => p.loading));
 
   const { overallProgress, itemsFetched, totalItems, activeSourcesList } = useMemo(() => {
     const tasks = Object.values(loadingTasks || {});

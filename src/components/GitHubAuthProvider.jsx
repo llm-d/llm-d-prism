@@ -27,7 +27,9 @@ export function GitHubAuthProvider({ children }) {
 
     const logout = useCallback(async () => {
         try {
-            await fetch('/api/auth/github/logout', { method: 'POST' });
+            // Sent so the server can forget its cached validation of this token.
+            const token = localStorage.getItem('prism_github_access_token');
+            await fetch('/api/auth/github/logout', { method: 'POST', headers: token ? { 'X-Prism-Github-Token': token } : {} });
         } catch (e) {
             console.error('Logout request failed:', e);
         }

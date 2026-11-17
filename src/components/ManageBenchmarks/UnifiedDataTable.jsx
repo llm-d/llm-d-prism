@@ -3090,6 +3090,7 @@ const BenchmarkRow = React.memo(({
         if (src === 'local') return true;
         if (src.startsWith('brv02:')) return true;
         if (src === 'llm-d-results:google_drive') return true;
+        if (src === 'results:store') return true; // the S3 Results Store, like its GCS bucket
         
         if (src.startsWith('gcs:') || src.startsWith('aws:') || src.startsWith('lpg:')) {
             const bucketName = src.split(':')[1];

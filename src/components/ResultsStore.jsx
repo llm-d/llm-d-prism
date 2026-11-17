@@ -21,7 +21,7 @@ import { useGitHubAuth } from '../hooks/useGitHubAuth.js';
 import { Button, Modal, Spinner, Checkbox, Input } from './ui';
 import { cn } from '../utils/cn';
 import { decodeShareLink } from '../utils/shareLinkEncoder';
-import { parseReportV02, stageToEntry, forwardBundleMetadata } from '../utils/benchmarkReportV02Parser';
+import { parseResultsBundle, getResultsStoreSourceKey } from '../utils/resultsStoreLoader';
 import { clearResultsStoreParams, clearSrcParams, syncResultsStoreParams, GRAPH_FILTER_DEFAULTS } from '../utils/urlParams';
 
 
@@ -112,7 +112,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         newBucketName, setNewBucketName,
         newBucketAlias, setNewBucketAlias,
         connectionType, setConnectionType,
-        loadAllData
+        loadAllData,
+        resultsStoreBackend, configResolved, resultsStoreLoading
     } = dashboardData;
 
 
@@ -312,6 +313,9 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             }
 
             if (processedBenchmarksParamRef.current === benchmarksParam) return;
+            // Wait for /api/config so runs are tagged with the right source key; the
+            // effect re-runs when it resolves (configResolved is read from dashboardData).
+            if (!configResolved) return;
             processedBenchmarksParamRef.current = benchmarksParam;
 
             let targetUuids = [];
@@ -420,13 +424,10 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
             let forbiddenCount = 0;
 
             if (missingUuids.length > 0) {
-                const headers = {};
-                const token = localStorage.getItem('prism_github_access_token');
-                if (token) {
-                    headers['X-Prism-Github-Token'] = token;
-                }
-
-                await Promise.all(missingUuids.map(async (uuid) => {
+                const currentToken = () => localStorage.getItem('prism_github_access_token');
+                // `retried`: fetched once more after the token changed mid-fetch (see below).
+                const loadSharedRun = async (uuid, token, retried = false) => {
+                    const headers = token ? { 'X-Prism-Github-Token': token } : {};
                     try {
                         const res = await fetch(`/api/results/${uuid}`, { headers });
                         if (res.status === 404) {
@@ -444,33 +445,21 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
 
                         const jsonPayload = await res.json();
                         if (jsonPayload && jsonPayload.entries && Array.isArray(jsonPayload.entries)) {
-                            const parsedEntries = [];
-                            for (const stageEntry of jsonPayload.entries) {
-                                if (stageEntry.raw_report) {
-                                    const parsedStage = parseReportV02(stageEntry.raw_report, stageEntry.filename);
-                                    if (parsedStage) {
-                                        forwardBundleMetadata(parsedStage, jsonPayload);
-                                        const entry = stageToEntry(parsedStage);
-                                        const resolvedState = submissionsMap?.[jsonPayload.runId]?.status
-                                            || jsonPayload.submission_state
-                                            || jsonPayload.state
-                                            || 'unlisted';
-                                        entry.run_id = jsonPayload.runId;
-                                        entry.source = 'gcs:llm-d-benchmarks';
-                                        entry.source_info = {
-                                            type: 'benchmark_report_v02',
-                                            origin: 'gcs:llm-d-benchmarks',
-                                            submission_state: resolvedState,
-                                            file_identifier: jsonPayload.runId
-                                        };
-                                        parsedEntries.push(entry);
-                                    }
-                                }
-                            }
+                            // The GET's own state is newer than the submissions list.
+                            const resolvedState = jsonPayload.submission_state
+                                || submissionsMap?.[jsonPayload.runId]?.status
+                                || jsonPayload.state
+                                || 'unlisted';
+                            const parsedEntries = parseResultsBundle(jsonPayload, { sourceKey: getResultsStoreSourceKey({ resultsStoreBackend }), state: resolvedState });
 
                             if (parsedEntries.length > 0) {
-                                if (dashboardData.injectDynamicEntries) {
-                                    dashboardData.injectDynamicEntries(parsedEntries);
+                                // false: fetched with a token that changed meanwhile, so the (private)
+                                // run was not shown. Fetch it once more with the current token;
+                                // after that, report it like any inaccessible run.
+                                if (dashboardData.injectDynamicEntries?.(parsedEntries, { token }) === false) {
+                                    if (!retried && currentToken() !== token) return loadSharedRun(uuid, currentToken(), true);
+                                    forbiddenCount++;
+                                    return;
                                 }
                                 if (setSelectedSources) {
                                     setSelectedSources(prev => {
@@ -489,7 +478,8 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                         console.error(`[ShareLink] Error fetching run ${uuid}:`, e);
                         missingCount++;
                     }
-                }));
+                };
+                await Promise.all(missingUuids.map(uuid => loadSharedRun(uuid, currentToken())));
             }
 
             if (missingCount > 0 && dashboardData.addToast) {
@@ -519,7 +509,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
         };
 
         processShareLink();
-    }, [urlSearch, data, dashboardData, dashboardState, setSelectedBenchmarks, setShowComparisonDrawer, setSelectedSources]);
+    }, [urlSearch, data, dashboardData, dashboardState, setSelectedBenchmarks, setShowComparisonDrawer, setSelectedSources, configResolved, resultsStoreBackend]);
 
 
 
@@ -1161,7 +1151,7 @@ export default function ResultsStore({ onNavigate, onNavigateBack, dashboardStat
                         deleteSubmission,
                         qualityMetrics,
                         gcsProfiles: gcsProfiles,
-                        loadingConnections: gcsProfiles?.some(p => p.loading) || gcsLoading,
+                        loadingConnections: gcsProfiles?.some(p => p.loading) || gcsLoading || resultsStoreLoading,
                         onOpenSubmitDialog: (intent) => onNavigate('submit-benchmarks', { intent }),
                         showDataPanel,
                         setShowDataPanel,

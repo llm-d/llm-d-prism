@@ -314,6 +314,7 @@ export const getSourceTag = (d) => {
     if (s === 'local') return 'LOCAL';
     if (s.startsWith('giq:')) return 'GIQ';
     if (s.startsWith('gcs:')) return 'GCS';
+    if (s.startsWith('results:')) return 'Results';
     if (s.startsWith('lpg:') || s === 'infperf' || s === 'inference-perf') return 'infperf';
     if (s === 'llm-d-results:google_drive' || s === 'llmd_drive') return 'llm-d';
     if (s === 'quality_scores') return 'Quality';
@@ -327,7 +328,7 @@ export const getSourceType = (d) => {
     
     if (s === 'local') return 'Built-in';
     if (s.startsWith('giq:')) return 'Cloud';
-    if (s.startsWith('gcs:') || s.startsWith('aws:')) return 'Cloud';
+    if (s.startsWith('gcs:') || s.startsWith('aws:') || s.startsWith('results:')) return 'Cloud';
     if (s.startsWith('lpg:') || s === 'infperf' || s === 'inference-perf') return 'Local';
     if (s.startsWith('brv02:')) return 'Local';
     if (s === 'llm-d-results:google_drive' || s === 'llmd_drive') return 'Built-in';
