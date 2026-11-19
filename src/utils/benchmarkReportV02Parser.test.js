@@ -2304,3 +2304,66 @@ describe('pod startup duration units', () => {
             .toEqual(report.results.observability.pod_startup_times.aggregate);
     });
 });
+
+describe('cache rate units', () => {
+    const reportWith = (observability) => ({
+        version: '0.2',
+        results: { observability },
+    });
+
+    it('keeps a low percent hit rate as percent instead of scaling sub-1 stats by 100', () => {
+        const stage = parseReportV02(reportWith({
+            vllm_prefix_cache_hit_rate: {
+                aggregated: { mean: 0.4, p50: 0.2, p99: 3.5, stddev: 0.9, units: 'percent' },
+            },
+        }), 'prefix.yaml');
+        expect(stage.observability).toMatchObject({
+            prefixCacheHitMean: 0.4,
+            prefixCacheHitP50: 0.2,
+            prefixCacheHitP99: 3.5,
+        });
+    });
+
+    it('scales every fraction stat by 100, including a fully used cache', () => {
+        const stage = parseReportV02(reportWith({
+            vllm_kv_cache_usage_perc: {
+                aggregated: { mean: 0.42, p50: 0.4, p99: 1, units: 'fraction' },
+            },
+            epp_pool_avg_kv_cache_utilization: {
+                aggregated: { mean: 0.005, p50: 0, p99: 0.02, units: 'fraction' },
+            },
+        }), 'kv.yaml');
+        expect(stage.observability.kvCacheUsageMean).toBeCloseTo(42);
+        expect(stage.observability.kvCacheUsageP50).toBeCloseTo(40);
+        expect(stage.observability.kvCacheUsageP99).toBeCloseTo(100);
+        expect(stage.observability.eppKvMean).toBeCloseTo(0.5);
+        expect(stage.observability.eppKvP50).toBe(0);
+        expect(stage.observability.eppKvP99).toBeCloseTo(2);
+    });
+
+    it('decides the scale once per block when units are missing', () => {
+        const fractionLike = parseReportV02(reportWith({
+            vllm_kv_cache_usage_perc: { aggregated: { mean: 0.3, p50: 0.25, p99: 0.9 } },
+        }), 'a.yaml');
+        expect(fractionLike.observability.kvCacheUsageMean).toBeCloseTo(30);
+        expect(fractionLike.observability.kvCacheUsageP99).toBeCloseTo(90);
+
+        const percentLike = parseReportV02(reportWith({
+            vllm_prefix_cache_hit_rate: { aggregated: { mean: 0.8, p50: 0.5, p99: 12 } },
+        }), 'b.yaml');
+        expect(percentLike.observability).toMatchObject({
+            prefixCacheHitMean: 0.8,
+            prefixCacheHitP50: 0.5,
+            prefixCacheHitP99: 12,
+        });
+    });
+
+    it('leaves the raw report untouched', () => {
+        const report = reportWith({
+            vllm_prefix_cache_hit_rate: { aggregated: { mean: 0.4, p50: 0.2, p99: 3.5, units: 'percent' } },
+        });
+        const stage = parseReportV02(report, 'raw.yaml');
+        expect(stage.rawReport.results.observability.vllm_prefix_cache_hit_rate.aggregated)
+            .toEqual({ mean: 0.4, p50: 0.2, p99: 3.5, units: 'percent' });
+    });
+});

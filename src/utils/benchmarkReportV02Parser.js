@@ -362,11 +362,31 @@ const toMs = (val, units) => {
 };
 
 // vllm cache rates are emitted as fractions for kv_cache_usage but as
-// percentages for prefix_cache_hit_rate. Detect and normalize to 0-100.
-const pct = (val) => {
-    const v = safeNum(val);
-    if (v === null) return null;
-    return v <= 1 ? v * 100 : v;
+// percentages for prefix_cache_hit_rate. Normalize a whole stats block to 0-100
+// with one scale: the block's declared units decide it, and only a block without
+// recognized units falls back to "every stat is <= 1, so it is a fraction".
+// Deciding per value would turn a 0.4 percent hit rate into 40 percent and leave
+// a p99 of 3.5 percent alone, so mean and p50 could land above p99.
+const PERCENT_STAT_KEYS = ['mean', 'p50', 'p99'];
+
+const normalizePercentStats = (block) => {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) return block;
+    const units = typeof block.units === 'string' ? block.units.trim().toLowerCase() : '';
+    const values = PERCENT_STAT_KEYS
+        .filter(k => k in block)
+        .map(k => safeNum(block[k]));
+    let scale;
+    if (units === 'percent') scale = 1;
+    else if (units === 'fraction') scale = 100;
+    else scale = values.every(v => v === null || v <= 1) ? 100 : 1;
+
+    const out = { ...block };
+    for (const k of PERCENT_STAT_KEYS) {
+        if (!(k in block)) continue;
+        const v = safeNum(block[k]);
+        out[k] = v === null ? null : v * scale;
+    }
+    return out;
 };
 
 // Human-readable labels for the TimeSeriesResourceMetrics fields the benchmark
@@ -453,7 +473,7 @@ const extractTimeSeries = (obs) => {
     for (const [field, entry] of fields) {
         const { units, unitsConflict, raw } = entry;
         // Fraction-vs-percent is decided once from every sample of the field:
-        // pct()'s per-value heuristic would rescale only the sub-1% samples and
+        // a per-value heuristic would rescale only the sub-1% samples and
         // fabricate spikes in a series that legitimately dips near zero, and
         // deciding per component would scale one pod but not its neighbour.
         const isPortion = !unitsConflict && typeof units === 'string'
@@ -492,7 +512,6 @@ const deriveRunLabel = (doc) => {
 // ---------------------------------------------------------------------------
 
 const numericField = z.preprocess(safeNum, z.number().nullable());
-const percentField = z.preprocess(pct, z.number().nullable());
 
 const MetricValuesSchema = z.object({
     units: z.string().optional().nullable(),
@@ -501,12 +520,12 @@ const MetricValuesSchema = z.object({
     p99: numericField.optional(),
 }).passthrough().optional().nullable();
 
-const PercentValuesSchema = z.object({
+const PercentValuesSchema = z.preprocess(normalizePercentStats, z.object({
     units: z.string().optional().nullable(),
-    mean: percentField.optional(),
-    p50: percentField.optional(),
-    p99: percentField.optional(),
-}).passthrough().optional().nullable();
+    mean: z.number().optional().nullable(),
+    p50: z.number().optional().nullable(),
+    p99: z.number().optional().nullable(),
+}).passthrough().optional().nullable());
 
 const ThroughputMetricSchema = z.object({
     units: z.string().optional().nullable(),
